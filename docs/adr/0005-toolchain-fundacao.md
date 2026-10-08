@@ -39,6 +39,7 @@ commitado. Justificação de cada dependência:
 | `@types/node`, `@types/pg` | tipos | sem eles, `strict` não resolve `node:`/`pg` |
 | `drizzle-orm` + `drizzle-kit` | ORM + migrações | migrações versionadas geradas (`docs/01`); nunca `drizzle-kit push` fora de dev local |
 | `pg` | driver Postgres | exigido pelo Drizzle e pelos testes de integração com Postgres real |
+| `ioredis` (Task 5) | cliente Redis | testes de integração com Redis real em contentor (`tests/integration/redis-ready.test.ts`); **sem opção `{ url }` — a URL entra como argumento posicional, a API documentada (bug do brief corrigido pela ruling 9 do ledger); sem ela ligaria ao Redis/Valkey do sistema em 6379 em vez do contentor em 6380** |
 | `zod` | validação nas fronteiras | HTTP, webhooks, jobs, env e saída do LLM (`docs/02` §3) |
 | `pino` | logging | JSON estruturado + redaction de dados pessoais (`docs/02` §10) |
 | `bullmq` (Task 7) | fila | plano A de jobs atrás do port (D7/A5); plano B `pg-boss` se o Redis falhar na verificação A5 |
