@@ -42,7 +42,7 @@ commitado. Justificação de cada dependência:
 | `ioredis` (Task 5) | cliente Redis | testes de integração com Redis real em contentor (`tests/integration/redis-ready.test.ts`); **sem opção `{ url }` — a URL entra como argumento posicional, a API documentada (bug do brief corrigido pela ruling 9 do ledger); sem ela ligaria ao Redis/Valkey do sistema em 6379 em vez do contentor em 6380** |
 | `zod` | validação nas fronteiras | HTTP, webhooks, jobs, env e saída do LLM (`docs/02` §3) |
 | `pino` | logging | JSON estruturado + redaction de dados pessoais (`docs/02` §10) |
-| `bullmq` (Task 7) | fila | plano A de jobs atrás do port (D7/A5); plano B `pg-boss` se o Redis falhar na verificação A5 |
+| `bullmq` (Task 7) | fila | plano A de jobs atrás do port (D7/A5); plano B `pg-boss` se o Redis falhar na verificação A5. **Instalado a 2026-10-08 (`bullmq@6.3.11`): peers opcionais `ioredis`/`redis`/`pg` — neste repo satisfaz-se com o `ioredis` já instalado (`npm ls bullmq ioredis` mostra `ioredis@6.0.0 deduped`); o port `src/ports/job-queue.ts` isola a troca** |
 | `ws` (Task 2) | sonda de websockets | A5 exige provar websockets no cPanel antes de fechar Socket.IO |
 | Docker Compose (`docker-compose.test.yml`) | só testes | A5: produção é cPanel **sem Docker**; conteúdores reais `pgvector/pgvector:pg16` e `redis:7.4-alpine` |
 | CI (GitHub Actions) | gates | Node **24** no CI (A1); `npm audit` + `gitleaks` em CI (`docs/02` §12, `docs/03` §2) |

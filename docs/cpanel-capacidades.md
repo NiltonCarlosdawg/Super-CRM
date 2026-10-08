@@ -143,3 +143,16 @@ verificação correspondente ficar **Refutado** (com evidência colada acima).
 | Redis (secção 2) | **Plano A** — BullMQ (D7) | **Plano B pg-boss** no mesmo port de jobs: acrescentar `src/adapters/queue/pgboss.ts`, trocar a fábrica `createJobQueue`, correr `npm run test:integration` (o `tests/integration/job-queue.test.ts` é o contrato e tem de passar igual), remover `bullmq` e registar a troca neste documento | Secção 2 `Refutado` → ativar o Plano B; `Confirmado` → Plano A; `Pendente` → Plano A por omissão, verificação no gate |
 | Websockets (secção 3) | **Plano A** — Socket.IO sobre websockets | Sem plano B próprio: o Socket.IO degrada para HTTP long-polling | Secção 3 remota `Refutado` → escalar ao dono; long-polling cobre |
 | RAM/CPU (secção 4) | **Plano A** — `multilingual-e5-small` (ADR-0002) | Sem plano além da variante `MiniLM` ~90 MB (ADR-0002) | Secção 4 `2 × RSS ociosa + 300–500 MB` não couber → variante MiniLM |
+
+### Registo de decisão (Task 7 — port de jobs)
+
+- **2026-10-08 — Plano A (BullMQ) ativado.** A secção 2 (Redis) está
+  `Pendente`, não `Refutado`; o ramo de decisão da tabela acima determina
+  `Pendente → Plano A por omissão`. Foi implementado o port
+  `src/ports/job-queue.ts` com o adaptador `src/adapters/queue/bullmq.ts`
+  (dependência `bullmq` justificada no ADR-0005), provado pelo contrato
+  `tests/integration/job-queue.test.ts` (enqueue repetido com a mesma
+  `idempotencyKey` executa o handler uma só vez, com Redis real em contentor).
+  Se a secção 2 ficar `Refutado` com evidência, ativa-se o Plano B (pg-boss)
+  descrito na tabela, trocando só a fábrica `createJobQueue`.
+
