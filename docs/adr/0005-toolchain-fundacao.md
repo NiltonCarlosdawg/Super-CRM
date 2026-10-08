@@ -58,3 +58,9 @@ commitado. Justificação de cada dependência:
 - `pg-boss` e `ws` só entram se a evidência da A5 os exigir/permitir — o port de jobs
   isola a troca.
 - O `package-lock.json` é a fonte de versões exatas; `npm ci` em CI.
+- Ao mover os ficheiros de `reference/` para `src/`/`tests/` (Task 6), o typecheck passou a
+  cobri-los e expôs 19 erros pré-existentes de `noUncheckedIndexedAccess` que estavam latentes
+  porque o `include` do tsconfig nunca alcançou `reference/`; foram corrigidos só com construços
+  de tipo (non-null assertions `!`), com zero mudança de runtime — o comportamento fica provado
+  pelos 17 testes do orquestrador e pela suite completa (34 testes, `fail 0`) antes e depois,
+  conforme a ruling 8 do ledger da Fase 0 (`.superpowers/sdd/2026-10-07-fase0-fundacoes-auditoria/progress.md`).

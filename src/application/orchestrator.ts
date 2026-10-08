@@ -2,7 +2,7 @@
 // Decide o que acontece a cada mensagem de entrada. A IA só classifica e responde:
 // quem decide handoff, bloqueio, lacunas e registo é este código, de forma determinística.
 
-import { keywordSafetyNet } from './keyword-safety-net';
+import { keywordSafetyNet } from '../domain/keyword-safety-net.js';
 import type {
   AIProvider,
   AIRequest,
@@ -14,7 +14,7 @@ import type {
   TriggerCode,
   TriggerDef,
   Turn,
-} from './ai-provider';
+} from '../ports/ai-provider.js';
 
 export interface InboundMessage {
   id: string;
@@ -67,7 +67,7 @@ function pickPrimary(ts: readonly TriggerDef[]): TriggerDef {
       RANK[b.priority] - RANK[a.priority] ||
       Number(b.lineSlug !== null) - Number(a.lineSlug !== null) ||
       weight(b) - weight(a),
-  )[0];
+  )[0]!;
 }
 
 async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {

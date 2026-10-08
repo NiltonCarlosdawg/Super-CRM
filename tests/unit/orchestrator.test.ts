@@ -1,4 +1,4 @@
-// Testes do orquestrador. Correr com: npx tsx --test orchestrator.test.ts
+// Testes do orquestrador. Correr com: npm test
 // Usam portas em memória e os gatilhos REAIS de handoff-triggers.seed.ts.
 // O fornecedor de IA é simulado: aqui testa-se a lógica de decisão, não o modelo.
 
@@ -15,9 +15,9 @@ import type {
   QualificationQuestion,
   TraceInput,
   TriggerDef,
-} from './ai-provider';
-import { triggerSeeds } from './handoff-triggers.seed';
-import { DEFAULT_CONFIG, handleInbound, type OrchestratorConfig } from './orchestrator';
+} from '../../src/ports/ai-provider.js';
+import { triggerSeeds } from '../../src/modules/knowledge/handoff-triggers.seed.js';
+import { DEFAULT_CONFIG, handleInbound, type OrchestratorConfig } from '../../src/application/orchestrator.js';
 
 const ALL_TRIGGERS: TriggerDef[] = triggerSeeds.map((s) => ({
   id: `${s.lineSlug ?? 'global'}:${s.code}`,
@@ -156,12 +156,12 @@ test('handoff_now (complaint): cria handoff urgente, bloqueia a IA e usa a mensa
   const out = await send('Isto é uma vergonha!', provider);
   assert.equal(out.lockedAi, true);
   assert.equal(w.state.aiMode, 'human_only');
-  assert.equal(out.reply, DEFAULT_CONFIG.handoffMessage(ALL_TRIGGERS[1]));
+  assert.equal(out.reply, DEFAULT_CONFIG.handoffMessage(ALL_TRIGGERS[1]!));
   assert.equal(w.handoffs.length, 1);
-  assert.equal(w.handoffs[0].priority, 'urgent');
-  assert.equal(w.handoffs[0].summary, 'resumo da IA');
+  assert.equal(w.handoffs[0]!.priority, 'urgent');
+  assert.equal(w.handoffs[0]!.summary, 'resumo da IA');
   assert.deepEqual(w.notifications.map((n) => n.type), ['handoff']);
-  assert.equal(w.traces[0].handoffId, 'h1');
+  assert.equal(w.traces[0]!.handoffId, 'h1');
 });
 
 test('flag_only: avisa o painel mas a IA continua e a resposta é a do modelo', async () => {
@@ -184,8 +184,8 @@ test('handoff_when_qualified: só passa quando a qualificação fica completa', 
   const second = await send('Benfica', fakeProvider({ qualificationUpdates: { location: 'Benfica, Luanda' } }));
   assert.equal(second.lockedAi, true);
   assert.equal(w.handoffs.length, 1);
-  assert.equal(w.handoffs[0].triggerId, 'cctv:quote_visit');
-  const snapshot = w.handoffs[0].leadSnapshot as { missing: string[]; answers: Record<string, string> };
+  assert.equal(w.handoffs[0]!.triggerId, 'cctv:quote_visit');
+  const snapshot = w.handoffs[0]!.leadSnapshot as { missing: string[]; answers: Record<string, string> };
   assert.deepEqual(snapshot.missing, []);
   assert.equal(snapshot.answers.camera_count, '6');
 });
@@ -194,7 +194,7 @@ test('handoff_when_qualified: cliente que insiste passa antes, com os campos em 
   const { w, send } = harness({ line: 'cctv' }, cctvQuestions);
   const out = await send('Quero que alguém venha ver', fakeProvider({ firedTriggers: ['quote_visit'] }));
   assert.equal(out.lockedAi, true);
-  const snapshot = w.handoffs[0].leadSnapshot as { missing: string[] };
+  const snapshot = w.handoffs[0]!.leadSnapshot as { missing: string[] };
   assert.deepEqual(snapshot.missing, ['camera_count', 'location']);
 });
 
@@ -239,9 +239,9 @@ test('falha do fornecedor de IA: passa a humano com mensagem fixa e sem gatilho'
   assert.equal(out.status, 'provider_error');
   assert.equal(out.reply, DEFAULT_CONFIG.errorHandoffMessage);
   assert.equal(out.lockedAi, true);
-  assert.equal(w.handoffs[0].triggerId, null);
-  assert.equal(w.handoffs[0].priority, 'high');
-  assert.ok(w.handoffs[0].reason.includes('503'));
+  assert.equal(w.handoffs[0]!.triggerId, null);
+  assert.equal(w.handoffs[0]!.priority, 'high');
+  assert.ok(w.handoffs[0]!.reason.includes('503'));
 });
 
 test('tempo excedido: aborta o pedido ao fornecedor e passa a humano', async () => {
@@ -264,12 +264,12 @@ test('tempo excedido: aborta o pedido ao fornecedor e passa a humano', async () 
 test('já existe handoff aberto: não duplica e sobe a prioridade', async () => {
   const { w, send } = harness({ line: 'software' });
   await send('preciso de integração com o ERP', fakeProvider({ firedTriggers: ['scope_exceeds_product'] }));
-  assert.equal(w.handoffs[0].priority, 'normal');
+  assert.equal(w.handoffs[0]!.priority, 'normal');
 
   const out = await send('isto é uma vergonha', fakeProvider({ firedTriggers: ['complaint'] }));
   assert.equal(w.handoffs.length, 1);
   assert.equal(out.handoffId, 'h1');
-  assert.equal(w.handoffs[0].priority, 'urgent');
+  assert.equal(w.handoffs[0]!.priority, 'urgent');
   assert.equal(w.notifications.length, 2);
   assert.equal(out.lockedAi, true);
 });
@@ -278,8 +278,8 @@ test('vários gatilhos: o motivo principal é o de maior prioridade', async () =
   const { w, send } = harness();
   await send('quero um humano, isto é uma vergonha', fakeProvider({ firedTriggers: ['complaint', 'human_requested'] }));
   assert.equal(w.handoffs.length, 1);
-  assert.equal(w.handoffs[0].triggerId, 'global:complaint');
-  assert.equal(w.handoffs[0].priority, 'urgent');
+  assert.equal(w.handoffs[0]!.triggerId, 'global:complaint');
+  assert.equal(w.handoffs[0]!.priority, 'urgent');
 });
 
 test('modo ai_suggest (rascunho): anota os gatilhos mas não cria handoff nem bloqueia', async () => {
@@ -305,7 +305,7 @@ test('chat de teste: sem handoff, lacunas nem notificações, mas com registo ma
   assert.equal(w.gaps.length, 0);
   assert.equal(w.notifications.length, 0);
   assert.equal(out.lockedAi, false);
-  assert.equal(w.traces[0].isTest, true);
+  assert.equal(w.traces[0]!.isTest, true);
 });
 
 test('códigos de gatilho desconhecidos ou de outra linha são ignorados', async () => {
@@ -322,5 +322,5 @@ test('se o resumo da IA falhar, o handoff usa um resumo local', async () => {
     throw new Error('sem resumo');
   };
   await send('Isto é uma vergonha', provider);
-  assert.ok(w.handoffs[0].summary.startsWith('Resumo automático indisponível'));
+  assert.ok(w.handoffs[0]!.summary.startsWith('Resumo automático indisponível'));
 });

@@ -5,7 +5,7 @@
 // determinística (palavras-chave) como rede de segurança, sem depender só do modelo.
 
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import { businessLines, handoffTriggers } from './knowledge.schema';
+import { businessLines, handoffTriggers } from './knowledge.schema.js';
 
 type LineSlug = 'software' | 'custom' | 'telecom' | 'cctv';
 

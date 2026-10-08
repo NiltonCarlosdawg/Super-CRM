@@ -3,7 +3,7 @@
 // o substitui: apanha os casos óbvios de forma barata e previsível.
 // Cobre só frases explícitas. Pedidos indiretos ficam para o modelo.
 
-import type { TriggerCode, Turn } from './ai-provider';
+import type { TriggerCode, Turn } from '../ports/ai-provider.js';
 
 export const SAFETY_NET_COVERS = ['human_requested', 'purchase_intent'] as const;
 
@@ -31,7 +31,7 @@ const PURCHASE_INTENT: RegExp[] = [
 
 const lastCustomerText = (turns: readonly Turn[]): string => {
   for (let i = turns.length - 1; i >= 0; i--) {
-    if (turns[i].from === 'customer') return normalize(turns[i].text);
+    if (turns[i]!.from === 'customer') return normalize(turns[i]!.text);
   }
   return '';
 };
