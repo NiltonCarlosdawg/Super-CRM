@@ -13,7 +13,8 @@
     "eval": "tsx tests/eval/run.ts",
     "test:integration": "bash scripts/integration-test.sh",
     "test:containers:up": "docker compose -f docker-compose.test.yml up -d --wait",
-    "test:containers:down": "docker compose -f docker-compose.test.yml down -v"
+    "test:containers:down": "docker compose -f docker-compose.test.yml down -v",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "bullmq": "^6.3.11",
