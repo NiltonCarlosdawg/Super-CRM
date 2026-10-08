@@ -1,26 +1,18 @@
 import { randomUUID } from 'node:crypto';
 
 import { ConfigError, loadConfig } from './config.js';
+import { createLogger, withCorrelationId } from './logger.js';
 
-// Fase 0: escrita direta; a Task 4 substitui por logger estruturado.
 // Sem servidor HTTP nesta fase (Fastify chega na Fase 1).
 try {
   const config = loadConfig(process.env);
-  const correlationId = randomUUID();
+  const log = withCorrelationId(createLogger({ level: config.logLevel }), randomUUID());
 
-  process.stdout.write(
-    `${JSON.stringify({
-      level: 'info',
-      msg: 'application.started',
-      correlationId,
-      nodeEnv: config.nodeEnv,
-      port: config.port,
-    })}\n`,
-  );
+  log.info({ nodeEnv: config.nodeEnv, port: config.port }, 'application.started');
   process.exit(0);
 } catch (error) {
   if (!(error instanceof ConfigError)) throw error;
-  // Sem stack trace e sem valores das env: só a lista de issues.
+  // Antes de existir logger: mensagem limpa no stderr, sem stack trace e sem valores das env.
   process.stderr.write(`${error.message}\n`);
   process.exit(1);
 }
