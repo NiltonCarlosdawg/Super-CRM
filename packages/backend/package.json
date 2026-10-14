@@ -1,19 +1,36 @@
 {
-  "name": "crm-monorepo",
+  "name": "milvendas-crm",
   "private": true,
-  "workspaces": [
-    "packages/backend",
-    "packages/frontend",
-    "packages/shared"
-  ],
+  "type": "module",
+  "engines": { "node": ">=24" },
   "scripts": {
-    "build": "turbo run build --scope=backend --scope=frontend",
-    "dev": "turbo run dev --scope=backend --scope=frontend",
-    "test": "turbo run test --scope=backend --scope=frontend",
-    "lint": "turbo run lint --scope=backend --scope=frontend",
-    "typecheck": "turbo run typecheck --scope=backend --scope=frontend"
+    "dev": "tsx watch src/infra/main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"tests/unit/**/*.test.ts\"",
+    "test:integration": "bash scripts/integration-test.sh",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "eval": "tsx tests/eval/run.ts"
   },
-  "engines": {
-    "node": ">=20"
+  "dependencies": {
+    "bullmq": "^6.3.11",
+    "drizzle-orm": "^0.45.3",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.2",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^10.12.0",
+    "ioredis": "^6.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "ws": "^8.22.0"
   }
 }
