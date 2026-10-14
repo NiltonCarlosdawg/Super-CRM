@@ -15,9 +15,9 @@ import type {
   QualificationQuestion,
   TraceInput,
   TriggerDef,
-} from '../../src/ports/ai-provider.js';
-import { triggerSeeds } from '../../src/modules/knowledge/handoff-triggers.seed.js';
-import { DEFAULT_CONFIG, handleInbound, type OrchestratorConfig } from '../../src/application/orchestrator.js';
+} from '../../src/ports/ai-provider.ts';
+import { triggerSeeds } from '../../src/modules/knowledge/handoff-triggers.seed.ts';
+import { DEFAULT_CONFIG, handleInbound, type OrchestratorConfig } from '../../src/application/orchestrator.ts';
 
 const ALL_TRIGGERS: TriggerDef[] = triggerSeeds.map((s) => ({
   id: `${s.lineSlug ?? 'global'}:${s.code}`,

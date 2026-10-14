@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom properties for theme */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 10%;
+  --muted: 0 0% 37%;
+  --muted-foreground: 0 0% 45%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 10%;
+  --primary: 142 76% 36%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 98%;
+  --secondary-foreground: 0 0% 10%;
+  --accent: 210 40% 98%;
+  --accent-foreground: 0 0% 10%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
+}
+
+.dark {
+  --background: 0 0% 10%;
+  --foreground: 0 0% 98%;
+  --muted: 0 0% 37%;
+  --muted-foreground: 0 0% 45%;
+  --card: 0 0% 14%;
+  --card-foreground: 0 0% 85%;
+  --popover: 0 0% 14%;
+  --popover-foreground: 0 0% 85%;
+  --primary: 142 76% 36%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 98%;
+  --secondary-foreground: 0 0% 10%;
+  --accent: 210 40% 98%;
+  --accent-foreground: 0 0% 10%;
+  --border: 0 0% 21.2%;
+  --input: 0 0% 21.2%;
+}

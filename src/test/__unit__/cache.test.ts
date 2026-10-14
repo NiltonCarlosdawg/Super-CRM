@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Cache } from '../cache/redis';
+import { Cache } from '../../cache/redis';
 
 describe('Cache', () => {
   beforeEach(() => {
