@@ -35,7 +35,7 @@ export class AuthAdapter implements AuthPort {
   }
 
   /** Verificar se usuário tem papel mínimo */
-  hasRole(userRole: string, requiredRole: 'admin' | 'editor' | 'agent': string): boolean {
+  hasRole(userRole: string, requiredRole: 'admin' | 'editor' | 'agent'): boolean {
     const roleHierarchy: Record<string, number> = {
       admin: 3,
       editor: 2,
