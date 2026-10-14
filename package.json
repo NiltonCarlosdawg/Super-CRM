@@ -9,7 +9,7 @@
     "dev": "tsx watch src/infra/main.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx --test tests/unit/**/*.test.ts 2>/dev/null || npx tsx --test src/test/__unit__/*.test.ts",
+    "test": "tsx --test \"tests/unit/**/*.test.ts\"",
     "eval": "tsx tests/eval/run.ts",
     "test:integration": "bash scripts/integration-test.sh",
     "test:containers:up": "docker compose -f docker-compose.test.yml up -d --wait",
@@ -21,11 +21,14 @@
     "drizzle-orm": "^0.45.3",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
+    "redis": "^6.3.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.6.4",
+    "@prisma/client": "^7.10.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",
@@ -34,6 +37,7 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
+    "vitest": "^4.1.11",
     "ws": "^8.22.0"
   }
 }
