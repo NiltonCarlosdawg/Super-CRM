@@ -34,3 +34,6 @@ pnpm-debug.log*
 .pnp.*
 # First, let's ignore everything from the root
 # Ranomatic
+# Vite build artifacts
+packages/frontend/dist/
+packages/frontend/tsconfig.tsbuildinfo

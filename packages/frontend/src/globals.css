@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom variables */
+:root {
+  --primary: 220 98% 61%;
+  --primary-foreground: 210 20% 98%;
+  --secondary: 210 20% 96%;
+  --secondary-foreground: 210 20% 15%;
+  --muted: 210 20% 90%;
+  --muted-foreground: 210 20% 45%;
+  --background: 215 25% 98%;
+  --foreground: 215 25% 15%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 25% 15%;
+  --border: 210 30% 85%;
+  --radius: 0.5rem;
+}
