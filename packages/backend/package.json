@@ -1,0 +1,19 @@
+{
+  "name": "crm-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/backend",
+    "packages/frontend",
+    "packages/shared"
+  ],
+  "scripts": {
+    "build": "turbo run build --scope=backend --scope=frontend",
+    "dev": "turbo run dev --scope=backend --scope=frontend",
+    "test": "turbo run test --scope=backend --scope=frontend",
+    "lint": "turbo run lint --scope=backend --scope=frontend",
+    "typecheck": "turbo run typecheck --scope=backend --scope=frontend"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
