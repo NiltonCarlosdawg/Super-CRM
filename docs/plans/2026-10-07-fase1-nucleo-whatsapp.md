@@ -1568,7 +1568,7 @@ test('RBAC: sem sessão → 401; qualquer papel lê; editor também envia', asyn
   - `createMessageSender.sendHumanMessage`: valida fronteira (`1 ≤ length ≤ WA_MAX_MESSAGE_CHARS`, sem só espaços → 400), `outbox.enqueue({ sender: 'human', idempotencyKey: 'rest:' + conversationId + ':' + idempotencyKey, text })`; `duplicate` ⇒ `getMessageByOutbox(outboxId)` → corpo igual ⇒ `{ message, replayed: true }`, corpo diferente ⇒ `{ conflict: true }` (rota → 409); primeiro ⇒ audit `message.sent` (`actorId`, `at`, `ip`); conversa inexistente ⇒ 404.
   - Rota: zod `{ text }`, cabeçalho `Idempotency-Key` obrigatório (em falta ⇒ 400 com `detail` a mencionar `Idempotency-Key`), `requireRole` nenhum (qualquer papel), CSRF ativo; serialização exata das Views; `message.created` já sai do `enqueue` (Task 17).
 - [x] **4. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **5. Commit.** `feat: add conversations and messages api with cursor pagination`
+- [x] **5. Commit.** `feat: add conversations and messages api with cursor pagination`
 
 ### Task 22: Fluxo ponta-a-ponta e suíte completa
 
@@ -1584,7 +1584,7 @@ test('RBAC: sem sessão → 401; qualquer papel lê; editor também envia', asyn
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/send-flow.test.ts`:
+- [x] **1. Teste falhado** `tests/integration/send-flow.test.ts`:
 
 ```ts
 test('entrada: webhook assinado → 202 rápido → job → handoff+reply na outbox → worker envia UMA vez', async () => {
@@ -1622,10 +1622,10 @@ test('saída sem sessão/CSRF nunca chega à outbox', async () => {
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/send-flow.test.ts` → `fail 1` (rota/job ainda não ligados de ponta a ponta — este teste é o que os liga).
-- [ ] **3. Corrigir o código, não o teste.** Ligar o que faltar em `main.ts` (job `inbound.process` + rota webhook + worker), corrigindo bugs reais à superfície; se um pressuposto do teste estiver errado contra a spec (`docs/01` §7, `docs/04` §7–8), corrigir o teste apenas com a evidência da spec citada.
-- [ ] **4. Correr e ver passar.** → `pass 3, fail 0`.
-- [ ] **5. Suíte completa.** `npm run lint` → `0 erros`; `npm run typecheck` → `0 erros`; `npm test` → `fail 0`; `npm run test:integration` → `fail 0`; `npm run test:contract` → `fail 0`; `npm audit --audit-level=high` → sem vulnerabilidades altas/críticas novas. Colar a saída integral no relatório.
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/send-flow.test.ts` → `fail 1` (rota/job ainda não ligados de ponta a ponta — este teste é o que os liga).
+- [x] **3. Corrigir o código, não o teste.** Ligar o que faltar em `main.ts` (job `inbound.process` + rota webhook + worker), corrigindo bugs reais à superfície; se um pressuposto do teste estiver errado contra a spec (`docs/01` §7, `docs/04` §7–8), corrigir o teste apenas com a evidência da spec citada.
+- [x] **4. Correr e ver passar.** → `pass 3, fail 0`.
+- [x] **5. Suíte completa.** `npm run lint` → `0 erros`; `npm run typecheck` → `0 erros`; `npm test` → `fail 0`; `npm run test:integration` → `fail 0`; `npm run test:contract` → `fail 0`; `npm audit --audit-level=high` → sem vulnerabilidades altas/críticas novas. Colar a saída integral no relatório.
 - [ ] **6. Commit.** `test: cover end to end inbound and outbound send flows`
 
 ### Task 23: Documentação, runbooks e verificação final

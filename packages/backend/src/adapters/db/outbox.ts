@@ -6,6 +6,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, count, eq, inArray, sql } from 'drizzle-orm';
+import { types as pgTypes } from 'pg';
 import type { AccountStatus } from '../../ports/accounts.js';
 import type { NotifyEvent } from '../../ports/notify.js';
 import type { Outbox } from '../../ports/outbox.js';
@@ -127,6 +128,15 @@ export function createOutbox(deps: {
 // tipagem própria.
 // ---------------------------------------------------------------------------
 
+// O `execute` bruto passa pelo parser de identidade do drizzle para TIMESTAMPTZ
+// (drizzle-orm/node-postgres/session.js — o drizzle converte nos seus mappers,
+// só nos `select`); por isso a coluna chega como texto aqui e ao consumidor.
+// Reaplica-se o parser padrão do pg onde se sabe que a coluna é timestamptz.
+const parseTimestamptz = pgTypes.getTypeParser(
+  pgTypes.builtins.TIMESTAMPTZ,
+  'text',
+) as (value: string) => Date;
+
 type ClaimedRaw = {
   id: string;
   message_id: string;
@@ -134,7 +144,7 @@ type ClaimedRaw = {
   idempotency_key: string;
   attempts: number;
   priority: number;
-  scheduled_at: Date;
+  scheduled_at: string; // texto (ver parseTimestamptz acima)
 };
 
 export type ClaimedOutboxRow = {
@@ -188,7 +198,7 @@ export async function sweepAndClaim(
       idempotencyKey: r.idempotency_key,
       attempts: r.attempts,
       priority: r.priority,
-      scheduledAt: r.scheduled_at,
+      scheduledAt: parseTimestamptz(r.scheduled_at),
     }))
     .sort(
       (a, b) => a.priority - b.priority || a.scheduledAt.getTime() - b.scheduledAt.getTime(),
