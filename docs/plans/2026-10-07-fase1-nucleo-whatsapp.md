@@ -962,7 +962,7 @@ export function createOrchestratorPorts(deps: {
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/orchestrator-ports.test.ts` (Postgres real; `msg.id` é o id do evento — contrato com a Fase 3):
+- [x] **1. Teste falhado** `tests/integration/orchestrator-ports.test.ts` (Postgres real; `msg.id` é o id do evento — contrato com a Fase 3):
 
 ```ts
 test('claimMessage: true, false, stale re-claim após claimTtlMs e releaseClaim', async () => {
@@ -989,14 +989,14 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/orchestrator-ports.test.ts` → `fail 1`.
-- [ ] **3. Implementar** os 14 métodos de `Ports` (`reference/ai-provider.ts` → `src/ports/ai-provider.ts`) + `releaseClaim`, com SQL parametrizado (`sql\`\``, nunca concat), tudo com `$now = deps.now()`:
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/orchestrator-ports.test.ts` → `fail 1`.
+- [x] **3. Implementar** os 14 métodos de `Ports` (`reference/ai-provider.ts` → `src/ports/ai-provider.ts`) + `releaseClaim`, com SQL parametrizado (`sql\`\``, nunca concat), tudo com `$now = deps.now()`:
   - `claimMessage(id)` → `UPDATE inbound_events SET ai_claimed_at = $now WHERE id = $1 AND (ai_claimed_at IS NULL OR ai_claimed_at < $now - make_interval(secs => $ttl)) RETURNING id` (linha ⇒ `true`); `releaseClaim(id)` → `SET ai_claimed_at = NULL`.
   - `loadState` → conversa (`ai_mode`, `miss_streak`, `line` via `business_lines.slug`, `lead_id`) + `leads.qualification` (answers) + últimos `turnsLimit` mensagens como `Turn[]` (inbound → turno do cliente, outbound → turno da IA; ordenado por `created_at` asc; a mensagem atual já está guardada — `docs/05` §3); `saveState` → transação: `UPDATE conversations` (só os campos do patch) + `UPDATE leads SET qualification` se houver lead.
   - `retrieve` = `deps.retrieve ?? (async () => [])` (comment: ligar `searchChunks` é Fase 2/3); `lookupCatalog` → `catalog_items` com `status='published'` e dentro de `valid_from/valid_until` da linha; `rules`/`questions`/`triggers` → ativos/publicados, globais (`line IS NULL`) + da linha (a da linha prevalece — o orquestrador já resolve por código).
   - `findOpenHandoff` (`status='pending'`), `createHandoff` (INSERT … RETURNING), `bumpHandoffPriority` (sobe só, por rank `normal<high<urgent` em `CASE`), `recordGap` (upsert por `normalizeQuestion`), `saveTrace` (INSERT `answer_traces`), `notify` → `deps.notifySink(e)` sem tocar no payload.
-- [ ] **4. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **5. Commit.** `feat: implement orchestrator ports over database`
+- [x] **4. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **5. Commit.** `feat: implement orchestrator ports over database`
 
 ### Task 15: Socket.IO, salas e `createSocketNotify`
 
