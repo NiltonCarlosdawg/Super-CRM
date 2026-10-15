@@ -1478,7 +1478,7 @@ test('job: message.status avança estado; session.status atualiza conta e notifi
   - Job `inbound.process`: valida payload com zod na fronteira (inválido ⇒ throw, sem retry, morto na dead-letter) e despacha por tipo como na Interfaces; `message.received` chama `handleInboundEvent(deps, eventId)`; os restantes tipos marcam `processed_at` no fim; erro ⇒ rethrow (retry com backoff da Fase 0) — o `releaseClaim` do handle-inbound garante que o retry não é engolido.
   - `main.ts`: `jobs.register('inbound.process', handler)` + registar a rota pública.
 - [x] **7. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **8. Commit.** `feat: add idempotent webhook ingest with async processing`
+- [x] **8. Commit.** `feat: add idempotent webhook ingest with async processing`
 
 ### Task 21: API de conversas e mensagens
 
@@ -1516,7 +1516,7 @@ export function createMessageSender(deps: { outbox: Outbox; repo: ConversationsR
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/conversations-api.test.ts`:
+- [x] **1. Teste falhado** `tests/integration/conversations-api.test.ts`:
 
 ```ts
 test('paginação por cursor: 5 mensagens, limit 2 → 3 páginas sem repetir nem faltar', async () => {
@@ -1562,12 +1562,12 @@ test('envio humano: sem Idempotency-Key → 400; 1.ª → 201; replay → 200 re
 test('RBAC: sem sessão → 401; qualquer papel lê; editor também envia', async () => { ... });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/conversations-api.test.ts` → `fail 1` (404).
-- [ ] **3. Implementar.**
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/conversations-api.test.ts` → `fail 1` (404).
+- [x] **3. Implementar.**
   - `createConversationsRepository`: paginação por cursor *keyset* opaco (`base64url` de `{ t, id }`, `ORDER BY last_message_at DESC, id DESC` e `created_at DESC, id DESC` com comparação de par `(t, id)`); `limit` default 50, aceite 1–100 (fora ⇒ erro de validação 400); cursor inválido ⇒ `DomainError('invalid_cursor')` 400; `SELECT` explícito de colunas (sem `SELECT *`), junção ao contacto para `contactPhone`.
   - `createMessageSender.sendHumanMessage`: valida fronteira (`1 ≤ length ≤ WA_MAX_MESSAGE_CHARS`, sem só espaços → 400), `outbox.enqueue({ sender: 'human', idempotencyKey: 'rest:' + conversationId + ':' + idempotencyKey, text })`; `duplicate` ⇒ `getMessageByOutbox(outboxId)` → corpo igual ⇒ `{ message, replayed: true }`, corpo diferente ⇒ `{ conflict: true }` (rota → 409); primeiro ⇒ audit `message.sent` (`actorId`, `at`, `ip`); conversa inexistente ⇒ 404.
   - Rota: zod `{ text }`, cabeçalho `Idempotency-Key` obrigatório (em falta ⇒ 400 com `detail` a mencionar `Idempotency-Key`), `requireRole` nenhum (qualquer papel), CSRF ativo; serialização exata das Views; `message.created` já sai do `enqueue` (Task 17).
-- [ ] **4. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **4. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
 - [ ] **5. Commit.** `feat: add conversations and messages api with cursor pagination`
 
 ### Task 22: Fluxo ponta-a-ponta e suíte completa

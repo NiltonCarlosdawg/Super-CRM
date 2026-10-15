@@ -39,6 +39,10 @@ const DOMAIN: Record<string, [number, string]> = {
   user_not_found: [404, 'utilizador não encontrado'],
   email_already_exists: [409, 'email já registado'],
   last_admin: [409, 'não é possível remover o último administrador ativo'],
+  // Task 21: paginação e envio de mensagens
+  invalid_cursor: [400, 'cursor de paginação inválido'],
+  message_empty: [400, 'mensagem vazia ou só espaços'],
+  message_too_long: [400, 'texto excede WA_MAX_MESSAGE_CHARS'],
 };
 
 export function toProblem(

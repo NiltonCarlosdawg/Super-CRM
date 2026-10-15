@@ -6,15 +6,18 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { buildHttpApp } from '../../src/adapters/http/app.js';
+import { createAccountsRepository } from '../../src/adapters/db/accounts.js';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
-import { createAccountsRepository } from '../../src/adapters/db/accounts.js';
+import { createConversationsRepository } from '../../src/adapters/db/conversations.js';
 import type { DbClient } from '../../src/adapters/db/index.js';
+import { createOutbox } from '../../src/adapters/db/outbox.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
 import { attachRealtime, type RealtimeHandle } from '../../src/adapters/realtime/socket.js';
 import { createLoginService } from '../../src/application/auth/login.js';
 import { createLoginLimiter } from '../../src/application/auth/login-limiter.js';
+import { createMessageSender } from '../../src/application/messaging.js';
 import type { AuthConfig } from '../../src/infra/config-app.js';
 import { createArgon2Hasher } from '../../src/infra/security/argon2.js';
 import type { MfaPort, SessionStore } from '../../src/ports/auth.js';
@@ -56,8 +59,13 @@ function createFakeMfa(sessions: SessionStore): MfaPort {
   };
 }
 
-/** MessagingProvider fake (Task 16): sem rede; sessões `fake-<uuid>` e QR fixo. */
-export function createFakeWaProvider(): MessagingProvider {
+/** MessagingProvider fake (Task 16): sem rede; sessões `fake-<uuid>` e QR fixo.
+ *  Task 21: regista as chamadas a sendText — os testes provam que nenhum envio
+ *  acontece fora da outbox. */
+export function createFakeWaProvider(): MessagingProvider & {
+  sendTextCalls: Array<{ sessionId: string; to: string; text: string; idempotencyKey: string }>;
+} {
+  const sendTextCalls: Array<{ sessionId: string; to: string; text: string; idempotencyKey: string }> = [];
   return {
     name: 'fake-wa',
     health: async () => ({ ok: true }),
@@ -65,9 +73,13 @@ export function createFakeWaProvider(): MessagingProvider {
     getSession: async () => ({ status: 'connected' as const }),
     getQr: async () => ({ qr: 'QR-FAKE' }),
     logout: async () => {},
-    sendText: async () => ({ providerMessageId: null, outcome: 'unknown' as const }),
+    sendText: async (input) => {
+      sendTextCalls.push(input);
+      return { providerMessageId: null, outcome: 'unknown' as const };
+    },
     sendMedia: async () => ({ providerMessageId: null, outcome: 'unknown' as const }),
     verifyAndParseWebhook: () => [],
+    sendTextCalls,
   };
 }
 
@@ -133,6 +145,26 @@ export async function buildTestApp(
   );
   const login = createLoginService({ users: usersRepo, sessions, hasher, mfa, limiter, audit, cfg: testAuthConfig, now: () => new Date() });
 
+  // Task 21: leitura/envio de conversas — outbox REAL (a única saída de
+  // mensagens) com janela [1000, 5000] ms para o teste de scheduledAt.
+  const conversations = createConversationsRepository(db);
+  const outbox = createOutbox({
+    db,
+    notifySink: async (e) => {
+      notifyLog.push(e);
+    },
+    now: () => new Date(),
+    random: Math.random,
+    replyDelay: { min: 1000, max: 5000 },
+  });
+  const messageSender = createMessageSender({
+    outbox,
+    repo: conversations,
+    audit,
+    cfg: { maxMessageChars: 4096 },
+    now: () => new Date(),
+  });
+
   const app = buildHttpApp({
     cfg,
     db,
@@ -148,6 +180,8 @@ export async function buildTestApp(
     accounts,
     waProvider,
     jobs,
+    conversations,
+    messageSender,
     notifySink: async (e) => {
       notifyLog.push(e);
     },

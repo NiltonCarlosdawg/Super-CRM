@@ -12,6 +12,7 @@ import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb } from '../adapters/db/index.js';
+import { createConversationsRepository } from '../adapters/db/conversations.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
 import { createUsersRepository } from '../adapters/db/users.js';
@@ -25,6 +26,7 @@ import { createMfaService } from '../application/auth/mfa.js';
 import { handleInboundEvent } from '../application/handle-inbound.js';
 import { createInboundProcessHandler } from '../application/inbound-process.js';
 import { advanceMessageStatus } from '../application/message-status.js';
+import { createMessageSender } from '../application/messaging.js';
 import { handleInbound, type InboundMessage, type Outcome } from '../application/orchestrator.js';
 import { runOutboxTick } from '../application/outbox-worker.js';
 import { ConfigError } from './config.js';
@@ -94,6 +96,24 @@ async function main(): Promise<void> {
     cbCooldownMs: config.messaging.cbCooldownMs,
   });
 
+  // Task 21: leitura de conversas + envio humano — a outbox é a ÚNICA saída
+  // (docs/04 §7); a mesma instância serve o orquestrador de inbound (Task 19).
+  const conversations = createConversationsRepository(db);
+  const outbox = createOutbox({
+    db,
+    notifySink: socketNotify,
+    now,
+    random: Math.random,
+    replyDelay: config.messaging.replyDelayMs,
+  });
+  const messageSender = createMessageSender({
+    outbox,
+    repo: conversations,
+    audit,
+    cfg: { maxMessageChars: config.messaging.maxMessageChars },
+    now,
+  });
+
   const app = buildHttpApp({
     cfg: config,
     db,
@@ -109,6 +129,8 @@ async function main(): Promise<void> {
     accounts: accountsRepo,
     waProvider,
     jobs,
+    conversations,
+    messageSender,
     notifySink: socketNotify,
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });
@@ -140,13 +162,6 @@ async function main(): Promise<void> {
   const unavailableAiProvider = createUnavailableAiProvider();
   const orchestrate = (msg: InboundMessage): Promise<Outcome> =>
     handleInbound(orchestratorPorts, unavailableAiProvider, msg);
-  const inboundOutbox = createOutbox({
-    db,
-    notifySink: socketNotify,
-    now,
-    random: Math.random,
-    replyDelay: config.messaging.replyDelayMs,
-  });
   await jobs.register(
     'inbound.process',
     createInboundProcessHandler({
@@ -159,7 +174,7 @@ async function main(): Promise<void> {
             db,
             ports: orchestratorPorts,
             orchestrate,
-            outbox: inboundOutbox,
+            outbox,
             notifySink: socketNotify,
             cfg: { claimTtlMs: config.messaging.claimTtlMs },
             now,
