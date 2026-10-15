@@ -243,7 +243,7 @@ export function loadFullConfig(env: NodeJS.ProcessEnv): AppConfig & { auth: Auth
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/unit/config-app.test.ts`:
+- [x] **1. Teste falhado** `tests/unit/config-app.test.ts`:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -285,11 +285,11 @@ test('loadFullConfig: compõe base + auth + messaging sem ler env duas vezes', (
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm test -- tests/unit/config-app.test.ts` → `fail 1` (`Cannot find module ... config-app.ts`).
-- [ ] **3. Implementar.** `loadAuthConfig`/`loadMessagingConfig` com a mesma mecânica de issues da Fase 0 (`falta X`, `X: valor não permitido`, `X: fora do intervalo ...`); `WA_REPLY_DELAY_MS` parseado como `min-max` com `0 ≤ min ≤ max ≤ 600000`; `WA_FAIL_RATIO` em (0,1]; números inteiros nos restantes campos no intervalo documentado; `loadFullConfig` chama `loadConfig(env)` uma vez e junta `{ auth, messaging }`. Atualizar `main.ts` e os casos do `config-startup.test.ts` (adicionar `AUTH_SECRET`, `AUTH_TOTP_ISSUER`, `WA_AKG_BASE_URL`, `WA_AKG_API_KEY`, `WA_WEBHOOK_SECRET` ao caso válido — estender, nunca enfraquecer; o caso inválido continua a falhar primeiro por `DATABASE_URL`). `.env.example`: todas as chaves novas com placeholders não funcionais (ex.: `WA_WEBHOOK_SECRET=<32+ caracteres aleatórios>`), zero segredos reais.
-- [ ] **4. Correr e ver passar.** `npm test -- tests/unit/config-app.test.ts tests/unit/config.test.ts tests/unit/config-startup.test.ts` → `pass, fail 0`.
-- [ ] **5. lint/typecheck.** `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **6. Commit.** `feat: add auth and messaging config loaders`
+- [x] **2. Correr e ver falhar.** `npm test -- tests/unit/config-app.test.ts` → `fail 1` (`Cannot find module ... config-app.ts`).
+- [x] **3. Implementar.** `loadAuthConfig`/`loadMessagingConfig` com a mesma mecânica de issues da Fase 0 (`falta X`, `X: valor não permitido`, `X: fora do intervalo ...`); `WA_REPLY_DELAY_MS` parseado como `min-max` com `0 ≤ min ≤ max ≤ 600000`; `WA_FAIL_RATIO` em (0,1]; números inteiros nos restantes campos no intervalo documentado; `loadFullConfig` chama `loadConfig(env)` uma vez e junta `{ auth, messaging }`. Atualizar `main.ts` e os casos do `config-startup.test.ts` (adicionar `AUTH_SECRET`, `AUTH_TOTP_ISSUER`, `WA_AKG_BASE_URL`, `WA_AKG_API_KEY`, `WA_WEBHOOK_SECRET` ao caso válido — estender, nunca enfraquecer; o caso inválido continua a falhar primeiro por `DATABASE_URL`). `.env.example`: todas as chaves novas com placeholders não funcionais (ex.: `WA_WEBHOOK_SECRET=<32+ caracteres aleatórios>`), zero segredos reais.
+- [x] **4. Correr e ver passar.** `npm test -- tests/unit/config-app.test.ts tests/unit/config.test.ts tests/unit/config-startup.test.ts` → `pass, fail 0`.
+- [x] **5. lint/typecheck.** `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **6. Commit.** `feat: add auth and messaging config loaders`
 
 ### Task 5: Ports `Audit` e `MessagingProvider` e adaptador de auditoria
 

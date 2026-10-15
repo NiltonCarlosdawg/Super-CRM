@@ -27,6 +27,12 @@ test('arranque com env válida escreve application.started e sai 0', () => {
     DATABASE_URL: 'postgres://user:pass@127.0.0.1:5432/crm-test',
     REDIS_URL: 'redis://127.0.0.1:6379',
     LOG_LEVEL: 'info',
+    // Fase 1 Task 4: loader completo (auth + messaging) — estender, nunca enfraquecer
+    AUTH_SECRET: 'x'.repeat(32),
+    AUTH_TOTP_ISSUER: 'MilVendas',
+    WA_AKG_BASE_URL: 'http://wa.local:3001',
+    WA_AKG_API_KEY: 'chave-teste',
+    WA_WEBHOOK_SECRET: 's'.repeat(32),
   });
 
   assert.equal(result.status, 0);
