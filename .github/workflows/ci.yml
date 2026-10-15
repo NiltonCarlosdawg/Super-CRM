@@ -25,6 +25,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:contract
 
   secret-scan:
     runs-on: ubuntu-latest
