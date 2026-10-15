@@ -75,8 +75,8 @@ export const leadStageEnum = pgEnum('lead_stage', ['open', 'won', 'lost']);
 
 **Steps:**
 
-- [ ] **1. Ler o runner da Fase 0.** Ver como `tests/integration/job-queue.test.ts` isola a BD (BD única, `--test-concurrency=1` ou BD por processo) e seguir essa convenção nos helpers; se não houver isolamento, acrescentar `--test-concurrency=1` ao script `test:integration` do `package.json` (estender, nunca enfraquecer).
-- [ ] **2. Teste falhado** `tests/integration/migrations.test.ts`:
+- [x] **1. Ler o runner da Fase 0.** Ver como `tests/integration/job-queue.test.ts` isola a BD (BD única, `--test-concurrency=1` ou BD por processo) e seguir essa convenção nos helpers; se não houver isolamento, acrescentar `--test-concurrency=1` ao script `test:integration` do `package.json` (estender, nunca enfraquecer).
+- [x] **2. Teste falhado** `tests/integration/migrations.test.ts`:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -100,8 +100,8 @@ test('migrações aplicam de zero e leads.stage é lead_stage NOT NULL default o
 });
 ```
 
-- [ ] **3. Correr e ver falhar.** `npm run test:integration -- tests/integration/migrations.test.ts` → `fail 1`: `AssertionError [ERR_ASSERTION]: deepEqual` (tipo `lead_stage` inexistente) ou `ai_claimed_at` em falta.
-- [ ] **4. Implementar.**
+- [x] **3. Correr e ver falhar.** `npm run test:integration -- tests/integration/migrations.test.ts` → `fail 1`: `AssertionError [ERR_ASSERTION]: deepEqual` (tipo `lead_stage` inexistente) ou `ai_claimed_at` em falta.
+- [x] **4. Implementar.**
   - `enums.ts`: `export const leadStageEnum = pgEnum('lead_stage', ['open', 'won', 'lost']);`
   - `leads.schema.ts`: `stage: leadStageEnum('stage').notNull().default('open')` (hoje é `text NOT NULL` sem vocabulário — `docs/schema-base.md` nota isto como pergunta do gate); se existir coluna `estado`/`state`, removê-la; garantir `qualification` `jsonb not null default '{}'` e `owner_id` anulável (usa-se em `saveState`, Task 14); qualquer coluna `NOT NULL` sem default que impeça inserir um lead passa a `default` documentado.
   - `inbound-events.schema.ts`: `aiClaimedAt: timestamp('ai_claimed_at', { withTimezone: true })`.
@@ -111,10 +111,10 @@ test('migrações aplicam de zero e leads.stage é lead_stage NOT NULL default o
   - `conversations.schema.ts`: `UNIQUE (account_id, contact_id)` se a Fase 0 não a tiver (uma conversa por conta+contacto, `docs/01` §6 "o fio de mensagens"; necessária ao upsert da Task 19 e ao `findOrCreateForCampaign` da Fase 4) — registar a decisão em `docs/schema-base.md`.
   - `npm run db:generate` → `drizzle/0002_*.sql`; **revistar** o SQL gerado (casts `USING`, `SET DEFAULT`, `SET NOT NULL`), nunca editar depois de aplicado.
   - `tests/helpers/db.ts` conforme a Interfaces, com o TRUNCATE construído a partir dos nomes devolvidos por `information_schema.tables` (nomes vindos da BD, SQL por identificadores da própria consulta, nunca concatenado de input).
-- [ ] **5. Correr e ver passar.** `npm run test:integration -- tests/integration/migrations.test.ts` → `pass 1, fail 0`; `npm run db:migrate` numa base vazia local do zero → sem erros.
-- [ ] **6. Responder ao gate de schema.** Em `docs/schema-base.md`, marcar as perguntas: `leads.stage` = `lead_stage` (`open` = em curso, `won` = fechada ganha, `lost` = fechada perdida; consumido pela Fase 5 como `leadStatus`); coluna `estado` eliminada (redundante — uma só fonte de verdade por facto, `docs/05` §5); `unknown_delivery` confirmado em `outbox_status` (usado pela Task 18); estados de `followup_runs` → Fase 5; colunas de limites de `campaigns` → Fase 4; `vector` → ADR-0002/Fase 2.
-- [ ] **7. lint/typecheck.** `npm run lint && npm run typecheck` → `0 erros`, `0 avisos novos`.
-- [ ] **8. Commit.** `feat: apply base migrations from empty db and add lead_stage enum`
+- [x] **5. Correr e ver passar.** `npm run test:integration -- tests/integration/migrations.test.ts` → `pass 1, fail 0`; `npm run db:migrate` numa base vazia local do zero → sem erros.
+- [x] **6. Responder ao gate de schema.** Em `docs/schema-base.md`, marcar as perguntas: `leads.stage` = `lead_stage` (`open` = em curso, `won` = fechada ganha, `lost` = fechada perdida; consumido pela Fase 5 como `leadStatus`); coluna `estado` eliminada (redundante — uma só fonte de verdade por facto, `docs/05` §5); `unknown_delivery` confirmado em `outbox_status` (usado pela Task 18); estados de `followup_runs` → Fase 5; colunas de limites de `campaigns` → Fase 4; `vector` → ADR-0002/Fase 2.
+- [x] **7. lint/typecheck.** `npm run lint && npm run typecheck` → `0 erros`, `0 avisos novos`.
+- [x] **8. Commit.** `feat: apply base migrations from empty db and add lead_stage enum`
 
 ### Task 2: Testes de integração do conhecimento (`search-chunks` e seed de gatilhos)
 

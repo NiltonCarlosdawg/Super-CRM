@@ -15,6 +15,13 @@
       "when": 1791459601367,
       "tag": "0001_shocking_saracen",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792027060912,
+      "tag": "0002_dry_otto_octavius",
+      "breakpoints": true
     }
   ]
 }

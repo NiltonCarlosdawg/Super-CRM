@@ -8,6 +8,11 @@ import { pgEnum } from 'drizzle-orm/pg-core';
 // docs/01 §6: role (admin, editor, agent)
 export const userRoleEnum = pgEnum('user_role', ['admin', 'editor', 'agent']);
 
+// docs/01 §6 (stage do lead) + gate docs/schema-base.md §4 Q1: open = em curso,
+// won = fechada ganha, lost = fechada perdida. Consumido como `leadStatus` na
+// Fase 5 (a coluna `status`/estado é eliminada — redundante, docs/05 §5).
+export const leadStageEnum = pgEnum('lead_stage', ['open', 'won', 'lost']);
+
 // docs/01 §6 e docs/04 §6: connecting | connected | disconnected | suspected_ban.
 // (`logged_out`/`qr_pending` são estados do contrato de sessão, docs/04 §5 —
 // não são estados guardados em whatsapp_accounts.status.)

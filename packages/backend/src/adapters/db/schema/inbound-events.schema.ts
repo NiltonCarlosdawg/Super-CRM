@@ -20,6 +20,9 @@ export const inboundEvents = pgTable(
     payload: jsonb('payload').notNull(), // payload bruto validado na fronteira (docs/02 §3)
     receivedAt: ts('received_at').notNull().defaultNow(),
     processedAt: ts('processed_at'), // nulo = pendente de processar
+    // Claim de idempotência do processamento (Fase 1 Task 20; consumido pela
+    // Fase 3): nulo = ainda não reclamado por um job.
+    aiClaimedAt: ts('ai_claimed_at'),
   },
   (t) => [
     // Fila de pendentes: só eventos por processar, ordenados por chegada

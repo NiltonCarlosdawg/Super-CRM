@@ -34,6 +34,8 @@ export const messages = pgTable(
     sender: messageSenderEnum('sender').notNull(), // customer | ai | human | campaign
     kind: messageKindEnum('kind').notNull().default('text'), // docs/04 §5
     body: text('body'), // nulo = mídia sem legenda
+    // Mídia recebida guarda só a referência (não o binário) — ver lacunas (docs/05).
+    mediaRef: text('media_ref'),
     providerMessageId: text('provider_message_id'), // nulo até o WA-AKG aceitar o envio
     status: messageStatusEnum('status').notNull().default('queued'),
     createdAt: createdAt(),

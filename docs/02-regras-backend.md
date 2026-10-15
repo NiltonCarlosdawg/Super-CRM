@@ -20,7 +20,7 @@ src/
     realtime/        Socket.IO
   infra/             config, logging, métricas, arranque
   modules/knowledge/ schema Drizzle, seed, services (vindos de reference/)
-tests/               unit/, integration/, contract/, eval/
+tests/               unit/, integration/, contract/, eval/, helpers/
 docs/adr/            decisões
 ```
 

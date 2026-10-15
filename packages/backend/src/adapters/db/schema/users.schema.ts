@@ -1,5 +1,5 @@
-// Equipa interna (docs/01 §6): role, active, hash de palavra-passe.
-// totp_secret/totp_enabled_at entram na Fase 1 (docs/plans/...fase1, Task 1).
+// Equipa interna (docs/01 §6): role, active, hash de palavra-passe,
+// totp_secret/totp_enabled_at (Fase 1, Task 1/8).
 
 import { boolean, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { userRoleEnum } from './enums.js';
@@ -25,6 +25,9 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(), // argon2id, nunca em claro (docs/03)
   role: userRoleEnum('role').notNull(), // admin | editor | agent — sem default: o papel é sempre explícito
   active: boolean('active').notNull().default(true), // docs/01 §6
+  // TOTP para `admin` (Fase 1 Task 8): blob AES-GCM, nulo até ativar.
+  totpSecret: text('totp_secret'),
+  totpEnabledAt: ts('totp_enabled_at'),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

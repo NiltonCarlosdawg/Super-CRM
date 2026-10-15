@@ -2,7 +2,7 @@
 // double-submit. A PK é o valor do cookie (randomUUID() gerado pela aplicação);
 // logout/revogação = DELETE da linha (docs/plans/...fase1, Task 15).
 
-import { index, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { users } from './users.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
@@ -26,6 +26,9 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id),
     expiresAt: ts('expires_at').notNull(), // now + ttl; sessão expirada nunca é aceite
+    // true = login feito, TOTP por confirmar (Fase 1, Task 8); a sessão só
+    // fica utilizável com o segundo fator concluído.
+    mfaPending: boolean('mfa_pending').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(), // mfa_pending (Fase 1) atualiza a linha
   },
