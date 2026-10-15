@@ -9,6 +9,7 @@ import { buildHttpApp } from '../adapters/http/app.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb } from '../adapters/db/index.js';
+import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
 import { createLoginService } from '../application/auth/login.js';
 import { createLoginLimiter } from '../application/auth/login-limiter.js';
@@ -58,11 +59,14 @@ async function main(): Promise<void> {
     cfg: config,
     db,
     users,
+    usersRepo: createUsersRepository({ db }),
     audit,
+    hasher,
     sessions,
     login,
     mfa,
     logger: log,
+    now,
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });
 

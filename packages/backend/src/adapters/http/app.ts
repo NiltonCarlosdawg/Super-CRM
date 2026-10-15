@@ -14,10 +14,13 @@ import type { NodeEnv } from '../../infra/config.js';
 import type { AuthConfig } from '../../infra/config-app.js';
 import type { Audit } from '../../ports/audit.js';
 import type { AuthUserRepo, MfaPort, SessionStore } from '../../ports/auth.js';
+import type { PasswordHasher } from '../../ports/security.js';
 import type { DbClient } from '../db/index.js';
+import type { UsersRepository } from '../db/users.js';
 import { toProblem } from './errors.js';
 import { authenticate, csrfGuard } from './guards.js';
 import { authRoutes } from './routes/auth.js';
+import { usersRoutes } from './routes/users.js';
 import type { createLoginService } from '../../application/auth/login.js';
 
 declare module 'fastify' {
@@ -31,11 +34,14 @@ export interface HttpDeps {
   cfg: { nodeEnv: NodeEnv; auth: AuthConfig };
   db?: DbClient;
   users?: AuthUserRepo; // /v1/auth/me devolve {id,name,email,role}
-  audit?: Audit;
+  usersRepo: UsersRepository; // API de utilizadores (Task 10)
+  audit: Audit;
+  hasher: PasswordHasher;
   sessions: SessionStore;
   login: ReturnType<typeof createLoginService>;
   mfa: MfaPort;
   logger: Logger;
+  now(): Date; // relógio injetado (docs/02 §3)
   /** Checks de readiness adicionais (ex.: ping Redis no arranque real). */
   readyChecks?: Array<{ name: string; run: () => Promise<unknown> }>;
 }
@@ -126,6 +132,7 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
   void app.register(
     async (instance) => {
       await authRoutes(instance, deps);
+      await usersRoutes(instance, deps);
     },
     { prefix: '' },
   );

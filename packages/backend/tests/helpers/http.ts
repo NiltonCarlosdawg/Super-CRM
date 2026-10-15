@@ -8,7 +8,9 @@ import { randomUUID } from 'node:crypto';
 import { buildHttpApp } from '../../src/adapters/http/app.js';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
+import type { DbClient } from '../../src/adapters/db/index.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
+import { createUsersRepository } from '../../src/adapters/db/users.js';
 import { createLoginService } from '../../src/application/auth/login.js';
 import { createLoginLimiter } from '../../src/application/auth/login-limiter.js';
 import type { AuthConfig } from '../../src/infra/config-app.js';
@@ -52,6 +54,7 @@ export interface TestApp extends FastifyInstance {
   sessions: { agent: string; editor: string; admin: string };
   csrf: { agent: string; editor: string; admin: string };
   users: { agent: UserInfo; editor: UserInfo; admin: UserInfo };
+  db: DbClient;
   close(): Promise<void>;
 }
 
@@ -93,11 +96,14 @@ export async function buildTestApp(): Promise<TestApp> {
     cfg,
     db,
     users: usersRepo,
+    usersRepo: createUsersRepository({ db }),
     audit,
+    hasher,
     sessions,
     login,
     mfa,
     logger: pino({ level: 'silent' }),
+    now: () => new Date(),
   });
 
   // login direto pelo serviço (não HTTP) para criar as cookies de teste
@@ -118,5 +124,6 @@ export async function buildTestApp(): Promise<TestApp> {
   withHelpers.sessions = { agent: agentS.sessionId, editor: editorS.sessionId, admin: adminS.sessionId };
   withHelpers.csrf = { agent: randomUUID(), editor: randomUUID(), admin: randomUUID() };
   withHelpers.users = { agent, editor, admin };
+  withHelpers.db = db;
   return withHelpers;
 }

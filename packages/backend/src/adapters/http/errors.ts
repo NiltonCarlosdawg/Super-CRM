@@ -34,7 +34,11 @@ const DOMAIN: Record<string, [number, string]> = {
   forbidden: [403, 'papel insuficiente para a operação'],
   csrf_invalid: [403, "header 'x-csrf-token' ausente ou inválido"],
   mfa_required: [403, 'segundo fator pendente: complete o TOTP'],
+  cannot_modify_self: [403, 'não pode alterar o próprio papel ou estado'],
   not_found: [404, 'recurso não encontrado'],
+  user_not_found: [404, 'utilizador não encontrado'],
+  email_already_exists: [409, 'email já registado'],
+  last_admin: [409, 'não é possível remover o último administrador ativo'],
 };
 
 export function toProblem(

@@ -738,7 +738,7 @@ export function createUsersRepository(db: DbClient): UsersRepository;
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/users-api.test.ts`:
+- [x] **1. Teste falhado** `tests/integration/users-api.test.ts`:
 
 ```ts
 test('RBAC e guarda do último admin', async () => {
@@ -764,10 +764,10 @@ test('reset de palavra-passe invalida as sessões do utilizador alvo', async () 
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** → `fail 1` (404).
-- [ ] **3. Implementar.** `createUsersRepository` (email `lower(trim())` único; `update` devolve `false` se não existir); rota com zod por método; guardas: auto-mutação de `role`/`active` → 403 `cannot_modify_self`; `countActiveAdmins() === 1` e a mutação tira um admin de circulação → 409 `last_admin`; `password` usa `assertPasswordPolicy` + hasher + `revokeAllForUser` do alvo; `role`/`active` mudados revogam as sessões do alvo; audit `user.created`, `user.updated`, `user.role_changed`, `user.deactivated`, `user.password_reset` (com `at` do relógio injetado, `ip` do pedido); erros `DomainError` → mapa do `toProblem` (400/404/409).
-- [ ] **4. Correr e ver passar.** → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **5. Commit.** `feat: add users management api with rbac`
+- [x] **2. Correr e ver falhar.** → `fail 1` (404).
+- [x] **3. Implementar.** `createUsersRepository` (email `lower(trim())` único; `update` devolve `false` se não existir); rota com zod por método; guardas: auto-mutação de `role`/`active` → 403 `cannot_modify_self`; `countActiveAdmins() === 1` e a mutação tira um admin de circulação → 409 `last_admin`; `password` usa `assertPasswordPolicy` + hasher + `revokeAllForUser` do alvo; `role`/`active` mudados revogam as sessões do alvo; audit `user.created`, `user.updated`, `user.role_changed`, `user.deactivated`, `user.password_reset` (com `at` do relógio injetado, `ip` do pedido); erros `DomainError` → mapa do `toProblem` (400/404/409).
+- [x] **4. Correr e ver passar.** → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **5. Commit.** `feat: add users management api with rbac`
 
 ### Task 11: Adaptador WA-AKG
 
