@@ -111,7 +111,18 @@ consecutivos ⇒ `CircuitOpenError` durante `cbCooldownMs`; depois, **uma** cham
 
 - Nenhum tipo/objeto do WA-AKG sai daqui (docs/04 §5): as respostas são validadas por zod em
   `schemas.ts` e convertidas para os tipos do port.
-- Webhook: `verifyAndParseWebhook` implementado na Task 12 (`webhook.ts`).
+- Webhook: `verifyAndParseWebhook` (`webhook.ts`) — HMAC-SHA256 exato do fork:
+  header `x-webhook-signature: sha256=<hex>` sobre o corpo bruto, comparação em
+  tempo constante (`webhook.ts` do fork `sendWebhookRequest`, auditoria §B6), sem
+  janela de timestamp. Envelope `{event, sessionId, timestamp, data}` validado por
+  zod; `message.received`/`message.status`/`connection.update` convertidos ao
+  contrato do port (`src/ports/provider-events.ts`), `from` → `normalizePhoneE164`
+  (inválido ⇒ `payload_invalid`), timestamps do envelope em `Date` UTC, `type`
+  fora do union documentado ⇒ `'other'`, `message.status` `PENDING` ⇒ ignorado com
+  log (fora do union — nunca mapear à força), qualquer outro `event` com assinatura
+  válida ⇒ ignorado com log sem lançar. `providerEventId` determinístico
+  `sha256(corpo):evento:index` (o WA-AKG não envia id de evento — redelivery
+  idêntico deduplica no job).
 
 ## Errata vs. auditoria (§A2)
 

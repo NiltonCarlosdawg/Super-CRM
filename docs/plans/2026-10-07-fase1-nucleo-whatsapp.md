@@ -857,8 +857,8 @@ export function signWebhook(rawBody: Buffer, secret: string, opts?: { at?: Date 
 
 **Steps:**
 
-- [ ] **1. Gate da assinatura.** Ler `docs/wa-akg-audit.md` §B (perguntas 5–8). Casos: (a) HMAC confirmado → implementar o esquema exato (header, algoritmo, formato hex/base64, janela de timestamp se existir); (b) só segredo partilhado → comparar header com `WA_WEBHOOK_SECRET` em tempo constante e registar em `docs/schema-base`/relatório que a proteção é segredo+rede (`docs/03` §5); (c) **nenhuma** das duas → parar e perguntar: é gate de `docs/03` §5, não se avança a Task 12 sem decisão humana.
-- [ ] **2. Teste falhado** `tests/unit/webhook-verify.test.ts` (vetores calculados com o esquema auditado; corpo de exemplo sintético):
+- [x] **1. Gate da assinatura.** Ler `docs/wa-akg-audit.md` §B (perguntas 5–8). Casos: (a) HMAC confirmado → implementar o esquema exato (header, algoritmo, formato hex/base64, janela de timestamp se existir); (b) só segredo partilhado → comparar header com `WA_WEBHOOK_SECRET` em tempo constante e registar em `docs/schema-base`/relatório que a proteção é segredo+rede (`docs/03` §5); (c) **nenhuma** das duas → parar e perguntar: é gate de `docs/03` §5, não se avança a Task 12 sem decisão humana.
+- [x] **2. Teste falhado** `tests/unit/webhook-verify.test.ts` (vetores calculados com o esquema auditado; corpo de exemplo sintético):
 
 ```ts
 test('assinatura válida → eventos normalizados; corpo alterado ou assinatura errada → lança', () => {
@@ -881,10 +881,10 @@ test('payload válido mas desconhecido (evento novo do WA-AKG) é ignorado sem l
 });
 ```
 
-- [ ] **3. Correr e ver falhar.** `npm test -- tests/unit/webhook-verify.test.ts` → `fail 1`.
-- [ ] **4. Implementar.** `webhook.ts`: extrair o header de assinatura (nomes exatos da auditoria), `timingSafeEqual` sobre buffers de igual tamanho (tamanhos diferentes ⇒ inválido), parse JSON do `rawBody`, validação por evento; `provider-events.ts` com os esquemas zod construídos a partir das capturas reais de `docs/wa-akg-audit.md` §B (campo a campo — **sem inventar nomes**); `from` passa por `normalizePhoneE164` (inválido ⇒ `payload_invalid`); timestamps → `Date` UTC; tipo `message.kind` fora do union documentado ⇒ `'other'`. `signWebhook` espelha o esquema (o teste de cima é o espelho).
-- [ ] **5. Correr e ver passar.** → `pass 2, fail 0`.
-- [ ] **6. Commit.** `feat: verify wa-akg webhooks over raw body with constant time compare`
+- [x] **3. Correr e ver falhar.** `npm test -- tests/unit/webhook-verify.test.ts` → `fail 1`.
+- [x] **4. Implementar.** `webhook.ts`: extrair o header de assinatura (nomes exatos da auditoria), `timingSafeEqual` sobre buffers de igual tamanho (tamanhos diferentes ⇒ inválido), parse JSON do `rawBody`, validação por evento; `provider-events.ts` com os esquemas zod construídos a partir das capturas reais de `docs/wa-akg-audit.md` §B (campo a campo — **sem inventar nomes**); `from` passa por `normalizePhoneE164` (inválido ⇒ `payload_invalid`); timestamps → `Date` UTC; tipo `message.kind` fora do union documentado ⇒ `'other'`. `signWebhook` espelha o esquema (o teste de cima é o espelho).
+- [x] **5. Correr e ver passar.** → `pass 2, fail 0`.
+- [x] **6. Commit.** `feat: verify wa-akg webhooks over raw body with constant time compare`
 
 ### Task 13: Mock fiel, testes de contrato e CI
 

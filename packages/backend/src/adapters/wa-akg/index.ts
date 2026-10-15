@@ -6,11 +6,10 @@
 // (meia-abertura): sucesso fecha, falha reabre.
 
 import { normalizePhoneE164 } from '../../domain/phone.js';
-import type { MessagingProvider, SendResult, SessionStatus } from '../../ports/messaging-provider.js';
+import type { MessagingProvider, SendResult } from '../../ports/messaging-provider.js';
 import {
   CircuitOpenError,
   ProviderUnavailableError,
-  WebhookError,
 } from '../../ports/messaging-provider.js';
 import {
   type WaAkgOptions,
@@ -24,27 +23,14 @@ import {
 import {
   createSessionDataSchema,
   listSessionsDataSchema,
+  mapSessionStatus,
   okEnvelope,
   okOnlySchema,
   qrSuccessSchema,
   sendDataSchema,
   sessionDataSchema,
 } from './schemas.js';
-
-/** Mapeamento documentado em README.md — nunca adivinhar estados novos. */
-const STATUS_MAP: Record<string, SessionStatus> = {
-  CONNECTED: 'connected',
-  SCAN_QR: 'qr_pending',
-  STOPPED: 'disconnected',
-  DISCONNECTED: 'disconnected',
-  ZOMBIE: 'disconnected',
-  FAILED: 'disconnected',
-  LOGGED_OUT: 'logged_out',
-};
-
-function mapStatus(status: string): SessionStatus {
-  return STATUS_MAP[status] ?? 'unknown';
-}
+import { verifyAndParseWebhook as verifyWebhook } from './webhook.js';
 
 /** `image/*|video/*|audio/*` → tipo do fork; resto → document. */
 function waMediaType(mimeType: string): string {
@@ -214,7 +200,7 @@ export function createWaAkgAdapter(opts: WaAkgOptions): MessagingProvider {
         if (!parsed.success) {
           throw new ProviderUnavailableError('wa-akg: resposta inesperada em getSession');
         }
-        return { status: mapStatus(parsed.data.data.status) };
+        return { status: mapSessionStatus(parsed.data.data.status) };
       });
     },
 
@@ -315,9 +301,7 @@ export function createWaAkgAdapter(opts: WaAkgOptions): MessagingProvider {
       });
     },
 
-    /** Task 12 substitui este stub por webhook.ts (assinatura sobre o corpo bruto). */
-    verifyAndParseWebhook() {
-      throw new WebhookError('payload_invalid', 'verifyAndParseWebhook: implementado na Task 12');
-    },
+    verifyAndParseWebhook: (headers, rawBody) =>
+      verifyWebhook(o.webhookSecret, headers, rawBody, o.logger),
   };
 }

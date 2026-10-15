@@ -19,6 +19,8 @@ export interface WaAkgOptions {
   fetchImpl?: typeof fetch;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
+  /** Log estrutural (compatível com o pino) para eventos de webhook ignorados (Task 12). */
+  logger?: { warn(obj: object, msg: string): void };
 }
 
 export const DEFAULT_DOWNLOAD_TIMEOUT_MS = 30_000;

@@ -4,6 +4,7 @@
 // (docs/04 §5). Nenhum tipo destes sai do directório.
 
 import { z } from 'zod';
+import type { SessionStatus } from '../../ports/messaging-provider.js';
 
 /** Envelope de gestão/envio: `{ status: true, message?, data }`. */
 export const okEnvelope = <T extends z.ZodType>(data: T) =>
@@ -38,3 +39,65 @@ export const qrSuccessSchema = z.object({
 
 /** Envio real: `data` = resultado do `sendMessage` do Baileys, com `key.id`. */
 export const sendDataSchema = z.object({ key: z.object({ id: z.string().min(1) }) });
+
+// ---------------------------------------------------------------------------
+// Webhooks (docs/wa-akg-audit.md §B — capturas do fork, campo a campo)
+// ---------------------------------------------------------------------------
+
+/** Envelope real `WebhookPayload` (fork `src/lib/webhook.ts`, interface
+ *  `{ event, sessionId, timestamp, data }`; timestamp = `new Date().toISOString()`). */
+export const webhookEnvelopeSchema = z.object({
+  event: z.string().min(1),
+  sessionId: z.string().min(1),
+  timestamp: z.string().min(1),
+  data: z.unknown(),
+});
+
+/** `message.received` (fork `webhook.ts` dispatch com `key`, `pushName`,
+ *  `messageTimestamp`, `from`, `receiver`, `sender`, `isGroup`, `chatType`,
+ *  `type`, `content`, `fileUrl`, `caption`, `quoted`). Consumidos: key.id,
+ *  from, type, content, fileUrl, caption — os restantes são documentados e
+ *  tolerados (`.nullish()`), campos novos são ignorados pelo strip do zod. */
+export const messageReceivedDataSchema = z.object({
+  key: z.object({ id: z.string().min(1) }),
+  pushName: z.string().nullish(),
+  messageTimestamp: z.union([z.number(), z.string()]).nullish(),
+  from: z.string().min(1),
+  receiver: z.string().nullish(),
+  sender: z.union([z.string(), z.record(z.string(), z.unknown())]).nullish(),
+  isGroup: z.boolean().nullish(),
+  chatType: z.string().nullish(),
+  type: z.string().min(1),
+  content: z.string(),
+  fileUrl: z.string().nullish(),
+  caption: z.string().nullish(),
+  quoted: z.unknown().nullish(),
+});
+
+/** `message.status` (fork `src/modules/whatsapp/store/index.ts` — `{ keyId, remoteJid, status }`). */
+export const messageStatusDataSchema = z.object({
+  keyId: z.string().min(1),
+  remoteJid: z.string().nullish(),
+  status: z.string().min(1),
+});
+
+/** `connection.update` (fork `webhook.ts` `onConnectionUpdate` — `{ status, qr }`). */
+export const connectionUpdateDataSchema = z.object({
+  status: z.string().min(1),
+  qr: z.string().nullish(),
+});
+
+/** Mapeamento documentado em README.md — nunca adivinhar estados novos. */
+const STATUS_MAP: Record<string, SessionStatus> = {
+  CONNECTED: 'connected',
+  SCAN_QR: 'qr_pending',
+  STOPPED: 'disconnected',
+  DISCONNECTED: 'disconnected',
+  ZOMBIE: 'disconnected',
+  FAILED: 'disconnected',
+  LOGGED_OUT: 'logged_out',
+};
+
+export function mapSessionStatus(status: string): SessionStatus {
+  return STATUS_MAP[status] ?? 'unknown';
+}
