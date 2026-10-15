@@ -82,9 +82,15 @@ test('sucesso: os 7 métodos do port falam com caminhos, auth e formatos da audi
 test('contrato: timeout → unknown e a MESMA chamada não se repete', async () => {
   const mock = await startMockWaAkg({ slow: true });
   try {
-    const a = createWaAkgAdapter(cfgFromMock(mock.baseUrl, { sendTimeoutMs: 30 }));
+    // sendTimeoutMs 500: ≫ chegada do pedido (~1-100ms; sob carga o event loop
+    // atrasa timers/I/O) e ≪ SLOW_DELAY_MS (1500) — o abort acontece sempre
+    // depois do pedido chegar e antes da resposta. As asserções mantêm-se:
+    // unknown + exatamente 1 pedido.
+    const a = createWaAkgAdapter(cfgFromMock(mock.baseUrl, { sendTimeoutMs: 500 }));
     const r = await a.sendText(textInput('k-1'));
     assert.deepEqual(r, { providerMessageId: null, outcome: 'unknown' });
+    // janela de settle: um retry (nosso ou do undici) seria imediato; 200ms apanca-o
+    await new Promise((done) => setTimeout(done, 200));
     const sends = mock.received.filter((x) => x.path.endsWith('/send'));
     assert.equal(sends.length, 1, 'sem retry automático da nossa parte');
   } finally {

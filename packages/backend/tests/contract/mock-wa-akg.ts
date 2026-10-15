@@ -29,7 +29,10 @@ export interface MockWaAkg {
   close(): Promise<void>;
 }
 
-const SLOW_DELAY_MS = 250;
+// 1500 ≫ sendTimeoutMs dos testes de timeout (500): o abort dispara sempre
+// DEPOIS do pedido chegar ao mock e ANTES da resposta — sob carga o loop de
+// eventos atrasa timers/I/O até ~100ms e uma janela de 30ms era inviável.
+const SLOW_DELAY_MS = 1500;
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   if (res.writableEnded || res.destroyed) return;
