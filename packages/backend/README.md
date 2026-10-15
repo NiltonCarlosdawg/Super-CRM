@@ -26,12 +26,12 @@ Lê por esta ordem. O `AGENTS.md` é o que o opencode carrega em cada sessão.
 | Ficheiro | Conteúdo |
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Regras permanentes do agente: missão, regras inegociáveis, fluxo de trabalho, definição de pronto, gates |
-| [`docs/01-contexto-e-plano.md`](docs/01-contexto-e-plano.md) | Contexto, decisões, decisões em aberto, arquitetura, entidades, fases e critérios de aceitação |
-| [`docs/02-regras-backend.md`](docs/02-regras-backend.md) | Regras de código e boas práticas de backend |
-| [`docs/03-seguranca.md`](docs/03-seguranca.md) | Segurança e privacidade |
-| [`docs/04-integracao-wa-akg.md`](docs/04-integracao-wa-akg.md) | Papel e limites do WA-AKG, auditoria, contrato do adaptador, política de envio |
-| [`docs/05-ia-conhecimento-handoff.md`](docs/05-ia-conhecimento-handoff.md) | IA, conhecimento, gatilhos de handoff, follow-ups, avaliação |
-| [`docs/adr/`](docs/adr/0000-template.md) | Registo de decisões de arquitetura (modelo incluído) |
+| [`docs/01-contexto-e-plano.md`](../../docs/01-contexto-e-plano.md) | Contexto, decisões, decisões em aberto, arquitetura, entidades, fases e critérios de aceitação |
+| [`docs/02-regras-backend.md`](../../docs/02-regras-backend.md) | Regras de código e boas práticas de backend |
+| [`docs/03-seguranca.md`](../../docs/03-seguranca.md) | Segurança e privacidade |
+| [`docs/04-integracao-wa-akg.md`](../../docs/04-integracao-wa-akg.md) | Papel e limites do WA-AKG, auditoria, contrato do adaptador, política de envio |
+| [`docs/05-ia-conhecimento-handoff.md`](../../docs/05-ia-conhecimento-handoff.md) | IA, conhecimento, gatilhos de handoff, follow-ups, avaliação |
+| [`docs/adr/`](../../docs/adr/0000-template.md) | Registo de decisões de arquitetura (modelo incluído) |
 
 ## Código de referência (`reference/`)
 
