@@ -1390,7 +1390,7 @@ test('inboundEffects corre DEPOIS da mensagem guardada e ANTES do orquestrador',
   8. se `outcome.mode === 'send' && outcome.reply` → `outbox.enqueue({ accountId, contactId, conversationId, sender: 'ai', text: reply, idempotencyKey: 'inbound:' + eventId })`; se `mode === 'draft' && reply` → **não envia** (rascunho fica registado em `answer_traces` via `saveTrace`; aprovação de rascunho é Fase 3) com log estruturado `{ reason: 'reply_draft_pending', correlationId }` sem texto;
   9. marcar `processed_at = now()` → `{ outcome: outcome.status }`;
   10. `catch` → `await ports.releaseClaim(eventId)` (best effort) e repropagar o erro original (o retry volta a claimar — `docs/05` §3.1; é exatamente o que a Review Focus nº 1 da Fase 3 aponta).
-- [ ] **4. Ligar a composição.** `main.ts`: `createOrchestratorPorts({ db, notifySink, claimTtlMs: cfg.messaging.claimTtlMs, now })`, `orchestrate = (m) => handleInbound(ports, createUnavailableAiProvider(), m)`. *(Nota T19: adiado para o wiring da Task 20 — o job `inbound.process` é o primeiro consumidor; criar consts sem consumidor viola `no-unused-vars`.)*
+- [x] **4. Ligar a composição.** `main.ts`: `createOrchestratorPorts({ db, notifySink, claimTtlMs: cfg.messaging.claimTtlMs, now })`, `orchestrate = (m) => handleInbound(ports, createUnavailableAiProvider(), m)`. *(Nota T19: adiado para o wiring da Task 20 — o job `inbound.process` é o primeiro consumidor; criar consts sem consumidor viola `no-unused-vars`. Ligado na Task 20.)*
 - [x] **5. Correr e ver passar.** → `pass 6, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
 - [x] **6. Commit.** `feat: add inbound event handler with claims and idempotency`
 
@@ -1426,7 +1426,7 @@ export function advanceMessageStatus(deps: { db: DbClient; notifySink; now(): Da
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/unit/message-status.test.ts` (estados só avançam, `docs/04` §8):
+- [x] **1. Teste falhado** `tests/unit/message-status.test.ts` (estados só avançam, `docs/04` §8):
 
 ```ts
 test('matriz: só avança; failed é terminal a partir de queued/sent/delivered; read nunca recua', () => {
@@ -1442,9 +1442,9 @@ test('matriz: só avança; failed é terminal a partir de queued/sent/delivered;
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm test -- tests/unit/message-status.test.ts` → `fail 1`.
-- [ ] **3. Implementar `nextStatus`/`advanceMessageStatus`** (rank `queued 0 < sent 1 < delivered 2 < read 3`; `failed` aceite só de rank 0–2 e depois é terminal; UPDATE condicional transacional + `notifySink({ type: 'message', phase: 'status', ... })` quando `changed`).
-- [ ] **4. Teste falhado** `tests/integration/webhook-idempotency.test.ts`:
+- [x] **2. Correr e ver falhar.** `npm test -- tests/unit/message-status.test.ts` → `fail 1`.
+- [x] **3. Implementar `nextStatus`/`advanceMessageStatus`** (rank `queued 0 < sent 1 < delivered 2 < read 3`; `failed` aceite só de rank 0–2 e depois é terminal; UPDATE condicional transacional + `notifySink({ type: 'message', phase: 'status', ... })` quando `changed`).
+- [x] **4. Teste falhado** `tests/integration/webhook-idempotency.test.ts`:
 
 ```ts
 test('assinatura inválida → 401 sem linha; mesmo evento 2× → 1 linha, 1 job, 2 respostas rápidas', async () => {
@@ -1471,13 +1471,13 @@ test('job: message.status avança estado; session.status atualiza conta e notifi
 });
 ```
 
-- [ ] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/webhook-idempotency.test.ts` → `fail 1`.
-- [ ] **6. Implementar.**
+- [x] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/webhook-idempotency.test.ts` → `fail 1`.
+- [x] **6. Implementar.**
   - Rota: aceita só `content-type: application/json`, lê `req.rawBody` (Task 9), chama `ingestWebhook`, mapeia `WebhookError('invalid_signature')` → 401, `payload_invalid` → 400, resto → `toProblem`; sem log de corpo (só `ip` + `providerEventId` + resultado).
   - `ingestWebhook`: como na Interfaces; resposta devolvida antes de qualquer processamento (o job é que corre o pipeline); logs mascarados.
   - Job `inbound.process`: valida payload com zod na fronteira (inválido ⇒ throw, sem retry, morto na dead-letter) e despacha por tipo como na Interfaces; `message.received` chama `handleInboundEvent(deps, eventId)`; os restantes tipos marcam `processed_at` no fim; erro ⇒ rethrow (retry com backoff da Fase 0) — o `releaseClaim` do handle-inbound garante que o retry não é engolido.
   - `main.ts`: `jobs.register('inbound.process', handler)` + registar a rota pública.
-- [ ] **7. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **7. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
 - [ ] **8. Commit.** `feat: add idempotent webhook ingest with async processing`
 
 ### Task 21: API de conversas e mensagens

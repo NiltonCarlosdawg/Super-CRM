@@ -66,8 +66,9 @@ export interface HandleInboundDeps {
 }
 
 /** jsonb perde os tipos: `timestamp` volta como string ISO — reidratar antes
- *  de revalidar na fronteira do job (docs/02 §3). */
-const reviveTimestamp = (payload: unknown): unknown => {
+ *  de revalidar na fronteira do job (docs/02 §3). Reutilizado pelo job
+ *  'inbound.process' (Task 20). */
+export const reviveTimestamp = (payload: unknown): unknown => {
   const p = payload as { timestamp?: unknown } | null;
   return p !== null && typeof p.timestamp === 'string'
     ? { ...p, timestamp: new Date(p.timestamp) }

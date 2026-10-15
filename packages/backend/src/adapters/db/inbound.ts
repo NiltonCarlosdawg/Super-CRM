@@ -169,3 +169,74 @@ export async function storeInboundMessage(
   if (existing === undefined) throw new Error('conflito de mensagem sem linha visível');
   return existing;
 }
+
+/** Insere o evento normalizado; chave repetida ⇒ null (duplicado do webhook). */
+export async function insertInboundEvent(
+  db: DbClient,
+  input: { providerEventId: string; payload: unknown },
+): Promise<{ id: string } | null> {
+  const [row] = await db
+    .insert(inboundEvents)
+    .values({ providerEventId: input.providerEventId, payload: input.payload })
+    .onConflictDoNothing({ target: inboundEvents.providerEventId })
+    .returning({ id: inboundEvents.id });
+  return row ?? null;
+}
+
+type MessageRow = typeof messages.$inferSelect;
+
+/** Avanço condicional do estado de UMA mensagem (docs/04 §8): linha travada
+ *  com FOR UPDATE na transação, o `computeNext` (matriz pura, Task 20) decide
+ *  e só escreve se o estado mudar — dois eventos concorrentes nunca regredem. */
+export async function advanceMessageStatusRow(
+  db: DbClient,
+  input: {
+    accountId: string;
+    providerMessageId: string;
+    at: Date;
+    computeNext: (current: MessageRow['status']) => MessageRow['status'];
+  },
+): Promise<
+  | { changed: false }
+  | {
+      changed: true;
+      row: {
+        messageId: string;
+        conversationId: string;
+        sender: MessageRow['sender'];
+        status: MessageRow['status'];
+      };
+    }
+> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+        sender: messages.sender,
+        status: messages.status,
+      })
+      .from(messages)
+      .where(
+        and(eq(messages.accountId, input.accountId), eq(messages.providerMessageId, input.providerMessageId)),
+      )
+      .for('update')
+      .limit(1);
+    if (row === undefined) return { changed: false as const }; // mensagem desconhecida → no-op
+    const next = input.computeNext(row.status);
+    if (next === row.status) return { changed: false as const };
+    await tx
+      .update(messages)
+      .set({ status: next, updatedAt: input.at })
+      .where(eq(messages.id, row.id));
+    return {
+      changed: true as const,
+      row: {
+        messageId: row.id,
+        conversationId: row.conversationId,
+        sender: row.sender,
+        status: next,
+      },
+    };
+  });
+}

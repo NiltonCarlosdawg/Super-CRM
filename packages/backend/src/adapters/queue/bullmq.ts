@@ -22,6 +22,9 @@ export class BullMqJobQueue implements JobQueue {
   private readonly connection: { url: string };
   private readonly queues = new Map<string, Queue<JobEnvelope>>();
   private readonly workers = new Map<string, Worker<unknown>>();
+  // Workers que JÁ ligaram ao Redis: os que nunca ligaram (arranque degradado,
+  // porta sem servidor) fecham em força — ver close().
+  private readonly everReady = new Set<Worker<unknown>>();
 
   constructor(redisUrl: string) {
     this.connection = { url: redisUrl };
@@ -80,6 +83,7 @@ export class BullMqJobQueue implements JobQueue {
       },
       { connection: this.connection, concurrency: 1 },
     );
+    worker.once('ready', () => this.everReady.add(worker));
     this.workers.set(name, worker);
   }
 
@@ -122,14 +126,25 @@ export class BullMqJobQueue implements JobQueue {
       },
       { connection: this.connection, concurrency: 1 },
     );
+    worker.once('ready', () => this.everReady.add(worker));
     this.workers.set(name, worker);
   }
 
   async close(): Promise<void> {
     // Primeiro os workers (param de consumir), depois as filas.
-    await Promise.all([...this.workers.values()].map((worker) => worker.close()));
+    // Redis inacessível: o close() gracioso espera pelo quit() do ioredis, que
+    // fica na offline queue para sempre → shutdown pendurado (o teste de
+    // arranque com porta sem servidor falhava por sinal, sem exit 0). Um worker
+    // que nunca ligou fecha em força (disconnect imediato); um worker pronto
+    // mantém o dreno normal dos jobs em curso.
+    await Promise.all(
+      [...this.workers.values()].map((worker) =>
+        this.everReady.has(worker) ? worker.close() : worker.close(true),
+      ),
+    );
     await Promise.all([...this.queues.values()].map((queue) => queue.close()));
     this.workers.clear();
     this.queues.clear();
+    this.everReady.clear();
   }
 }

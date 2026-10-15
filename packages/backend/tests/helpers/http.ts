@@ -18,6 +18,7 @@ import { createLoginLimiter } from '../../src/application/auth/login-limiter.js'
 import type { AuthConfig } from '../../src/infra/config-app.js';
 import { createArgon2Hasher } from '../../src/infra/security/argon2.js';
 import type { MfaPort, SessionStore } from '../../src/ports/auth.js';
+import type { JobQueue } from '../../src/ports/job-queue.js';
 import type { AccountsRepository } from '../../src/ports/accounts.js';
 import type { MessagingProvider } from '../../src/ports/messaging-provider.js';
 import type { NotifyEvent } from '../../src/ports/notify.js';
@@ -90,7 +91,14 @@ export interface UserInfo {
   email: string;
 }
 
-export async function buildTestApp(): Promise<TestApp> {
+export async function buildTestApp(
+  overrides?: {
+    /** Task 20: adaptador REAL do WA-AKG para exercitar assinatura de webhook. */
+    waProvider?: MessagingProvider;
+    /** Task 20: fila capturadora (os testes inspecionam os jobs enfileirados). */
+    jobs?: JobQueue;
+  },
+): Promise<TestApp> {
   const db = await migratedDb();
   const hasher = createArgon2Hasher();
   const passwordHash = await hasher.hash(TEST_PASSWORD);
@@ -113,7 +121,9 @@ export async function buildTestApp(): Promise<TestApp> {
   const mfa = createFakeMfa(sessions);
   // Task 16: provider falso determinístico (não há rede em testes) + repo de
   // contas real; os eventos de logout/transição ficam no notifyLog do TestApp.
-  const waProvider = createFakeWaProvider();
+  // Task 20: pode receber o adaptador REAL (assinatura de webhook) e a fila.
+  const waProvider = overrides?.waProvider ?? createFakeWaProvider();
+  const jobs = overrides?.jobs;
   const accounts = createAccountsRepository({ db });
   const notifyLog: NotifyEvent[] = [];
   const cfg = { nodeEnv: 'test' as const, auth: testAuthConfig };
@@ -137,6 +147,7 @@ export async function buildTestApp(): Promise<TestApp> {
     now: () => new Date(),
     accounts,
     waProvider,
+    jobs,
     notifySink: async (e) => {
       notifyLog.push(e);
     },

@@ -21,9 +21,11 @@ import { toProblem } from './errors.js';
 import { authenticate, csrfGuard } from './guards.js';
 import { authRoutes } from './routes/auth.js';
 import { usersRoutes } from './routes/users.js';
+import { webhookRoutes } from './routes/webhook.js';
 import { whatsappAccountsRoutes } from './routes/whatsapp-accounts.js';
 import type { createLoginService } from '../../application/auth/login.js';
 import type { AccountsRepository } from '../../ports/accounts.js';
+import type { JobQueue } from '../../ports/job-queue.js';
 import type { MessagingProvider } from '../../ports/messaging-provider.js';
 import type { NotifyEvent } from '../../ports/notify.js';
 
@@ -49,6 +51,8 @@ export interface HttpDeps {
   /** Task 16: contas WhatsApp — as rotas admin só registam com os dois presentes. */
   accounts?: AccountsRepository;
   waProvider?: MessagingProvider;
+  /** Task 20: fila para o ingest de webhook enfileirar `inbound.process`. */
+  jobs?: JobQueue;
   /** Sinks de evento (realtime Task 15); o logout de admin notifica a transição. */
   notifySink?: (e: NotifyEvent) => Promise<void>;
   /** Checks de readiness adicionais (ex.: ping Redis no arranque real). */
@@ -145,6 +149,10 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
       // Task 16: só com repo + provider monta as rotas de contas (padrão `db?`).
       if (deps.accounts !== undefined && deps.waProvider !== undefined) {
         await whatsappAccountsRoutes(instance, deps);
+      }
+      // Task 20: webhook público do WA-AKG (sem sessão) — só com fila presente.
+      if (deps.jobs !== undefined && deps.waProvider !== undefined && deps.db !== undefined) {
+        await webhookRoutes(instance, deps);
       }
     },
     { prefix: '' },

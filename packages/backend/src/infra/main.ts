@@ -7,10 +7,13 @@ import { Redis } from 'ioredis';
 import { Pool } from 'pg';
 import { z } from 'zod';
 import { buildHttpApp } from '../adapters/http/app.js';
+import { createUnavailableAiProvider } from '../adapters/ai/unavailable.js';
 import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb } from '../adapters/db/index.js';
+import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
+import { createOutbox } from '../adapters/db/outbox.js';
 import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
 import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
@@ -19,6 +22,10 @@ import { createAccountLifecycle } from '../application/account-lifecycle.js';
 import { createLoginService } from '../application/auth/login.js';
 import { createLoginLimiter } from '../application/auth/login-limiter.js';
 import { createMfaService } from '../application/auth/mfa.js';
+import { handleInboundEvent } from '../application/handle-inbound.js';
+import { createInboundProcessHandler } from '../application/inbound-process.js';
+import { advanceMessageStatus } from '../application/message-status.js';
+import { handleInbound, type InboundMessage, type Outcome } from '../application/orchestrator.js';
 import { runOutboxTick } from '../application/outbox-worker.js';
 import { ConfigError } from './config.js';
 import { loadFullConfig } from './config-app.js';
@@ -101,6 +108,7 @@ async function main(): Promise<void> {
     now,
     accounts: accountsRepo,
     waProvider,
+    jobs,
     notifySink: socketNotify,
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });
@@ -119,10 +127,50 @@ async function main(): Promise<void> {
     log,
   });
 
-  // A composição do orquestrador de inbound (Task 19: createOrchestratorPorts +
-  // handleInbound(ports, createUnavailableAiProvider(), m)) é ligada aqui quando
-  // o job 'inbound.process' a consome (Task 20) — criar consts sem consumidor
-  // viola no-unused-vars.
+  // Task 19+20 (docs/05 §3.1): orquestrador de inbound SEM IA configurada —
+  // `createUnavailableAiProvider` rejeita sempre → o orquestrador cai no
+  // failSafe (ai_active: mensagem fixa + passa a humano; ai_suggest: rascunho
+  // por aprovar, D13) — e o job 'inbound.process' que despacha por tipo.
+  const orchestratorPorts = createOrchestratorPorts({
+    db,
+    notifySink: socketNotify,
+    claimTtlMs: config.messaging.claimTtlMs,
+    now,
+  });
+  const unavailableAiProvider = createUnavailableAiProvider();
+  const orchestrate = (msg: InboundMessage): Promise<Outcome> =>
+    handleInbound(orchestratorPorts, unavailableAiProvider, msg);
+  const inboundOutbox = createOutbox({
+    db,
+    notifySink: socketNotify,
+    now,
+    random: Math.random,
+    replyDelay: config.messaging.replyDelayMs,
+  });
+  await jobs.register(
+    'inbound.process',
+    createInboundProcessHandler({
+      db,
+      now,
+      logger: log,
+      runHandleInbound: (eventId) =>
+        handleInboundEvent(
+          {
+            db,
+            ports: orchestratorPorts,
+            orchestrate,
+            outbox: inboundOutbox,
+            notifySink: socketNotify,
+            cfg: { claimTtlMs: config.messaging.claimTtlMs },
+            now,
+            logger: log,
+          },
+          eventId,
+        ),
+      advanceStatus: (input) => advanceMessageStatus({ db, notifySink: socketNotify, now }, input),
+      lifecycle,
+    }),
+  );
 
   // Task 18 (docs/04 §7): o worker da outbox corre como job recorrente.
   // Payload SEMPRE vazio (validado com zod); erro do tick → log + rethrow
