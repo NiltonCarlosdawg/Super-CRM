@@ -119,6 +119,11 @@ async function main(): Promise<void> {
     log,
   });
 
+  // A composição do orquestrador de inbound (Task 19: createOrchestratorPorts +
+  // handleInbound(ports, createUnavailableAiProvider(), m)) é ligada aqui quando
+  // o job 'inbound.process' a consome (Task 20) — criar consts sem consumidor
+  // viola no-unused-vars.
+
   // Task 18 (docs/04 §7): o worker da outbox corre como job recorrente.
   // Payload SEMPRE vazio (validado com zod); erro do tick → log + rethrow
   // (retry da fila). NÃO bloqueia o arranque: com Redis em baixo o BullMQ

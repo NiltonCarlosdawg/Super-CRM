@@ -1330,7 +1330,7 @@ const orchestrate = (msg: InboundMessage) => handleInbound(ports, unavailableAiP
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/handle-inbound.test.ts`:
+- [x] **1. Teste falhado** `tests/integration/handle-inbound.test.ts`:
 
 ```ts
 test('mensagem recebida: cria contact/lead/conversation/mensagem, marca processed e notifica message.created', async () => {
@@ -1378,8 +1378,8 @@ test('inboundEffects corre DEPOIS da mensagem guardada e ANTES do orquestrador',
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/handle-inbound.test.ts` → `fail 1`.
-- [ ] **3. Implementar `handleInboundEvent`** (fluxo exato, um passo por efeito colateral):
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/handle-inbound.test.ts` → `fail 1`.
+- [x] **3. Implementar `handleInboundEvent`** (fluxo exato, um passo por efeito colateral):
   1. carregar o evento; `processed_at` preenchido → `{ outcome: 'skipped' }`;
   2. `parseProviderEvent(row.payload)` (revalidação na fronteira do job); tipo ≠ `message.received` → `{ outcome: 'skipped' }`; dados invalidáveis (`from` não-normalizável) → marcar `processed_at` + `logger.error({ reason: 'payload_invalid', eventId })` e `{ outcome: 'skipped' }` (evento venenoso não entra em retry infinito, `docs/02` §3);
   3. conta por `sessionId` (`whatsapp_accounts.provider_session_id`); sem conta → log warn + `processed_at` + skipped;
@@ -1390,9 +1390,9 @@ test('inboundEffects corre DEPOIS da mensagem guardada e ANTES do orquestrador',
   8. se `outcome.mode === 'send' && outcome.reply` → `outbox.enqueue({ accountId, contactId, conversationId, sender: 'ai', text: reply, idempotencyKey: 'inbound:' + eventId })`; se `mode === 'draft' && reply` → **não envia** (rascunho fica registado em `answer_traces` via `saveTrace`; aprovação de rascunho é Fase 3) com log estruturado `{ reason: 'reply_draft_pending', correlationId }` sem texto;
   9. marcar `processed_at = now()` → `{ outcome: outcome.status }`;
   10. `catch` → `await ports.releaseClaim(eventId)` (best effort) e repropagar o erro original (o retry volta a claimar — `docs/05` §3.1; é exatamente o que a Review Focus nº 1 da Fase 3 aponta).
-- [ ] **4. Ligar a composição.** `main.ts`: `createOrchestratorPorts({ db, notifySink, claimTtlMs: cfg.messaging.claimTtlMs, now })`, `orchestrate = (m) => handleInbound(ports, createUnavailableAiProvider(), m)`.
-- [ ] **5. Correr e ver passar.** → `pass 6, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **6. Commit.** `feat: add inbound event handler with claims and idempotency`
+- [ ] **4. Ligar a composição.** `main.ts`: `createOrchestratorPorts({ db, notifySink, claimTtlMs: cfg.messaging.claimTtlMs, now })`, `orchestrate = (m) => handleInbound(ports, createUnavailableAiProvider(), m)`. *(Nota T19: adiado para o wiring da Task 20 — o job `inbound.process` é o primeiro consumidor; criar consts sem consumidor viola `no-unused-vars`.)*
+- [x] **5. Correr e ver passar.** → `pass 6, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **6. Commit.** `feat: add inbound event handler with claims and idempotency`
 
 ### Task 20: Rota de webhook, ingestão idempotente e job de processamento
 
