@@ -131,7 +131,7 @@ import { seedHandoffTriggers } from '../../src/modules/knowledge/handoff-trigger
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/search-chunks.test.ts` (também prova que a extensão `vector` e o plano A pgvector funcionam de zero — se falhar, é o momento do plano B de `docs/06` A5):
+- [x] **1. Teste falhado** `tests/integration/search-chunks.test.ts` (também prova que a extensão `vector` e o plano A pgvector funcionam de zero — se falhar, é o momento do plano B de `docs/06` A5):
 
 ```ts
 import assert from 'node:assert/strict';
@@ -151,7 +151,7 @@ test('searchChunks: vetor igual devolve o próprio chunk; base vazia devolve []'
 });
 ```
 
-- [ ] **2. Teste falhado** `tests/integration/handoff-triggers-seed.test.ts` (insere as 4 `business_lines` sintéticas diretamente — o seed publicado é da Fase 2):
+- [x] **2. Teste falhado** `tests/integration/handoff-triggers-seed.test.ts` (insere as 4 `business_lines` sintéticas diretamente — o seed publicado é da Fase 2):
 
 ```ts
 test('seedHandoffTriggers: 16 gatilhos de arranque e segunda chamada não duplica', async () => {
@@ -166,9 +166,9 @@ test('seedHandoffTriggers: 16 gatilhos de arranque e segunda chamada não duplic
 });
 ```
 
-- [ ] **3. Correr e ver falhar.** `npm run test:integration -- tests/integration/search-chunks tests/integration/handoff-triggers-seed` → `fail` (colunas/limites do schema ainda por confirmar contra o código real; corrigir os `values` do teste para os nomes reais de `knowledge.schema.ts` **sem** alterar as asserções).
-- [ ] **4. Correr e ver passar.** → `pass 2, fail 0`. Se `searchChunks` falhar no plano A (extensão `vector` ausente), parar e perguntar (gate A5) — não trocar de plano por conta própria.
-- [ ] **5. Commit.** `test: cover vector search and handoff trigger seed against real pg`
+- [x] **3. Correr e ver falhar.** `npm run test:integration -- tests/integration/search-chunks tests/integration/handoff-triggers-seed` → `fail` (colunas/limites do schema ainda por confirmar contra o código real; corrigir os `values` do teste para os nomes reais de `knowledge.schema.ts` **sem** alterar as asserções).
+- [x] **4. Correr e ver passar.** → `pass 2, fail 0`. Se `searchChunks` falhar no plano A (extensão `vector` ausente), parar e perguntar (gate A5) — não trocar de plano por conta própria.
+- [x] **5. Commit.** `test: cover vector search and handoff trigger seed against real pg`
 
 ### Task 3: Normalização E.164 e máscara de logs
 
