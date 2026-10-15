@@ -5,6 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import { Pool } from 'pg';
+import { z } from 'zod';
 import { buildHttpApp } from '../adapters/http/app.js';
 import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
@@ -14,9 +15,11 @@ import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
 import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
 import { createWaAkgAdapter } from '../adapters/wa-akg/index.js';
+import { createAccountLifecycle } from '../application/account-lifecycle.js';
 import { createLoginService } from '../application/auth/login.js';
 import { createLoginLimiter } from '../application/auth/login-limiter.js';
 import { createMfaService } from '../application/auth/mfa.js';
+import { runOutboxTick } from '../application/outbox-worker.js';
 import { ConfigError } from './config.js';
 import { loadFullConfig } from './config-app.js';
 import { createLogger, withCorrelationId } from './logger.js';
@@ -73,6 +76,17 @@ async function main(): Promise<void> {
     log,
   );
 
+  const accountsRepo = createAccountsRepository({ db });
+  // adaptador REAL do WA-AKG (docs/04 §1: só pelo adaptador MessagingProvider)
+  const waProvider = createWaAkgAdapter({
+    baseUrl: config.messaging.waAkgBaseUrl,
+    apiKey: config.messaging.waAkgApiKey,
+    webhookSecret: config.messaging.waWebhookSecret,
+    sendTimeoutMs: config.messaging.sendTimeoutMs,
+    cbThreshold: config.messaging.cbThreshold,
+    cbCooldownMs: config.messaging.cbCooldownMs,
+  });
+
   const app = buildHttpApp({
     cfg: config,
     db,
@@ -85,22 +99,74 @@ async function main(): Promise<void> {
     mfa,
     logger: log,
     now,
-    accounts: createAccountsRepository({ db }),
-    // adaptador REAL do WA-AKG (docs/04 §1: só pelo adaptador MessagingProvider)
-    waProvider: createWaAkgAdapter({
-      baseUrl: config.messaging.waAkgBaseUrl,
-      apiKey: config.messaging.waAkgApiKey,
-      webhookSecret: config.messaging.waWebhookSecret,
-      sendTimeoutMs: config.messaging.sendTimeoutMs,
-      cbThreshold: config.messaging.cbThreshold,
-      cbCooldownMs: config.messaging.cbCooldownMs,
-    }),
+    accounts: accountsRepo,
+    waProvider,
     notifySink: socketNotify,
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });
 
   // Task 15: Socket.IO no mesmo httpServer (handshake autenticado por sessão).
   realtime.handle = attachRealtime({ server: app.server, sessions, now });
+
+  // Task 16/18: ciclo de vida partilhado (webhook de sessão + worker da outbox).
+  const lifecycle = createAccountLifecycle({
+    accounts: accountsRepo,
+    provider: waProvider,
+    notifySink: socketNotify,
+    audit,
+    cfg: { failWindow: config.messaging.failWindow, failRatio: config.messaging.failRatio },
+    now,
+    log,
+  });
+
+  // Task 18 (docs/04 §7): o worker da outbox corre como job recorrente.
+  // Payload SEMPRE vazio (validado com zod); erro do tick → log + rethrow
+  // (retry da fila). NÃO bloqueia o arranque: com Redis em baixo o BullMQ
+  // enfileira o registo (offline queue) e aplica-o quando a ligação nascer —
+  // a app tem de arrancar sem Redis (contrato Fase 0, config-startup.test.ts).
+  const emptyPayload = z.object({}).strict();
+  void jobs
+    .registerRecurring(
+      'outbox.tick',
+      async (payload) => {
+        const parsed = emptyPayload.safeParse(payload);
+        if (!parsed.success) {
+          log.error({ issues: parsed.error.issues }, 'outbox.tick.payload_invalid');
+          throw new Error('outbox.tick: payload tem de ser vazio');
+        }
+        try {
+          const { claimed, sent } = await runOutboxTick({
+            db,
+            provider: waProvider,
+            accounts: lifecycle,
+            notifySink: socketNotify,
+            audit,
+            now,
+            random: Math.random,
+            logger: log,
+            cfg: {
+              sendTimeoutMs: config.messaging.sendTimeoutMs,
+              maxAttempts: config.messaging.sendMaxAttempts,
+              retryDelayMs: config.messaging.outboxRetryDelayMs,
+            },
+          });
+          log.info({ claimed, sent }, 'outbox.tick');
+        } catch (error) {
+          log.error(
+            { err: { message: error instanceof Error ? error.message : String(error) } },
+            'outbox.tick.failed',
+          );
+          throw error; // rethrow ⇒ a fila faz retry do tick
+        }
+      },
+      { everyMs: config.messaging.outboxTickMs },
+    )
+    .catch((error: unknown) => {
+      log.error(
+        { err: { message: error instanceof Error ? error.message : String(error) } },
+        'outbox.tick.register_failed',
+      );
+    });
 
   const shutdown = (signal: string): void => {
     log.info({ signal }, 'application.shutdown');

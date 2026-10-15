@@ -5,11 +5,12 @@
 // vê um evento de algo que pode ter sido revertido.
 
 import { randomUUID } from 'node:crypto';
-import { and, count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray, sql } from 'drizzle-orm';
+import type { AccountStatus } from '../../ports/accounts.js';
 import type { NotifyEvent } from '../../ports/notify.js';
 import type { Outbox } from '../../ports/outbox.js';
 import type { DbClient } from './index.js';
-import { messages, outboxMessages } from './schema/index.js';
+import { contacts, conversations, messages, outboxMessages, whatsappAccounts } from './schema/index.js';
 
 /** Sinal interno: a transação fez rollback por chave já existente. */
 class DuplicateEnqueue extends Error {
@@ -118,4 +119,177 @@ export function createOutbox(deps: {
       return r?.n ?? 0;
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Operações do worker de envio (Task 18B; docs/04 §7). O SQL fica AQUI: a
+// application não importa drizzle-orm (docs/02 §4) e recebe só funções com
+// tipagem própria.
+// ---------------------------------------------------------------------------
+
+type ClaimedRaw = {
+  id: string;
+  message_id: string;
+  account_id: string;
+  idempotency_key: string;
+  attempts: number;
+  priority: number;
+  scheduled_at: Date;
+};
+
+export type ClaimedOutboxRow = {
+  id: string;
+  messageId: string;
+  accountId: string;
+  idempotencyKey: string;
+  attempts: number;
+  priority: number;
+  scheduledAt: Date;
+};
+
+/** Sweep + claim do tick (docs/04 §7):
+ *  1. sweep — `sending` mais velho que o timeout de envio = órfã de crash →
+ *     `unknown_delivery` (a mensagem fica `queued`; sem resposta conhecida);
+ *  2. claim — `queued` vencidas, ordem (priority ASC, scheduledAt ASC), LIMIT,
+ *     `FOR UPDATE SKIP LOCKED`: execuções sobrepostas do tick nunca reivindicam
+ *     a mesma linha (docs/02 §6). Linhas devolvidas ordenadas. */
+export async function sweepAndClaim(
+  db: DbClient,
+  input: { now: Date; staleBefore: Date; limit: number },
+): Promise<{ stale: number; rows: ClaimedOutboxRow[] }> {
+  const sweep = await db.execute(sql`
+    UPDATE outbox_messages
+    SET status = 'unknown_delivery'::outbox_status, updated_at = ${input.now}
+    WHERE status = 'sending' AND updated_at < ${input.staleBefore}
+    RETURNING id`);
+
+  const claim = await db.execute<ClaimedRaw>(sql`
+    UPDATE outbox_messages AS o
+    SET status = 'sending'::outbox_status, updated_at = ${input.now}
+    FROM (
+      WITH claimed AS (
+        SELECT id FROM outbox_messages
+        WHERE status = 'queued' AND scheduled_at <= ${input.now}
+        ORDER BY priority ASC, scheduled_at ASC
+        LIMIT ${input.limit}
+        FOR UPDATE SKIP LOCKED
+      )
+      SELECT id FROM claimed
+    ) AS c
+    WHERE o.id = c.id
+    RETURNING o.id, o.message_id, o.account_id, o.idempotency_key, o.attempts,
+              o.priority, o.scheduled_at`);
+
+  const rows = claim.rows
+    .map((r) => ({
+      id: r.id,
+      messageId: r.message_id,
+      accountId: r.account_id,
+      idempotencyKey: r.idempotency_key,
+      attempts: r.attempts,
+      priority: r.priority,
+      scheduledAt: r.scheduled_at,
+    }))
+    .sort(
+      (a, b) => a.priority - b.priority || a.scheduledAt.getTime() - b.scheduledAt.getTime(),
+    );
+  return { stale: sweep.rows.length, rows };
+}
+
+export type OutboxStatePatch =
+  | { status: 'sent' | 'failed' | 'unknown_delivery' }
+  /** Requeue: `scheduledAt` novo; `attempts` só para RESTAURAR (breaker). */
+  | { status: 'queued'; scheduledAt: Date; attempts?: number };
+
+/** Transição de estado da linha da outbox. */
+export async function setOutboxState(
+  db: DbClient,
+  outboxId: string,
+  patch: OutboxStatePatch,
+  at: Date,
+): Promise<void> {
+  if (patch.status === 'queued') {
+    const set =
+      patch.attempts !== undefined
+        ? {
+            status: patch.status,
+            updatedAt: at,
+            scheduledAt: patch.scheduledAt,
+            attempts: patch.attempts,
+          }
+        : { status: patch.status, updatedAt: at, scheduledAt: patch.scheduledAt };
+    await db.update(outboxMessages).set(set).where(eq(outboxMessages.id, outboxId));
+    return;
+  }
+  await db
+    .update(outboxMessages)
+    .set({ status: patch.status, updatedAt: at })
+    .where(eq(outboxMessages.id, outboxId));
+}
+
+/** Estado da mensagem espelhado pelo resultado do envio (sent/failed). */
+export async function setMessageState(
+  db: DbClient,
+  messageId: string,
+  status: 'sent' | 'failed',
+  at: Date,
+  providerMessageId?: string,
+): Promise<void> {
+  await db
+    .update(messages)
+    .set(
+      providerMessageId !== undefined
+        ? { status, updatedAt: at, providerMessageId }
+        : { status, updatedAt: at },
+    )
+    .where(eq(messages.id, messageId));
+}
+
+/** Claim de envio: `attempts++` SÓ quando se chama o provider (docs/04 §7).
+ *  Devolve o valor já incrementado. */
+export async function incrementAttempts(
+  db: DbClient,
+  outboxId: string,
+  at: Date,
+): Promise<number> {
+  const res = await db.execute<{ attempts: number }>(sql`
+    UPDATE outbox_messages SET attempts = attempts + 1, updated_at = ${at}
+    WHERE id = ${outboxId}
+    RETURNING attempts`);
+  const row = res.rows[0];
+  if (row === undefined) throw new Error(`outbox ${outboxId} inexistente ao incrementar tentativas`);
+  return row.attempts;
+}
+
+/** Contexto de envio de uma linha reivindicada:
+ *  - `account: null` = conta removida → adiar (sem gastar tentativa);
+ *  - `msg: null` = dado corrompido (impossível com as FKs) → erro não-transiente. */
+export async function loadSendContext(
+  db: DbClient,
+  input: { accountId: string; messageId: string },
+): Promise<{
+  account: { status: AccountStatus; providerSessionId: string } | null;
+  msg: { conversationId: string; sender: string; body: string | null; to: string } | null;
+}> {
+  const [account] = await db
+    .select({
+      status: whatsappAccounts.status,
+      providerSessionId: whatsappAccounts.providerSessionId,
+    })
+    .from(whatsappAccounts)
+    .where(eq(whatsappAccounts.id, input.accountId))
+    .limit(1);
+  const [msg] = await db
+    .select({
+      conversationId: messages.conversationId,
+      sender: messages.sender,
+      body: messages.body,
+      to: contacts.phoneE164,
+    })
+    .from(messages)
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .innerJoin(contacts, eq(contacts.id, conversations.contactId))
+    .where(eq(messages.id, input.messageId))
+    .limit(1);
+  return { account: account ?? null, msg: msg ?? null };
 }

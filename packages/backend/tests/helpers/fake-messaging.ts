@@ -12,7 +12,7 @@ import type {
 export function createFakeMessaging() {
   const sendTextCalls: Array<{ sessionId: string; to: string; text: string; idempotencyKey: string }> = [];
   const sendMediaCalls: Array<{ sessionId: string; to: string; mediaUrl: string; caption?: string; mimeType: string; idempotencyKey: string }> = [];
-  let nextResult: SendResult = { providerMessageId: 'fake-wa-1', outcome: 'accepted' };
+  let nextResult: SendResult | Error = { providerMessageId: 'fake-wa-1', outcome: 'accepted' };
 
   const provider: MessagingProvider = {
     name: 'fake',
@@ -23,10 +23,14 @@ export function createFakeMessaging() {
     logout: async () => undefined,
     sendText: async (input) => {
       sendTextCalls.push(input);
+      // Task 18: um Error programado é LANÇADO (simula ProviderUnavailableError,
+      // timeout, etc.); um SendResult é devolvido normalmente.
+      if (nextResult instanceof Error) throw nextResult;
       return { ...nextResult };
     },
     sendMedia: async (input) => {
       sendMediaCalls.push(input);
+      if (nextResult instanceof Error) throw nextResult;
       return { ...nextResult };
     },
     verifyAndParseWebhook: (): ProviderEvent[] => [],
@@ -36,8 +40,8 @@ export function createFakeMessaging() {
     provider,
     sendTextCalls,
     sendMediaCalls,
-    /** Programa o resultado dos próximos envios (ex.: 'unknown' p/ timeout). */
-    queueResult(result: SendResult): void {
+    /** Programa o resultado dos próximos envios ('unknown' p/ timeout; Error é lançado). */
+    queueResult(result: SendResult | Error): void {
       nextResult = result;
     },
   };

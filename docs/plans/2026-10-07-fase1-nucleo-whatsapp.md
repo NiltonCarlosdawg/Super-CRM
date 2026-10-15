@@ -1235,7 +1235,7 @@ test('registerRecurring: dispara a cada everyMs; registrar duas vezes não dupli
 
 - [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/job-recurring.test.ts` → `fail 1` (`registerRecurring is not a function`).
 - [x] **3. Implementar `registerRecurring`** no port e no adaptador BullMQ (conforme Interfaces; dedupe por nome num `Map`; se o Redis estiver no ramo B da Fase 0 — `pg-boss` — implementar a repetição com o mecanismo equivalente **no mesmo port**, o teste acima é o contrato e não muda).
-- [ ] **4. Teste falhado** `tests/integration/outbox-worker.test.ts`:
+- [x] **4. Teste falhado** `tests/integration/outbox-worker.test.ts`:
 
 ```ts
 test('timeout → unknown_delivery, mensagem continua queued, SEM reenvio automático', async () => {
@@ -1281,8 +1281,8 @@ test('sweep: linha 'sending' velha (crash) → unknown_delivery', async () => {
 });
 ```
 
-- [ ] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/outbox-worker.test.ts` → `fail` (worker inexistente).
-- [ ] **6. Implementar `runOutboxTick`** (algoritmo exato):
+- [x] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/outbox-worker.test.ts` → `fail` (worker inexistente).
+- [x] **6. Implementar `runOutboxTick`** (algoritmo exato):
   1. **Sweep:** `outbox_messages` com `status='sending'` e `updated_at < $now - (sendTimeoutMs + 10000)` → `unknown_delivery`, log `alert { reason: 'stale_sending' }` (mensagem continua `queued`).
   2. **Claim:** seleção `status='queued' AND scheduled_at <= $now ORDER BY priority ASC, scheduled_at ASC LIMIT 10 FOR UPDATE SKIP LOCKED`, cada linha transicionada para `sending` na sua própria transação curta (o `SKIP LOCKED` torna o tick seguro em execução sobreposta — é o *lock* dos jobs recorrentes, `docs/02` §6).
   3. **Processamento sequencial** (concorrência 1 global ⇒ serialização por conta, `docs/04` §7), por linha, **nesta ordem**: conta ausente/`disconnected`/`connecting`/`suspected_ban` → voltar a `queued` com `scheduled_at = $now + WA_OUTBOX_RETRY_DELAY_MS` e **sem** incrementar `attempts` (as mensagens saem da cabeça, não bloqueiam as outras); senão `provider.sendText({ sessionId: provider_session_id, to: phone do contacto, text, idempotencyKey: outbox.id })` e:
@@ -1293,9 +1293,9 @@ test('sweep: linha 'sending' velha (crash) → unknown_delivery', async () => {
      - exceção transiente (`ProviderUnavailableError`) → se `attempts + 1 < WA_SEND_MAX_ATTEMPTS`: `queued` com `scheduled_at = $now + WA_OUTBOX_RETRY_DELAY_MS * 2^attempts + jitter(0..250ms)` (o incremento de `attempts` acontece no claim de envio, passo 3); senão outbox `failed` + mensagem `failed` + dead-letter;
      - erro não-transiente (zod do adapter, bug) → repropagar (o job vai para dead-letter da fila).
   4. `attempts` incrementa-se **só** quando se chama o provider; devolver `{ claimed, sent }`.
-- [ ] **7. Ligar no arranque.** `main.ts`: `registerRecurring('outbox.tick', handlerQueChama runOutboxTick, { everyMs: cfg.messaging.outboxTickMs })`; o handler valida o payload vazio com zod (`{}`) e trata erro com log + rethrow (retry da fila).
-- [ ] **8. Correr e ver passar.** → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **9. Commit.** `feat: add recurring jobs to job queue port` e `feat: add outbox send worker with pacing and serialization`
+- [x] **7. Ligar no arranque.** `main.ts`: `registerRecurring('outbox.tick', handlerQueChama runOutboxTick, { everyMs: cfg.messaging.outboxTickMs })`; o handler valida o payload vazio com zod (`{}`) e trata erro com log + rethrow (retry da fila).
+- [x] **8. Correr e ver passar.** → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **9. Commit.** `feat: add recurring jobs to job queue port` e `feat: add outbox send worker with pacing and serialization`
 
 ### Task 19: `handle-inbound.ts`, `AIProvider` indisponível e seam de efeitos
 
