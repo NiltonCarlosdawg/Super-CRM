@@ -787,8 +787,8 @@ export function createWaAkgAdapter(opts: {
 
 **Steps:**
 
-- [ ] **1. Extrair o mapa da auditoria (sem inventar).** De `docs/wa-akg-audit.md` §A (perguntas 1–4) transcrever para `src/adapters/wa-akg/README.md` a tabela: método + caminho + auth (header exato) + corpo + resposta para criar sessão, obter QR, estado, logout, enviar texto, enviar mídia, saúde; e de §B a semântica de timeout/idempotência (pergunta 3). **Se algum destes 7 endpoints estiver `Refutado`/`Não verificável`, ou a autenticação não estiver confirmada com `ficheiro:linha`: parar e perguntar ao humano** (gate da Fase 0) — não escrever o adaptador contra endpoints supostos.
-- [ ] **2. Teste falhado** `tests/unit/wa-akg-adapter.test.ts` (fetch injetado — sem rede):
+- [x] **1. Extrair o mapa da auditoria (sem inventar).** De `docs/wa-akg-audit.md` §A (perguntas 1–4) transcrever para `src/adapters/wa-akg/README.md` a tabela: método + caminho + auth (header exato) + corpo + resposta para criar sessão, obter QR, estado, logout, enviar texto, enviar mídia, saúde; e de §B a semântica de timeout/idempotência (pergunta 3). **Se algum destes 7 endpoints estiver `Refutado`/`Não verificável`, ou a autenticação não estiver confirmada com `ficheiro:linha`: parar e perguntar ao humano** (gate da Fase 0) — não escrever o adaptador contra endpoints supostos.
+- [x] **2. Teste falhado** `tests/unit/wa-akg-adapter.test.ts` (fetch injetado — sem rede):
 
 ```ts
 test('mapeamento de resultados: 200 com id → accepted; 422 → rejected; AbortError → unknown sem retry', async () => {
@@ -827,10 +827,10 @@ test('circuit breaker: cbThreshold falhas consecutivas abrem; após cbCooldownMs
 });
 ```
 
-- [ ] **3. Correr e ver falhar.** `npm test -- tests/unit/wa-akg-adapter.test.ts` → `fail 2`.
-- [ ] **4. Implementar.** `http.ts`: `fetch` com `AbortSignal.timeout(sendTimeoutMs)`, headers de auth exatos da auditoria, `ProviderUnavailableError` em rede/timeout de ligação/5xx/401-nosso-lado, validação zod de **toda** a resposta (`schemas.ts`) — resposta inesperada ⇒ erro, nunca adivinhar; `index.ts`: 7 métodos do port com o mapeamento de `README.md`, `verifyAndParseWebhook` isolado para a Task 12; breaker por instância (`cbThreshold` consecutivas `ProviderUnavailableError` ⇒ `CircuitOpenError` durante `cbCooldownMs`, meio-sucesso fecha); normalização de telefone com `normalizePhoneE164`; nenhum tipo do WA-AKG para fora do diretório.
-- [ ] **5. Correr e ver passar.** → `pass 2, fail 0`; `npm run lint` com a regra da Task 9 → o adaptador não é importado fora de `src/infra` → `0 erros`.
-- [ ] **6. Commit.** `feat: add wa-akg messaging adapter with circuit breaker`
+- [x] **3. Correr e ver falhar.** `npm test -- tests/unit/wa-akg-adapter.test.ts` → `fail 2`.
+- [x] **4. Implementar.** `http.ts`: `fetch` com `AbortSignal.timeout(sendTimeoutMs)`, headers de auth exatos da auditoria, `ProviderUnavailableError` em rede/timeout de ligação/5xx/401-nosso-lado, validação zod de **toda** a resposta (`schemas.ts`) — resposta inesperada ⇒ erro, nunca adivinhar; `index.ts`: 7 métodos do port com o mapeamento de `README.md`, `verifyAndParseWebhook` isolado para a Task 12; breaker por instância (`cbThreshold` consecutivas `ProviderUnavailableError` ⇒ `CircuitOpenError` durante `cbCooldownMs`, meio-sucesso fecha); normalização de telefone com `normalizePhoneE164`; nenhum tipo do WA-AKG para fora do diretório.
+- [x] **5. Correr e ver passar.** → `pass 2, fail 0`; `npm run lint` com a regra da Task 9 → o adaptador não é importado fora de `src/infra` → `0 erros`.
+- [x] **6. Commit.** `feat: add wa-akg messaging adapter with circuit breaker`
 
 ### Task 12: `verifyAndParseWebhook` e helper de assinatura
 

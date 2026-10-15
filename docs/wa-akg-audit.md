@@ -108,6 +108,22 @@
 **Nota:** As 5 lacunas críticas (idempotência, HMAC, retention, auth pública, credenciais por defeito) exigem **ADR e aprovação humana** (docs/04 §9) antes da ativação em produção. Nenhum patch está pré-aprovado.
 
 ---
-AUDITEOF
-echo "Task 13 document appended. Validating..."
-wc -l /home/niltoncosta/Documentos/Projetos/Milvendas/CRM/docs/wa-akg-audit.md
+
+## Errata (2026-10-15) — pós-auditoria, por inspecção directa do commit `c7dd01a0`
+
+O mapa de endpoints da §A2 tem **três caminhos errados** e omite a total ausência de rota de
+saúde. Confirmado por `find`/`grep`/leitura do clone no mesmo commit auditado; aprovado pelo
+humano a 2026-10-15 (decisão: usar o código real, nunca endpoints supostos). O mapa correcto e
+completo vive em `packages/backend/src/adapters/wa-akg/README.md`.
+
+| §A2 dizia | Realidade (evidência) |
+|-----------|----------------------|
+| (2) QR: `GET /api/qrcode` | **`GET /api/sessions/{sessionId}/qr`** — `src/app/api/sessions/[sessionId]/qr/route.ts`; não existe `src/app/api/qrcode/` |
+| (5) texto: `POST …/{jid}/text` | **`POST …/{jid}/send`** — `src/app/api/messages/[sessionId]/[jid]/send/route.ts:15-16,32`; não existe directoria `text/` |
+| (7) lido: `POST /api/messages/{sid}/{jid}/read` | **`POST /api/chat/{sid}/{jid}/read`** — existe `src/app/api/chat/[sessionId]/[jid]/read/`, não existe em `messages/…/[jid]/` |
+| (8) escrita: `POST …/{jid}/typing` | **inexistente** — sem `typing/` em `messages/…/[jid]/` nem em `chat/…/[jid]/` |
+| saúde (não listada) | **nenhuma rota `/health`** no fork (grep em `src/app` → zero; G21 mantém-se "Não verificável"). Ping no adaptador = `GET /api/sessions` **[decisão humana 2026-10-15]** |
+
+**A1 mantém-se:** header `x-api-key` confirmado em `src/lib/api-auth.ts:15`.
+A2 estado passa de "Confirmado" a **"Confirmado com errata"** para os pontos (2), (5), (7), (8).
+
