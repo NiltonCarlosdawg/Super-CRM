@@ -29,3 +29,22 @@ test('enqueue idempotente: mesma idempotencyKey executa o handler uma só vez', 
   assert.deepEqual(correlations, ['corr-1']);
   await queue.close();
 });
+
+// Regressão da validação viva da Fase 1: as chaves reais de idempotência
+// contêm ':' (`inbound-event:...`, `rest:...`) e o BullMQ proíbe ':' em custom
+// jobIds — sem este teste, o ingest de webhooks e o envio REST falhavam em produção.
+test('idempotencyKey com ":" é aceite (chaves reais inbound-event:/rest:)', async () => {
+  const queue = createJobQueue({ redisUrl: TEST_REDIS_URL });
+  let runs = 0;
+  await queue.register('test.colon', async () => {
+    runs += 1;
+  });
+  const payload = { leadId: '00000000-0000-4000-8000-000000000002' };
+  const key = 'inbound-event:evt_abc123';
+  await queue.enqueue('test.colon', payload, { idempotencyKey: key, correlationId: 'corr-colon-1' });
+  await queue.enqueue('test.colon', payload, { idempotencyKey: key, correlationId: 'corr-colon-2' });
+  await waitFor(() => runs >= 1);
+  await new Promise((r) => setTimeout(r, 300)); // janela para uma 2.ª execução indesejada
+  assert.equal(runs, 1, 'mesma chave repetida executa o handler uma só vez');
+  await queue.close();
+});

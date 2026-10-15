@@ -49,8 +49,11 @@ export class BullMqJobQueue implements JobQueue {
   ): Promise<void> {
     const envelope: JobEnvelope = { payload, correlationId: opts.correlationId };
     // jobId determinístico: se já existe em qualquer estado, o BullMQ não recria o job.
+    // O BullMQ proíbe ':' em custom jobIds (separador interno de chaves), mas as
+    // chaves reais de idempotência contêm ':' (`inbound-event:...`, `rest:...`):
+    // codifica-se em base64url — bijectivo, logo a dedupe mantém-se.
     await this.queueFor(name).add(name, envelope, {
-      jobId: opts.idempotencyKey,
+      jobId: Buffer.from(opts.idempotencyKey).toString('base64url'),
       delay: opts.delayMs,
     });
   }
