@@ -376,8 +376,8 @@ export function assertPasswordPolicy(plain: string): void;  // 12–100 chars, s
 
 **Steps:**
 
-- [ ] **1. ADR das dependências novas.** Criar `docs/adr/0006-dependencias-fase1.md` (estado: proposto; revisão por `docs/02` §12): `argon2` (Task 6), `zod` + `@fastify/cookie` + `@fastify/rate-limit` + `@fastify/swagger` (Task 9), `socket.io` e `socket.io-client` (dev, Task 15); justificação, licença MIT, versões fixadas no lockfile, `npm audit` obrigatório; Fastify já decidido em ADR-0001, Socket.IO em D8 (Fase 0); TOTP sem dependência (`node:crypto`, RFC 6238); zod v4 usa `z.toJSONSchema` para o OpenAPI, senão `zod-to-json-schema` (verificar com `npm ls zod` na Task 9 e registar a escolha neste ADR).
-- [ ] **2. Teste falhado** `tests/unit/password.test.ts`:
+- [x] **1. ADR das dependências novas.** Criar `docs/adr/0006-dependencias-fase1.md` (estado: proposto; revisão por `docs/02` §12): `argon2` (Task 6), `zod` + `@fastify/cookie` + `@fastify/rate-limit` + `@fastify/swagger` (Task 9), `socket.io` e `socket.io-client` (dev, Task 15); justificação, licença MIT, versões fixadas no lockfile, `npm audit` obrigatório; Fastify já decidido em ADR-0001, Socket.IO em D8 (Fase 0); TOTP sem dependência (`node:crypto`, RFC 6238); zod v4 usa `z.toJSONSchema` para o OpenAPI, senão `zod-to-json-schema` (verificar com `npm ls zod` na Task 9 e registar a escolha neste ADR).
+- [x] **2. Teste falhado** `tests/unit/password.test.ts`:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -399,12 +399,12 @@ test('assertPasswordPolicy: 11 chars lança weak_password; 12 passa', () => {
 });
 ```
 
-- [ ] **3. Correr e ver falhar.** `npm test -- tests/unit/password.test.ts` → `fail 1`; `npm install argon2` (registado no ADR-0006).
-- [ ] **4. Implementar.** `createArgon2Hasher` (`argon2.hash(plain, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })`); `assertPasswordPolicy` com `DomainError('weak_password')`.
-- [ ] **5. Teste falhado do script** `tests/integration/create-user-script.test.ts`: `spawnSync('npx', ['--no-install', 'tsx', 'scripts/create-user.ts', '--email', 'bootstrap@test.local', '--name', 'Bootstrap', '--role', 'admin'], { input: 'senha-muito-forte-123', env: testEnv })` → `status 0`, `stdout` contém `created user bootstrap@test.local role admin` e não contém a palavra-passe; segunda execução → `status 1` e `email already exists`; sem stdin (`input: ''`) → `status 1` e `password via stdin`.
-- [ ] **6. Correr script → falhar → implementar** `scripts/create-user.ts`: lê env via `loadFullConfig`, valida `--role` ∈ `agent|editor|admin`, lê a palavra-passe inteira de `process.stdin` (nunca de argv, nunca de `process.env`), aplica `assertPasswordPolicy`, hash, INSERT com `active = true`, `audit.record({ actorId: null, action: 'user.created', ... })`; logs sem segredos.
-- [ ] **7. Correr e ver passar.** `npm run test:integration -- tests/integration/create-user-script.test.ts tests/integration/audit.test.ts` → `pass, fail 0`.
-- [ ] **8. Commit.** `feat: add argon2id password hashing and user bootstrap script` e `docs: record phase 1 dependencies in adr 0006`
+- [x] **3. Correr e ver falhar.** `npm test -- tests/unit/password.test.ts` → `fail 1`; `npm install argon2` (registado no ADR-0006).
+- [x] **4. Implementar.** `createArgon2Hasher` (`argon2.hash(plain, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })`); `assertPasswordPolicy` com `DomainError('weak_password')`.
+- [x] **5. Teste falhado do script** `tests/integration/create-user-script.test.ts`: `spawnSync('npx', ['--no-install', 'tsx', 'scripts/create-user.ts', '--email', 'bootstrap@test.local', '--name', 'Bootstrap', '--role', 'admin'], { input: 'senha-muito-forte-123', env: testEnv })` → `status 0`, `stdout` contém `created user bootstrap@test.local role admin` e não contém a palavra-passe; segunda execução → `status 1` e `email already exists`; sem stdin (`input: ''`) → `status 1` e `password via stdin`.
+- [x] **6. Correr script → falhar → implementar** `scripts/create-user.ts`: lê env via `loadFullConfig`, valida `--role` ∈ `agent|editor|admin`, lê a palavra-passe inteira de `process.stdin` (nunca de argv, nunca de `process.env`), aplica `assertPasswordPolicy`, hash, INSERT com `active = true`, `audit.record({ actorId: null, action: 'user.created', ... })`; logs sem segredos.
+- [x] **7. Correr e ver passar.** `npm run test:integration -- tests/integration/create-user-script.test.ts tests/integration/audit.test.ts` → `pass, fail 0`.
+- [x] **8. Commit.** `feat: add argon2id password hashing and user bootstrap script` e `docs: record phase 1 dependencies in adr 0006`
 
 ### Task 7: Sessões, login e bloqueio progressivo
 

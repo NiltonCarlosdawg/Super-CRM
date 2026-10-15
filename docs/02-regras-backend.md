@@ -18,7 +18,8 @@ src/
     queue/           BullMQ
     http/            rotas, validação, serialização
     realtime/        Socket.IO
-  infra/             config, logging, métricas, arranque
+  infra/             config, logging, métricas, arranque, security/ (argon2id)
+scripts/             create-user.ts (bootstrap de utilizadores)
   modules/knowledge/ schema Drizzle, seed, services (vindos de reference/)
 tests/               unit/, integration/, contract/, eval/, helpers/
 docs/adr/            decisões

@@ -2,7 +2,9 @@
   "name": "milvendas-crm",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "tsx watch src/infra/main.ts",
     "lint": "eslint .",
@@ -14,6 +16,7 @@
     "eval": "tsx tests/eval/run.ts"
   },
   "dependencies": {
+    "argon2": "^0.45.1",
     "bullmq": "^6.3.11",
     "drizzle-orm": "^0.45.3",
     "pg": "^8.23.1",
