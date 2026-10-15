@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"tests/unit/**/*.test.ts\"",
+    "test:contract": "tsx --test \"tests/contract/**/*.test.ts\"",
     "test:integration": "bash scripts/integration-test.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

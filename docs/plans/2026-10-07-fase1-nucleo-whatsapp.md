@@ -905,8 +905,8 @@ export function startMockWaAkg(opts?: { failAuth?: boolean; malformed?: boolean 
 
 **Steps:**
 
-- [ ] **1. Construir o mock da auditoria.** Uma rota por endpoint marcado em `docs/wa-akg-audit.md` §A, com: mesmo caminho/método, mesma autenticação exigida, mesmo shape de resposta de sucesso (capturas), 401 com header errado, 400 de validação, JSON malformado num caso e rota lenta (`delay > sendTimeoutMs`) num caso. Sem achado na auditoria para um endpoint que precisamos → parar e perguntar (regra 3 do `AGENTS.md`).
-- [ ] **2. Teste falhado** `tests/contract/wa-akg-contract.test.ts`:
+- [x] **1. Construir o mock da auditoria.** Uma rota por endpoint marcado em `docs/wa-akg-audit.md` §A, com: mesmo caminho/método, mesma autenticação exigida, mesmo shape de resposta de sucesso (capturas), 401 com header errado, 400 de validação, JSON malformado num caso e rota lenta (`delay > sendTimeoutMs`) num caso. Sem achado na auditoria para um endpoint que precisamos → parar e perguntar (regra 3 do `AGENTS.md`).
+- [x] **2. Teste falhado** `tests/contract/wa-akg-contract.test.ts`:
 
 ```ts
 test('contrato: sendText envia auth+corpo esperados e valida a resposta', async () => {
@@ -934,10 +934,10 @@ test('contrato: resposta inesperada é rejeitada (nunca adivinha)', async () => 
 });
 ```
 
-- [ ] **3. Correr e ver falhar.** `npm run test:contract` → `fail` (script inexistente / rotas do mock em falta).
-- [ ] **4. Implementar.** `mock-wa-akg.ts` conforme o passo 1; testar os 7 métodos do port (sucesso + autenticação errada + malformado + lento) e `health()`; adicionar `"test:contract": "<runner da Fase 0> tests/contract/"` ao `package.json` e o passo ao workflow de CI (junto aos restantes testes; `npm audit --audit-level=high` já existe na Fase 0 — confirmar).
-- [ ] **5. Correr e ver passar.** `npm run test:contract` → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **6. Commit.** `test: add wa-akg contract tests against audited mock` e `chore: run contract tests in ci`
+- [x] **3. Correr e ver falhar.** `npm run test:contract` → `fail` (script inexistente / rotas do mock em falta).
+- [x] **4. Implementar.** `mock-wa-akg.ts` conforme o passo 1; testar os 7 métodos do port (sucesso + autenticação errada + malformado + lento) e `health()`; adicionar `"test:contract": "<runner da Fase 0> tests/contract/"` ao `package.json` e o passo ao workflow de CI (junto aos restantes testes; `npm audit --audit-level=high` já existe na Fase 0 — confirmar).
+- [x] **5. Correr e ver passar.** `npm run test:contract` → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **6. Commit.** `test: add wa-akg contract tests against audited mock` e `chore: run contract tests in ci`
 
 ### Task 14: `createOrchestratorPorts` e `releaseClaim`
 
