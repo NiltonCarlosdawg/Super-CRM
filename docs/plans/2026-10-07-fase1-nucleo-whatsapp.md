@@ -185,7 +185,7 @@ export function maskPhone(phone: string): string;
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/unit/phone.test.ts`:
+- [x] **1. Teste falhado** `tests/unit/phone.test.ts`:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -208,10 +208,10 @@ test('maskPhone', () => {
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm test -- tests/unit/phone.test.ts` → `fail 1` (`Cannot find module ... src/domain/phone.ts`).
-- [ ] **3. Implementar.** `trim`; remover espaços, pontos, hífenes e parênteses; prefixo `+` mantido, `00`→`+`; resto tem de ser 10–15 dígitos (caso contrário `null`); letras ou outros caracteres → `null`. `maskPhone`: `^\+(\d{10,15})$` senão `'***'`; código de país = `244` se os dígitos começam por `244`, senão os 3 primeiros; nacional mascarado = 1.º dígitos + `**` + `*` repetido até `n-3` + últimos 2, agrupado em blocos de 3 com espaço.
-- [ ] **4. Correr e ver passar.** `npm test -- tests/unit/phone.test.ts` → `pass 2, fail 0`.
-- [ ] **5. Commit.** `feat: add e164 phone normalizer and log masker`
+- [x] **2. Correr e ver falhar.** `npm test -- tests/unit/phone.test.ts` → `fail 1` (`Cannot find module ... src/domain/phone.ts`).
+- [x] **3. Implementar.** `trim`; remover espaços, pontos, hífenes e parênteses; prefixo `+` mantido, `00`→`+`; resto tem de ser 10–15 dígitos (caso contrário `null`); letras ou outros caracteres → `null`. `maskPhone`: `^\+(\d{10,15})$` senão `'***'`; código de país = `244` se os dígitos começam por `244`, senão os 3 primeiros; nacional mascarado = 1.º dígitos + `**` + `*` repetido até `n-3` + últimos 2, agrupado em blocos de 3 com espaço.
+- [x] **4. Correr e ver passar.** `npm test -- tests/unit/phone.test.ts` → `pass 2, fail 0`.
+- [x] **5. Commit.** `feat: add e164 phone normalizer and log masker`
 
 ### Task 4: Config de autenticação e de mensagens
 
