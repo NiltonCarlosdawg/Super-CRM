@@ -29,7 +29,10 @@ export default tseslint.config(
   // tests/unit/lint-wa-akg-isolation.test.ts (API do ESLint sobre este config).
   {
     files: ['src/**'],
-    ignores: ['src/adapters/wa-akg/**', 'src/domain/**', 'src/application/**'],
+    // docs/04 §5: o WA-AKG é acessível SÓ do composition root (src/infra, a
+    // única que injeta o adaptador como MessagingProvider) e do próprio
+    // adaptador. domain/application são regidos pelo bloco seguinte (probe).
+    ignores: ['src/infra/**', 'src/adapters/wa-akg/**', 'src/domain/**', 'src/application/**'],
     rules: {
       'no-restricted-imports': [
         'error',
