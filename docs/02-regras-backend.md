@@ -10,17 +10,20 @@ Arquitetura hexagonal simples. As dependências apontam sempre para dentro.
 src/
   domain/            tipos e regras puras (sem I/O, sem frameworks)
   application/       casos de uso (ex.: handleInbound, publishKnowledgeItem)
+    auth/            login, passwords e MFA/TOTP
   ports/             interfaces (MessagingProvider, AIProvider, Ports...)
+  modules/
+    knowledge/       schema Drizzle, seed, services (vindos de reference/)
   adapters/
     wa-akg/          adaptador do WA-AKG
     ai/              implementação do AIProvider
-    db/              repositórios Drizzle
+    db/              repositórios Drizzle (+ schema/ — 16 tabelas base + enums)
     queue/           BullMQ
-    http/            rotas, validação, serialização
+    http/            rotas, guards, validação, serialização (+ routes/)
     realtime/        Socket.IO
-  infra/             config, logging, métricas, arranque, security/ (argon2id)
-scripts/             create-user.ts (bootstrap de utilizadores)
-  modules/knowledge/ schema Drizzle, seed, services (vindos de reference/)
+  infra/             config.ts, config-app.ts, logger.ts, main.ts (arranque)
+    security/        argon2id (argon2.ts) e TOTP cifrado (totp.ts)
+scripts/             create-user.ts, integration-test.sh, ws-echo-*.ts
 tests/               unit/, integration/, contract/, eval/, helpers/
 docs/adr/            decisões
 ```

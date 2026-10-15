@@ -1626,7 +1626,7 @@ test('saída sem sessão/CSRF nunca chega à outbox', async () => {
 - [x] **3. Corrigir o código, não o teste.** Ligar o que faltar em `main.ts` (job `inbound.process` + rota webhook + worker), corrigindo bugs reais à superfície; se um pressuposto do teste estiver errado contra a spec (`docs/01` §7, `docs/04` §7–8), corrigir o teste apenas com a evidência da spec citada.
 - [x] **4. Correr e ver passar.** → `pass 3, fail 0`.
 - [x] **5. Suíte completa.** `npm run lint` → `0 erros`; `npm run typecheck` → `0 erros`; `npm test` → `fail 0`; `npm run test:integration` → `fail 0`; `npm run test:contract` → `fail 0`; `npm audit --audit-level=high` → sem vulnerabilidades altas/críticas novas. Colar a saída integral no relatório.
-- [ ] **6. Commit.** `test: cover end to end inbound and outbound send flows`
+- [x] **6. Commit.** `test: cover end to end inbound and outbound send flows`
 
 ### Task 23: Documentação, runbooks e verificação final
 
@@ -1644,13 +1644,13 @@ test('saída sem sessão/CSRF nunca chega à outbox', async () => {
 
 **Steps:**
 
-- [ ] **1. READMEs e runbooks.** Escrever os ficheiros acima (curtos, `docs/02` §13): no README do adaptador, tabela endpoint→método do port→teste de contrato; no de HTTP, matriz de rotas × papéis (a da Global Constraints) e o fluxo de cookies/CSRF/TOTP; runbooks com comandos concretos (`npm run test:contract`, SQL de consulta de `unknown_delivery`, etc.), sem segredos.
-- [ ] **2. Verificação de estrutura.** `find src tests -type d | sort` corresponde à árvore de `docs/02` §1 atualizada; `npm test -- tests/unit/schema-coverage.test.ts` → `pass, fail 0` (lista estendida, nunca enfraquecida); `git status --porcelain` vazio após os commits.
-- [ ] **3. Prova de ausência de segredos/PII.** `grep -rniE "(password|secret|api[_-]?key|token)\s*[:=]\s*['\"][^'\"]{8,}" src tests scripts --exclude-dir=node_modules` → rever manualmente: só placeholders; logs de exemplo com telefone mascarado (`maskPhone`).
-- [ ] **4. Verificação no navegador (hook global).** Subir o ambiente de teste (contentores + `npm run dev` em background com env de exemplo) e correr `bash ~/.config/opencode/skills/agent-browser-verify/scripts/verify.sh http://localhost:3000/v1/openapi.json`; confirmar: snapshot carrega, console sem erros de JS, screenshot anexado ao relatório; testar também `http://localhost:3000/health/live` (200) e `http://localhost:3000/v1/auth/me` sem sessão (401 problem+json); no fim, `agent-browser close --all`.
-- [ ] **5. Suíte final.** `npm run lint && npm run typecheck && npm test && npm run test:integration && npm run test:contract` → todos com `fail 0`; colar as saídas no relatório.
-- [ ] **6. Relatório de fim de fase.** Entregar (resposta ao utilizador): o que mudou, evidência por critério de `docs/01` §8 (tabela critério → teste → saída), o que ficou por fazer, riscos novos, decisões que precisam de humano (secção "Lacunas" abaixo), e o estado de prontidão para o gate.
-- [ ] **7. Commit.** `docs: add adapter http readmes and wa-akg runbooks`
+- [x] **1. READMEs e runbooks.** Escrever os ficheiros acima (curtos, `docs/02` §13): no README do adaptador, tabela endpoint→método do port→teste de contrato; no de HTTP, matriz de rotas × papéis (a da Global Constraints) e o fluxo de cookies/CSRF/TOTP; runbooks com comandos concretos (`npm run test:contract`, SQL de consulta de `unknown_delivery`, etc.), sem segredos.
+- [x] **2. Verificação de estrutura.** `find src tests -type d | sort` corresponde à árvore de `docs/02` §1 atualizada; `npm test -- tests/unit/schema-coverage.test.ts` → `pass, fail 0` (lista estendida, nunca enfraquecida); `git status --porcelain` vazio após os commits.
+- [x] **3. Prova de ausência de segredos/PII.** `grep -rniE "(password|secret|api[_-]?key|token)\s*[:=]\s*['\"][^'\"]{8,}" src tests scripts --exclude-dir=node_modules` → rever manualmente: só placeholders; logs de exemplo com telefone mascarado (`maskPhone`).
+- [x] **4. Verificação no navegador (hook global).** Subir o ambiente de teste (contentores + `npm run dev` em background com env de exemplo) e correr `bash ~/.config/opencode/skills/agent-browser-verify/scripts/verify.sh http://localhost:3000/v1/openapi.json`; confirmar: snapshot carrega, console sem erros de JS, screenshot anexado ao relatório; testar também `http://localhost:3000/health/live` (200) e `http://localhost:3000/v1/auth/me` sem sessão (401 problem+json); no fim, `agent-browser close --all`.
+- [x] **5. Suíte final.** `npm run lint && npm run typecheck && npm test && npm run test:integration && npm run test:contract` → todos com `fail 0`; colar as saídas no relatório.
+- [x] **6. Relatório de fim de fase.** Entregar (resposta ao utilizador): o que mudou, evidência por critério de `docs/01` §8 (tabela critério → teste → saída), o que ficou por fazer, riscos novos, decisões que precisam de humano (secção "Lacunas" abaixo), e o estado de prontidão para o gate.
+- [x] **7. Commit.** `docs: add adapter http readmes and wa-akg runbooks`
 
 ## Lacunas de spec (decisões que precisam de humano)
 
@@ -1674,14 +1674,14 @@ Gate de `docs/01` §8 (Fase 1): **"primeiro envio real, só para número de test
 
 Critérios da fase (`docs/01` §8) e evidência mínima exigida antes do gate:
 
-- [ ] Autenticação e RBAC do painel → `tests/integration/auth-routes.test.ts` + `tests/integration/users-api.test.ts` (Tasks 9–10).
-- [ ] Schema base aplicado por migrações numa base vazia → `tests/integration/migrations.test.ts` + CI a aplicar `drizzle/` do zero (Task 1).
-- [ ] Adaptador WA-AKG com testes de contrato contra um mock fiel ao comportamento auditado → `tests/contract/wa-akg-contract.test.ts` (Task 13).
-- [ ] Webhooks: verificação de assinatura e caixa de entrada idempotente (mesmo evento 2 vezes) → `tests/integration/webhook-idempotency.test.ts` (Task 20).
-- [ ] Outbox + fila de envio com atrasos e limites por conta → `tests/integration/outbox-enqueue.test.ts` + `tests/integration/outbox-worker.test.ts` (Tasks 17–18).
-- [ ] Gestão de contas WhatsApp (criar sessão, QR, estado, desligar) → `tests/integration/accounts-api.test.ts` + `tests/integration/account-lifecycle.test.ts` (Task 16).
-- [ ] API REST e eventos Socket.IO para conversas e mensagens → `tests/integration/conversations-api.test.ts` + `tests/integration/realtime.test.ts` (Tasks 15 e 21).
-- [ ] Fluxo completo sem envios fora da outbox → `tests/integration/send-flow.test.ts` + regra ESLint/análise estática (Tasks 9 e 22).
+- [x] Autenticação e RBAC do painel → `tests/integration/auth-routes.test.ts` + `tests/integration/users-api.test.ts` (Tasks 9–10).
+- [x] Schema base aplicado por migrações numa base vazia → `tests/integration/migrations.test.ts` + CI a aplicar `drizzle/` do zero (Task 1).
+- [x] Adaptador WA-AKG com testes de contrato contra um mock fiel ao comportamento auditado → `tests/contract/wa-akg-contract.test.ts` (Task 13).
+- [x] Webhooks: verificação de assinatura e caixa de entrada idempotente (mesmo evento 2 vezes) → `tests/integration/webhook-idempotency.test.ts` (Task 20).
+- [x] Outbox + fila de envio com atrasos e limites por conta → `tests/integration/outbox-enqueue.test.ts` + `tests/integration/outbox-worker.test.ts` (Tasks 17–18).
+- [x] Gestão de contas WhatsApp (criar sessão, QR, estado, desligar) → `tests/integration/accounts-api.test.ts` + `tests/integration/account-lifecycle.test.ts` (Task 16).
+- [x] API REST e eventos Socket.IO para conversas e mensagens → `tests/integration/conversations-api.test.ts` + `tests/integration/realtime.test.ts` (Tasks 15 e 21).
+- [x] Fluxo completo sem envios fora da outbox → `tests/integration/send-flow.test.ts` + regra ESLint/análise estática (Tasks 9 e 22).
 
 Regras do gate:
 

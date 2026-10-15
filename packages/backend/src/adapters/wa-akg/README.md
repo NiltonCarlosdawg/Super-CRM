@@ -124,6 +124,26 @@ consecutivos ⇒ `CircuitOpenError` durante `cbCooldownMs`; depois, **uma** cham
   `sha256(corpo):evento:index` (o WA-AKG não envia id de evento — redelivery
   idêntico deduplica no job).
 
+## Como correr os contratos
+
+```bash
+npm run test:contract    # em packages/backend — usa tests/contract/mock-wa-akg.ts
+```
+
+O mock é um servidor HTTP local que **imita o fork** no commit auditado (caminhos, `x-api-key`,
+envelopes) — os contratos correm **offline** (nunca dependem da internet, `docs/02` §15).
+Cobertura — método do port ↔ endpoint da tabela acima ↔ teste:
+
+| Método do port | Endpoint do fork | Teste(s) de contrato |
+|---|---|---|
+| `createSession` | `POST /api/sessions` | `sucesso: os 7 métodos do port falam com caminhos, auth e formatos da auditoria`; `contrato: 400 de validação do provider → não é transitório` (sem `name`) |
+| `getSession` | `GET /api/sessions/{sessionId}` | teste dos 7; `contrato: timeout → unknown…` (timeout → indisponível); `contrato: resposta inesperada é rejeitada (nunca adivinha)` |
+| `getQr` | `GET /api/sessions/{sessionId}/qr` | teste dos 7 |
+| `logout` | `POST /api/sessions/{sessionId}/logout` | teste dos 7 |
+| `sendText` | `POST /api/messages/{sessionId}/{jid}/send` | teste dos 7; `contrato: timeout → unknown e a MESMA chamada não se repete`; `contrato: resposta inesperada é rejeitada…`; `contrato: autenticação errada → 401 ⇒ ProviderUnavailableError` |
+| `sendMedia` | `POST /api/messages/{sessionId}/{jid}/media` | teste dos 7 |
+| `health` | `GET /api/sessions` | teste dos 7; `contrato: autenticação errada → 401 ⇒ ProviderUnavailableError` |
+
 ## Errata vs. auditoria (§A2)
 
 | Auditoria diz | Código real (commit `c7dd01a0`) |

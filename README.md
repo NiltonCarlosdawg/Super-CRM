@@ -33,6 +33,26 @@ Lê por esta ordem. O `AGENTS.md` é o que o opencode carrega em cada sessão.
 | [`docs/05-ia-conhecimento-handoff.md`](docs/05-ia-conhecimento-handoff.md) | IA, conhecimento, gatilhos de handoff, follow-ups, avaliação |
 | [`docs/adr/`](docs/adr/0000-template.md) | Registo de decisões de arquitetura (modelo incluído) |
 
+## Como correr
+
+Comandos reais (todos na pasta `packages/backend`):
+
+```bash
+npm ci                       # instalar dependências
+npm run dev                  # servidor (env validada no arranque; ver .env.example)
+npm run lint                 # ESLint
+npm run typecheck            # tsc --noEmit
+npm test                     # suite unitária (sem Docker)
+npm run test:integration     # integração — sobe e desce os contentores de teste (Docker)
+npm run test:contract        # contrato WA-AKG (mock local, offline)
+npm run eval                 # classificador vs tests/eval/handoff-scenarios.ts
+npm run db:generate          # gerar migração (só com revisão; nunca editar migração aplicada)
+npm run db:migrate           # aplicar migrações (só com DATABASE_URL de desenvolvimento)
+```
+
+Endpoints mínimos: `GET /health/live` (200 se o processo vive), `GET /health/ready` (db + redis),
+`GET /v1/openapi.json` (com sessão). Operação do WA-AKG em [`docs/runbooks/wa-akg.md`](docs/runbooks/wa-akg.md).
+
 ## Código de referência
 
 O código de referência foi movido para `packages/backend/src/` e `packages/backend/tests/` na Fase 0 (mapa antigo→novo em [`reference/README.md`](reference/README.md)). Só muda com ADR aprovado.
