@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
@@ -7,36 +7,39 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/backend
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: packages/backend/package-lock.json
       - run: npm ci
-      - run: npm test
+      - run: npm audit --audit-level=high
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
 
-  build:
-    needs: test
+  secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
         with:
-          node-version: '20'
-      - run: npm ci
-      - run: npm run build
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
-    needs: build
+    needs: [backend, secret-scan]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v3
-      - name: Deploy
-        run: echo "Deploy realizado com sucesso"
+      - name: Deploy placeholder
+        run: echo "Deploy não configurado (produção é cPanel, A5)"

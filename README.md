@@ -2,7 +2,7 @@
 
 CRM **interno** da MilVendas para gerir conversas de WhatsApp com leads e clientes: várias contas num só lugar, campanhas com limites, e uma IA que responde, qualifica leads, faz follow-ups e **passa a um humano** quando deve.
 
-> **Estado:** planeamento concluído. A Fase 0 (fundações e auditoria do WA-AKG) ainda não começou. Este repositório contém a documentação do plano e código de referência já testado.
+> **Estado:** Fase 0 (fundações e auditoria do WA-AKG) concluída; decisões A1–A11 fechadas (`docs/06`). Próximo passo: Fase 1 (núcleo WhatsApp: schema aplicado, Fastify, webhooks, outbox).
 
 ## Como funciona
 
@@ -33,50 +33,34 @@ Lê por esta ordem. O `AGENTS.md` é o que o opencode carrega em cada sessão.
 | [`docs/05-ia-conhecimento-handoff.md`](docs/05-ia-conhecimento-handoff.md) | IA, conhecimento, gatilhos de handoff, follow-ups, avaliação |
 | [`docs/adr/`](docs/adr/0000-template.md) | Registo de decisões de arquitetura (modelo incluído) |
 
-## Código de referência (`reference/`)
+## Código de referência
 
-Já escrito e testado. É a fonte de verdade destes módulos. Só muda com ADR aprovado.
+O código de referência foi movido para `packages/backend/src/` e `packages/backend/tests/` na Fase 0 (mapa antigo→novo em [`reference/README.md`](reference/README.md)). Só muda com ADR aprovado.
 
-| Ficheiro | Conteúdo |
+| Módulo | Caminho novo |
 |---|---|
-| `knowledge.schema.ts` | Schema Drizzle do módulo de conhecimento (12 tabelas, pgvector, índice HNSW) e `searchChunks()` |
-| `handoff-triggers.seed.ts` | 16 gatilhos de handoff e seed idempotente |
-| `ai-provider.ts` | Contrato `AIProvider` e `Ports` (só tipos) |
-| `orchestrator.ts` | `handleInbound()`: decide o que fazer com cada mensagem |
-| `orchestrator.test.ts` | 17 testes com portas em memória |
-| `handoff-scenarios.ts` | 72 cenários sintéticos e `evaluate()` |
-| `keyword-safety-net.ts` | Regras determinísticas para `human_requested` e `purchase_intent` |
+| Schema do módulo de conhecimento (12 tabelas, pgvector, índice HNSW) e `searchChunks()` | `packages/backend/src/modules/knowledge/knowledge.schema.ts` |
+| 16 gatilhos de handoff e seed idempotente | `packages/backend/src/modules/knowledge/handoff-triggers.seed.ts` |
+| Contrato `AIProvider` e `Ports` (só tipos) | `packages/backend/src/ports/ai-provider.ts` |
+| `handleInbound()`: decide o que fazer com cada mensagem | `packages/backend/src/application/orchestrator.ts` |
+| 17 testes com portas em memória | `packages/backend/tests/unit/orchestrator.test.ts` |
+| 72 cenários sintéticos e `evaluate()` | `packages/backend/tests/eval/handoff-scenarios.ts` |
+| Regras determinísticas para `human_requested` e `purchase_intent` | `packages/backend/src/domain/keyword-safety-net.ts` |
 
-Correr os testes de referência (numa pasta com Node.js):
+Correr a suite do backend (na pasta `packages/backend`):
 
 ```bash
-npm i -D drizzle-orm tsx typescript @types/node
-npx tsx --test reference/orchestrator.test.ts
+npm ci
+npm test
 ```
 
-Resultado esperado: `17 pass, 0 fail`. Testado com `drizzle-orm` 0.45.3 e `tsx` 4.23.
-
-Os testes cobrem a lógica de decisão com um fornecedor de IA **simulado**. Não testam Postgres, Redis nem a qualidade das respostas de um modelo real.
+Resultado esperado: `pass ≥ 70, fail 0`. Os testes cobrem a lógica de decisão com um fornecedor de IA **simulado**. Não testam a qualidade das respostas de um modelo real.
 
 ## Como começar com o opencode
 
-1. **Coloca este pacote na raiz do repositório** (`AGENTS.md`, `docs/`, `reference/`).
-2. **Fecha as decisões em aberto** que bloqueiam o arranque (lista completa em `docs/01`, secção 4). Sugestão de quando cada uma é necessária:
-
-   | Decisão | Necessária até |
-   |---|---|
-   | A1 Framework HTTP | Início da Fase 0 |
-   | A5 Topologia de deploy | Auditoria do WA-AKG (Fase 0) |
-   | A2 Autenticação do painel | Fase 1 |
-   | A3 Modelo de LLM, A4 embeddings | Fase 2 e 3 |
-   | A6 a A10 (handoffs, desconto, qualificação, ciclo das lacunas, devolver à IA) | Fase 3 |
-   | A11 Base legal para enviar dados a um LLM externo | Antes de enviar qualquer conversa a um LLM |
-
-3. **Começa pela Fase 0 e só por ela.** Prompt inicial sugerido:
-
-   > Lê `AGENTS.md` e `docs/01` a `docs/05`. Executa **apenas a Fase 0**: repositório, CI, Docker Compose com Postgres+pgvector e Redis, configuração validada, integração dos ficheiros de `reference/` com os seus testes a passar, e a **auditoria só de leitura do WA-AKG** conforme `docs/04`, secção 3. Não escrevas o adaptador nem alteres o código do WA-AKG. Preenche a secção "Comandos" do `AGENTS.md`. No fim, entrega o relatório com evidência e **pára no gate**.
-
-4. **Revê em cada gate.** O agente pára e espera pela tua aprovação.
+1. **Lê `AGENTS.md` e `docs/01` a `docs/06`.** O `AGENTS.md` carrega sozinho em cada sessão.
+2. **Executa a fase que for indicada** (planos em `docs/plans/`), tarefa a tarefa, com commits convencionais e push ao terminar cada tarefa.
+3. **Revê em cada gate.** O agente pára e espera pela tua aprovação (schema base, primeiro envio real de WhatsApp, campanhas/IA em produção, alterações ao código do WA-AKG, dados a serviços externos novos).
 
 ## Gates (aprovação humana obrigatória)
 

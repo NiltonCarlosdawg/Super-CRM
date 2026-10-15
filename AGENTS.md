@@ -81,13 +81,13 @@ O WhatsApp é servido por um serviço separado, o **WA-AKG** (fork de `mrifqidaf
 Preenche esta secção na Fase 0, com os comandos reais do repositório:
 
 ```
-install:           (a definir)
-dev:               (a definir)
-lint:              (a definir)
-typecheck:         (a definir)
-test:              (a definir)
-test:integration:  (a definir)
-db:generate:       (a definir)
-db:migrate:        (a definir)
-eval:              (a definir)   # avalia o classificador contra reference/handoff-scenarios.ts
+install:           npm ci                # em packages/backend
+dev:               npm run dev           # em packages/backend (tsx watch src/infra/main.ts)
+lint:              npm run lint
+typecheck:         npm run typecheck
+test:              npm test
+test:integration:  npm run test:integration   # precisa Docker; contentores sobem e descem no próprio script
+db:generate:       npm run db:generate
+db:migrate:        npm run db:migrate          # só com DATABASE_URL de desenvolvimento; aplicação é Fase 1
+eval:              npm run eval                # avalia o classificador contra tests/eval/handoff-scenarios.ts
 ```
