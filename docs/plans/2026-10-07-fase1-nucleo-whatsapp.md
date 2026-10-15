@@ -1162,7 +1162,7 @@ export function createOutbox(deps: {
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/outbox-enqueue.test.ts`:
+- [x] **1. Teste falhado** `tests/integration/outbox-enqueue.test.ts`:
 
 ```ts
 test('enqueue: cria mensagem+outbox numa transação; repetir a chave não duplica nem reemite evento', async () => {
@@ -1185,10 +1185,10 @@ test('prioridade: campaign = 2, ai/human = 1; pendingConversationCount só conta
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/outbox-enqueue.test.ts` → `fail 1`.
-- [ ] **3. Implementar.** Transação: gerar `messageId`; INSERT na mensagem (`direction 'outbound'`, `status 'queued'`, `sender`, corpo, `provider_message_id` NULL) → INSERT na outbox (`message_id`, `account_id`, `priority = sender === 'campaign' ? 2 : 1`, `scheduled_at = scheduledAt ?? now + randomInt(min,max)`, `attempts 0`, `status 'queued'`) com `ON CONFLICT (idempotency_key) DO NOTHING` → sem linha devolvida ⇒ `ROLLBACK` (a mensagem órfã desaparece) e `SELECT` da existente ⇒ `{ outboxId, duplicate: true }`; com linha ⇒ `COMMIT` e só **depois** `notifySink({ type: 'message', phase: 'created', messageId, conversationId, accountId, sender, status: 'queued', createdAt })`. `pendingConversationCount` = contagem de `queued`+`sending` da conta. Nenhuma validação de texto aqui (fronteira é a rota/job — `docs/02` §3).
-- [ ] **4. Correr e ver passar.** → `pass 2, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **5. Commit.** `feat: add outbox port with transactional enqueue`
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/outbox-enqueue.test.ts` → `fail 1`.
+- [x] **3. Implementar.** Transação: gerar `messageId`; INSERT na mensagem (`direction 'outbound'`, `status 'queued'`, `sender`, corpo, `provider_message_id` NULL) → INSERT na outbox (`message_id`, `account_id`, `priority = sender === 'campaign' ? 2 : 1`, `scheduled_at = scheduledAt ?? now + randomInt(min,max)`, `attempts 0`, `status 'queued'`) com `ON CONFLICT (idempotency_key) DO NOTHING` → sem linha devolvida ⇒ `ROLLBACK` (a mensagem órfã desaparece) e `SELECT` da existente ⇒ `{ outboxId, duplicate: true }`; com linha ⇒ `COMMIT` e só **depois** `notifySink({ type: 'message', phase: 'created', messageId, conversationId, accountId, sender, status: 'queued', createdAt })`. `pendingConversationCount` = contagem de `queued`+`sending` da conta. Nenhuma validação de texto aqui (fronteira é a rota/job — `docs/02` §3).
+- [x] **4. Correr e ver passar.** → `pass 2, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **5. Commit.** `feat: add outbox port with transactional enqueue`
 
 ### Task 18: Worker de envio e `registerRecurring`
 
