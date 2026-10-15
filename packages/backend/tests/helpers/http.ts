@@ -11,6 +11,7 @@ import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/au
 import type { DbClient } from '../../src/adapters/db/index.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
+import { attachRealtime, type RealtimeHandle } from '../../src/adapters/realtime/socket.js';
 import { createLoginService } from '../../src/application/auth/login.js';
 import { createLoginLimiter } from '../../src/application/auth/login-limiter.js';
 import type { AuthConfig } from '../../src/infra/config-app.js';
@@ -55,6 +56,8 @@ export interface TestApp extends FastifyInstance {
   csrf: { agent: string; editor: string; admin: string };
   users: { agent: UserInfo; editor: UserInfo; admin: UserInfo };
   db: DbClient;
+  /** Task 15: Socket.IO ligado ao httpServer (fecha antes do Fastify). */
+  realtime: RealtimeHandle;
   close(): Promise<void>;
 }
 
@@ -125,5 +128,14 @@ export async function buildTestApp(): Promise<TestApp> {
   withHelpers.csrf = { agent: randomUUID(), editor: randomUUID(), admin: randomUUID() };
   withHelpers.users = { agent, editor, admin };
   withHelpers.db = db;
+  // Task 15: Socket.IO no mesmo httpServer; o fecho vai primeiro pelo realtime
+  // (desliga clientes e o server) e depois pelo Fastify (que tolera o 2º fecho).
+  const realtime = attachRealtime({ server: app.server, sessions, now: () => new Date() });
+  withHelpers.realtime = realtime;
+  const baseClose = app.close.bind(app);
+  withHelpers.close = async (): Promise<void> => {
+    await realtime.close();
+    await baseClose();
+  };
   return withHelpers;
 }

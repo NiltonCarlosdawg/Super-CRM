@@ -1022,7 +1022,7 @@ export function attachRealtime(deps: { server: HTTPServer; sessions: SessionStor
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/realtime.test.ts` (socket.io-client real):
+- [x] **1. Teste falhado** `tests/integration/realtime.test.ts` (socket.io-client real):
 
 ```ts
 test('salas por papel: agent vê message.created, editor NÃO vê handoff.created, admin vê account.status', async () => {
@@ -1058,10 +1058,10 @@ test('mapeamento: payload extra sobrevive e só saem os 5 eventos (espião de io
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/realtime.test.ts` → `fail 1`.
-- [ ] **3. Implementar.** `socket.io` com `cookie` parseado no handshake (`sessions.get`, sem sessão ou expirada ⇒ `next(new Error('unauthorized'))`); `socket.join` na sala do papel + `handoffs` para `agent`/`admin` (`docs/02` §9); `createSocketNotify` conforme a Interfaces (payload em pass-through — é o contrato que a Fase 3 usa); `attachRealtime` devolve `io` e `close()`; ligar em `main.ts` (`httpServer` de dentro do Fastify) e no `close()` do `buildTestApp`.
-- [ ] **4. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **5. Commit.** `feat: add socket.io auth rooms and notify event mapping`
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/realtime.test.ts` → `fail 1`.
+- [x] **3. Implementar.** `socket.io` com `cookie` parseado no handshake (`sessions.get`, sem sessão ou expirada ⇒ `next(new Error('unauthorized'))`); `socket.join` na sala do papel + `handoffs` para `agent`/`admin` (`docs/02` §9); `createSocketNotify` conforme a Interfaces (payload em pass-through — é o contrato que a Fase 3 usa); `attachRealtime` devolve `io` e `close()`; ligar em `main.ts` (`httpServer` de dentro do Fastify) e no `close()` do `buildTestApp`.
+- [x] **4. Correr e ver passar.** → `pass 3, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **5. Commit.** `feat: add socket.io auth rooms and notify event mapping`
 
 ### Task 16: Ciclo de vida das contas WhatsApp
 

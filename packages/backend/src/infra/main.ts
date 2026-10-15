@@ -1,6 +1,6 @@
 // Arranque da aplicação (Fase 1, Task 9): config validada → pool/pg, Redis e
 // fila → auth real (argon2 + TOTP) → Fastify a escutar → graceful shutdown
-// (SIGTERM/SIGINT: para de aceitar, fecha server → fila → Redis → pool).
+// (SIGTERM/SIGINT: fecha realtime (Socket.IO) → server → fila → Redis → pool).
 
 import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
@@ -11,6 +11,7 @@ import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb } from '../adapters/db/index.js';
 import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
+import { attachRealtime } from '../adapters/realtime/socket.js';
 import { createLoginService } from '../application/auth/login.js';
 import { createLoginLimiter } from '../application/auth/login-limiter.js';
 import { createMfaService } from '../application/auth/mfa.js';
@@ -70,11 +71,15 @@ async function main(): Promise<void> {
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });
 
+  // Task 15: Socket.IO no mesmo httpServer (handshake autenticado por sessão).
+  const realtime = attachRealtime({ server: app.server, sessions, now });
+
   const shutdown = (signal: string): void => {
     log.info({ signal }, 'application.shutdown');
     void (async () => {
       try {
-        await app.close(); // para de aceitar ligações novas
+        await realtime.close(); // desliga clientes de socket e o server
+        await app.close(); // para de aceitar ligações novas (tolera o 2º fecho)
         await jobs.close();
         redis.disconnect();
         await pool.end();
