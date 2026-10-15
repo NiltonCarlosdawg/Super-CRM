@@ -79,29 +79,36 @@ A **paginação por cursor** de `handoffs` usa `handoffs_queue_idx (status, prio
 ## 3. Decisões de design
 
 1. **`line` modelado como FK `line_id` → `business_lines`.** O esboço de `docs/01` §6 escreve
+**mantém** (com `lead_stage` = `open` | `won` | `lost`, consumido como `leadStatus` na Fase 5 — a decidir aqui antes de virar `pgEnum`).
    `line` (texto) em `leads`, `conversations` e (em `docs/05` §9) `followup_sequences`; modelar como
    FK dá integridade na base (`docs/02` §5) e uma só fonte de verdade para os nomes das linhas.
    É anulável em `leads`/`conversations` (a conversa/lead pode ser criado antes de a linha estar
    identificada — fluxo da Fase 1) e obrigatório em `followup_sequences` (sequência *por linha*).
 2. **`sessions` por A2** (`docs/06`): sessões server-side em PostgreSQL, PK `uuid` = valor do cookie
+**eliminado** (redundante com `stage`; Fase 1 prevê eliminação; teste da Fase 1 verifica que a coluna `estado` não existe).
    (`randomUUID()` gerado pela aplicação), `expires_at` obrigatório; logout/revogação = `DELETE`.
    `mfa_pending` entra na Fase 1 (Task 15) como coluna nova.
 3. **Junção `campaign_accounts`** deriva de "contas permitidas" (`docs/01` §6): tabela de junção com
+**criar enums** (enquanto não existirem não é possível fechar unicidade parcial de run ativo por `(lead_id, sequence_id)`; transições e stop_reason são da Fase 5).
    FKs + `UNIQUE (campaign_id, account_id)` em vez de array `uuid[]` — a unicidade e a existência das
    contas ficam garantidas pela base, não pela aplicação.
 4. **`outbox` transacional com ligação a `messages` em estado `queued`**: o caso de uso grava a
+**mantém** (definir se enum ou `text` livre; `CHECK` de conteúdo depende destes valores).
    mensagem (`status = 'queued'`) e a linha de outbox na **mesma transação**; nenhum handler chama
    `send()` diretamente (`docs/04` §7, regra 6 do `AGENTS.md`). `idempotency_key` única garante que
    o re-envio com a mesma chave não duplica; `message_id` é FK porque a outbox existe para transportar
    uma mensagem concreta.
 5. **`daily_send_cap` é o limite por conta, por baixo da config global**: coluna anulável;
+**manter livre** (texto); já usam `auth.login`, `user.created`, `campaign.started`, `contact.delete`…
    `null` = aplica-se só a config global (`WA_CAMPAIGN_RAMP` e afins, `docs/04` §7); valor definido
    sobrepõe-se à config para essa conta. Os limites são impostos no código do CRM, nunca confiados ao
    WA-AKG (`docs/04` §7).
 6. **`UNIQUE (account_id, contact_id)` em `conversations`** — uma conversa por conta+contacto ("o
+**só `daily_limit`** (inteiro, por conta, por dia; `null` = só a ramp/config global). Restante para Fase 4.
    fio de mensagens", `docs/01` §6); necessária ao upsert da Fase 1 (Task 19) e ao
    `findOrCreateForCampaign` da Fase 4 (decisão pedida pela Fase 1, Task 1, passo 4).
 7. **Enums: fonte única.** Os enums da base vivem em `src/adapters/db/schema/enums.ts`;
+**incluído** porque docs/04 §5/§7 o define (timeout de envio → never retry automatic → alerta para reconciliação). Confirmar necessidade e semântica de reconciliação antes do primeiro envio real.
    `conversations.ai_mode` **importa `aiModeEnum` do módulo de conhecimento** (o próprio ficheiro o
    marca "A usar na tabela de conversas da base") e arranca em `ai_suggest` por D13 — passar a
    `ai_active` exige gate (`docs/01` §8). Os vocabulários vêm todos de docs (fonte em comentário em
@@ -110,6 +117,7 @@ A **paginação por cursor** de `handoffs` usa `handoffs_queue_idx (status, prio
    `message_direction` dos literais da Fase 1; `outbox_status` de `docs/04` §5 + Fase 1;
    `campaign_status`/`campaign_recipient_status` de `docs/01` §6 + Fase 4.
 8. **`drizzle.config.ts` usa um array de glob** (`./src/**/*.schema.ts` **mais**
+**mantido até à Fase 2** por ADR-0002 (mudança para vector(384) com multilingual-e5-small, migração nova em pré-produção). Não afeta as 16 tabelas base; registado para revisão no gate.
    `./src/adapters/db/schema/enums.ts`): o `enums.ts` não termina em `.schema.ts` e, sem entrar no
    glob, o drizzle-kit referenciava os 10 tipos nas tabelas sem emitir os `CREATE TYPE`
    (migração que falhava de zero — verificado e corrigido na geração; 25 `CREATE TYPE` no `0001`).

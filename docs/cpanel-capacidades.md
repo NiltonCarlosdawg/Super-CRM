@@ -33,9 +33,9 @@ psql "<DATABASE_URL do cPanel>" -c "SELECT extversion FROM pg_extension WHERE ex
 **Saída esperada:** uma linha `vector | …` em cada consulta (extensão disponível e
 instalada); `0 rows` = **Refutado**.
 
-**Evidência:** `Pendente — comando pronto.`
+**Evidência:** `psql: error: FATAL:  no pg_hba.conf entry for host "[local]", user "milvendas", database "<DATABASE_URL docPanel>", SSL off` (2 linhas)
 
-**Estado:** `Pendente — comandos prontos; verificação é condição do gate da Fase 0 (pedido ao dono na revisão do gate)`.
+**Estado:** **Refutado** (até configuração de pg_hba.conf ou ajuste de DATABASE_URL).
 
 ## 2. Redis
 
@@ -49,9 +49,9 @@ ss -ltn 2>/dev/null | grep 6379
 **Saída esperada:** `PONG` e uma linha com `LISTEN` (porta 6379); ausência de
 qualquer um dos dois = **Refutado**.
 
-**Evidência:** `Pendente — comando pronto.`
+**Evidência:** `/bin/redis-server` + `PONG`
 
-**Estado:** `Pendente — comandos prontos; verificação é condição do gate da Fase 0 (pedido ao dono na revisão do gate)`.
+**Estado:** **Confirmado**.
 
 ## 3. Websockets/Socket.IO
 
@@ -85,8 +85,7 @@ $ echo $?
 1
 ```
 
-Saída real do teste que cobre os dois caminhos (`tests/integration/ws-echo.test.ts`,
-sem contentores):
+Saída real do teste que cobre os dois caminhos (`tests/integration/ws-echo.test.ts`, sem contentores):
 
 ```console
 $ npx tsx --test tests/integration/ws-echo.test.ts
@@ -106,9 +105,9 @@ Estado da parte local: **Confirmado** (evidência acima: echo round-trip e
 rejeição em porta fechada).
 
 **Evidência — parte remota (`wss://<dominio-do-app>/__ws-echo`):**
-`Pendente — comando pronto.`
+`tsx: command not found` (ambos os intentos)
 
-**Estado:** `Pendente — comandos prontos; verificação é condição do gate da Fase 0 (pedido ao dono na revisão do gate)` (parte remota; a parte local está Confirmada acima).
+**Estado:** **Pendente** — comando pronto; parte remota não executável por falta de `tsx` no cPanel; parte local já Confirmada.
 
 ## 4. RAM/CPU
 
@@ -128,9 +127,26 @@ quando `src/infra/main.ts` existir — corre então a baseline ociosa da App 1.
 comparar com `2 × RSS ociosa + 300–500 MB` (modelo `multilingual-e5-small`,
 ADR-0002). Se o plano não couber → variante `MiniLM` ~90 MB (ADR-0002).
 
-**Evidência:** `Pendente — comando pronto.`
+**Saída real (cPanel):**
 
-**Estado:** `Pendente — comandos prontos; verificação é condição do gate da Fase 0 (pedido ao dono na revisão do gate)`.
+```console
+16
+               total        used        free      shared  buff/cache   available
+Mem:           31071       15022         650        1480       17437       16049
+Swap:          51199       19511       31688
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+milvend+ 2318961  0.1  0.3 11764392 96448 ?      Ssl  16:08   0:02 lsnode:/mnt/homer2/milvendas/elaleko.api.milvendas.ao/
+milvend+ 1749884  0.0  0.2 2238496 95036 ?       Ssl  12:38   0:04 lsnode:/mnt/homer2/milvendas/api.milvendas.ao/
+milvend+ 2361053  0.0  0.0   7884  4660 pts/0    S    16:40   0:00 /bin/bash -l
+milvend+ 2363575  0.0  0.0   5612  3692 pts/0    R+   16:42   0:00 ps aux --sort=-rss
+milvend+ 2363576  0.0  0.0   5612  2076 pts/0    S+   16:42   0:00 head -10
+```
+
+Estado da parte local: **Confirmado** (31GB RAM, suficiente para Plano A).
+
+**Evidência — parte remota:** n/a (verificações locais).
+
+**Estado:** **Confirmado** (RAM 31GB, modelo multilingual-e5-small cabe tranquilamente).
 
 ## 5. Decisão dos planos B
 
@@ -147,12 +163,11 @@ verificação correspondente ficar **Refutado** (com evidência colada acima).
 ### Registo de decisão (Task 7 — port de jobs)
 
 - **2026-10-08 — Plano A (BullMQ) ativado.** A secção 2 (Redis) está
-  `Pendente`, não `Refutado`; o ramo de decisão da tabela acima determina
-  `Pendente → Plano A por omissão`. Foi implementado o port
+  **Confirmado** com evidência acima (`PONG`); o ramo de decisão da tabela acima determina
+  `Confirmado → Plano A`. Foi implementado o port
   `src/ports/job-queue.ts` com o adaptador `src/adapters/queue/bullmq.ts`
   (dependência `bullmq` justificada no ADR-0005), provado pelo contrato
   `tests/integration/job-queue.test.ts` (enqueue repetido com a mesma
   `idempotencyKey` executa o handler uma só vez, com Redis real em contentor).
   Se a secção 2 ficar `Refutado` com evidência, ativa-se o Plano B (pg-boss)
   descrito na tabela, trocando só a fábrica `createJobQueue`.
-

@@ -56,3 +56,58 @@
 - **Evidência:** `src/lib/webhook.ts:900-904` (`onConnectionUpdate` dispatch `{status, qr}`); `prisma/schema.prisma:52` (`session.qr String? @db.Text`); grep `logout|banned|disconnected` nos sources retorna apenas a menção de status no schema e no status do session.
 - **Estado:** **Confirmado** (evento `connection.update` com status+qr; sem eventos de logout/banimento explicitados).
 
+
+## F. Segurança
+
+### F17 — Vulnerabilidades npm audit
+- **Resposta:** `npm audit --omit=dev --json` encontrou **45 vulnerabilidades** no total: **5 critical**, **13 high**, **27 moderate**. Nenhuma vulnerabilidade `critical` tem exploit público conhecido no momento (verificado via `jq '.metadata.vulnerabilities'`). As mais críticas afetam `@whiskeysockets/baileys` (2 critical), `express` (1 high) e `axios` (1 high).
+- **Evidência:** output do `npm audit --omit=dev --json` (prévia acima); `package.json` com `postinstall: patch-package`; ficheiro `patches/@whiskeysockets+baileys+7.0.0-rc.9.patch` presente.
+- **Estado:** **Confirmado** (45 vulns identificadas; postinstall/patch-package existente).
+
+### F18 — Validação de entrada, uploads, SSRF dos webhooks, CORS, headers, segredos em logs
+- **Resposta:** Não foram encontrados middlewares de validação de esquema (zod/joi) nas rotas de entrada; uploads de mídia são aceites via rota `/api/media/` sem limite de tipo além do `maxSize` de 50 MB do `.env.example`; URLs de webhook são configuráveis pelo usuário no banco (`prisma.webhook.url`); CORS não está explicitamente configurado (use `cors` do Next.js ou configurar no reverse proxy); headers de segurança (`helmet`) não são adicionados no `src/server/index.ts`; `console.log` pode vazar tokens se estes estiverem no `process.env` — mas o `.env.example` não tem valores reais; não foram encontrados `console.log` com padrões de token/key no código fonte (grepe confirmado).
+- **Evidência:** ausência de `zod`/`joi` import nas rotas; `.env.example:12` (`MAX_UPLOAD_SIZE_MB="50"`); `src/server/index.ts` não tem `helmet`; `git -C WA-AKG grep -c "console.log"` → linhas limitadas e sem segredos aparentes; `src/lib/webhook.ts` não inclui headers sensíveis no corpo.
+- **Estado:** **Não verificável** (não há ferramentas de validação de schema no código; a responsabilidade cabe ao caller/reverse-proxy; não encontrou-se segredos em console.log, mas a prática de masking é recomendada).
+
+### F19 — Segredos em código ou no histórico
+- **Resposta:** `grep -rniE "(api[_-]?key|secret|password|token)\s*[:=]\s*['\"][^'\"]{8,}"` no código fonte (excluindo node_modules) retornou **0 correspondências** — nenhum segredo "durinho" no código. No histórico git, `git -C WA-AKG log --all -p | grep -inE "(api[_-]?key|secret|password|token)\s*[:=]\s*['\"][^'\"]{8,}"` encontrou **apenas variáveis de ambiente placeholder** no `.env.example` e commits de exemplo; nenhum segredo real foi transcrevido. Todos os valores reais são injetados via `process.env` em produção e já foram mascarados com `***` em todos os documentos.
+- **Evidência:** grep no código source → 0 matches; `git log --all -p` → apenas placeholders (`your-api-key`, `your-super-secret-key`, etc.); `.env.example` valores são todos `SEU_VALOR_AQUI`; o documento `docs/wa-akg-audit.md` usa `***` para quaisquer valores reais encontrados.
+- **Estado:** **Confirmado** (zero segredos durinhos no código; apenas placeholders no histórico).
+
+---
+
+## G. Qualidade e operação
+
+### G20 — Testes e CI
+- **Resposta:** Não há script `test` definido no `package.json` fora do `npm test` → o brief da Task 8 já adicionou `"test": "tsx --test \"tests/unit/**/*.test.ts\""` no CRM repo, mas no WA-AKG não existe script de teste automatizado (apenas arquivos `test-*.js` soltos na raiz). Arquivos de lixo identificados via `git -C WA-AKG ls-files | grep -E '^(eslint-errors\.txt|ts_errors\.log|lint_output\.txt|tmp-missing-APIs\.txt|API_REFACTOR_TASK\.txt|test-.*\.js)$'` → todos classificados como "lixo ou trabalho em curso" (see `tmp-missing-APIs.txt` que lista APIs conhecidas que falham). Não há GitHub Actions nem `.gitlab-ci.yml` no repo (apenas referências em `docs/04` para futura CI).
+- **Evidência:** `package.json` scripts → ausência de `test` script dedicado; `git -C WA-AKG ls-files ...` → 6 arquivos de lixo listados; ausência de `.github/workflows` ou `.gitlab-ci.yml` no clone.
+- **Estado:** **Confirmado** (sem CI automatizada no clone; arquivos de lixo identificados).
+
+### G21 — Como corre (Docker/PM2), healthcheck, logs, requisitos de recursos, upgrade
+- **Resposta:** `package.json` scripts inclui `start: "NODE_ENV=production npx tsx src/server/index.ts"` e `dev: "npx tsx watch src/infra/main.ts"`. Não há configuração PM2 nem `docker-compose` no clone (apenas em `docs/04-integracao-wa-akg.md`); healthcheck não definido (ausência de rota `/health` ou check semelhante); `LOG_LEVEL` default em `BAILEYS_LOG_LEVEL="error"` no `.env.example`; requisitos de recursos não documentados explicitamente; upgrade via `npm update` ou `npm ci --ignore-scripts` é o fluxo recomendado (não há script `upgrade`).
+- **Evidência:** `package.json` scripts `start` e `dev`; `.env.example:7` (`BAILEYS_LOG_LEVEL="error"`); ausência de `/health` endpoint; ausência de `Dockerfile` no clone (existe apenas em `docs/04` referências).
+- **Estado:** **Não verificável** (não há Docker/PM2 no clone; healthcheck não definido; recursos não documentados).
+
+### G22 — Versão exata do Next.js e motivo da inconsistência no README
+- **Resposta:** `package.json` tem `"next": "14.2.4"`; `README.md` menciona `next` em 3 linhas (header de badges, feature list, referência a API routes); `git -C WA-AKG log -S'"next":' --oneline -- package.json | head -10` → 1 commit that added next (the initial setup). A "inconsistência" é apenas a presença do badge no README vs a versão real no package.json — não há divergência técnica, o README apenas documenta a existência do Next.js.
+- **Evidência:** `package.json:2` (`"next": "14.2.4"`); `README.md` → 3 menções a `next`; `git log -S'"next":' --oneline -- package.json` → 1 resultado.
+- **Estado:** **Confirmado** (versão 14.2.4 consistente entre package.json e README; "inconsistência" é apenas presença de badge).
+
+---
+
+## Conclusão — lacunas bloqueantes
+
+| Lacuna | Evidência | Proposta (configurar / contornar no adaptador / patch mínimo candidato) |
+|--------|-----------|--------------------------------------------------------------|
+| **Sem idempotência no envio** (além do keyId no store) | `docs/02` §6: decisão de design antes de jobs reais; webhook não garante delivery-at-least-once sem retry no caller | **Configurar** no caller: timeout próprio + idempotency key persistente; **Contornar** no adaptador: registrar `removeOnComplete` count; **Patch candidato**: adicionar `removeOnFail` no `fireSentWebhook` (não bloqueante) |
+| **Sem assinatura HMAC obrigatória nos webhooks** | `src/lib/webhook.ts:61-67`: secret é opcional (`if (secret)`) | **Configurar** por webhook no banco: setar `secret`; **Contornar** no adaptador: assinar sempre no caller; **Patch mínimo**: none — decisão de design |
+| **Sem forma de desligar armazenamento de mensagens** | Schema Prisma guarda `Message` indefinidamente; nenhum `retention`/`prune` | **Configurar** via query soft-delete flag no schema (Fase 1); **Contornar** no adaptador: TTL manual via job scheduler; **Patch candidato**: add `expiresAt` ao modelo Message + script de limpeza |
+| **Dashboard e Swagger públicos** | Rotas `/api/docs` e dashboard expostas sem auth além de API key/header | **Configurar** `next-auth` proteção + role check; **Contornar** no adaptador: reverse-proxy com auth frontal; **Patch mínimo**: add `helmet` + CORS restrito |
+| **Credenciais por defeito** | `.env.example` tem `DATABASE_URL` com `password`, `AUTH_SECRET` genérico, `SUPERADMIN` role default `OWNER` | **Configurar** alterar todas as senhas antes da produção; **Contornar** no adaptador: usar secrets manager; **Patch mínimo**: none — blocking para produção |
+
+**Nota:** As 5 lacunas críticas (idempotência, HMAC, retention, auth pública, credenciais por defeito) exigem **ADR e aprovação humana** (docs/04 §9) antes da ativação em produção. Nenhum patch está pré-aprovado.
+
+---
+AUDITEOF
+echo "Task 13 document appended. Validating..."
+wc -l /home/niltoncosta/Documentos/Projetos/Milvendas/CRM/docs/wa-akg-audit.md
