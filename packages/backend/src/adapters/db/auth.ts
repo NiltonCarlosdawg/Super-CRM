@@ -3,7 +3,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, eq, gt, ne } from 'drizzle-orm';
-import type { AuthUserRepo, SessionRecord, SessionStore } from '../../ports/auth.js';
+import type { AuthUserRepo, SessionRecord, SessionStore, UserTotpRepo } from '../../ports/auth.js';
 import type { PasswordHasher } from '../../ports/security.js';
 import type { DbClient } from './index.js';
 import { sessions } from './schema/sessions.schema.js';
@@ -49,10 +49,21 @@ export function createSessionStore(deps: { db: DbClient }): SessionStore {
           : and(eq(sessions.userId, userId), ne(sessions.id, exceptSessionId));
       await deps.db.delete(sessions).where(cond);
     },
+
+    async setMfaPending(sessionId, mfaPending, now) {
+      await deps.db
+        .update(sessions)
+        .set({ mfaPending, updatedAt: now })
+        .where(eq(sessions.id, sessionId));
+    },
   };
 }
 
-export function createAuthUserRepo(deps: { db: DbClient; hasher: PasswordHasher }): AuthUserRepo {
+/** Utilizador + TOTP: o mesmo repositório serve o login e o MFA (Task 8). */
+export function createAuthUserRepo(deps: {
+  db: DbClient;
+  hasher: PasswordHasher;
+}): AuthUserRepo & UserTotpRepo {
   let dummy: Promise<string> | undefined;
 
   const map = (r: typeof users.$inferSelect) => ({
@@ -92,6 +103,32 @@ export function createAuthUserRepo(deps: { db: DbClient; hasher: PasswordHasher 
       await deps.db
         .update(users)
         .set({ passwordHash, updatedAt: now })
+        .where(eq(users.id, userId));
+    },
+
+    // ── UserTotpRepo (Task 8): segredo SEMPRE cifrado em BD ──
+
+    async getTotpState(userId) {
+      const rows = await deps.db
+        .select({ encryptedSecret: users.totpSecret, totpEnabledAt: users.totpEnabledAt })
+        .from(users)
+        .where(eq(users.id, userId));
+      const r = rows[0];
+      if (r === undefined || r.encryptedSecret === null) return null;
+      return { encryptedSecret: r.encryptedSecret, totpEnabledAt: r.totpEnabledAt };
+    },
+
+    async setTotpSecret(userId, encryptedSecret, now) {
+      await deps.db
+        .update(users)
+        .set({ totpSecret: encryptedSecret, updatedAt: now })
+        .where(eq(users.id, userId));
+    },
+
+    async setTotpEnabled(userId, now) {
+      await deps.db
+        .update(users)
+        .set({ totpEnabledAt: now, updatedAt: now })
         .where(eq(users.id, userId));
     },
   };

@@ -19,6 +19,8 @@ export interface SessionStore {
   get(sessionId: string, now: Date): Promise<SessionRecord | null>; // nula se expirada/revogada
   revoke(sessionId: string): Promise<void>;
   revokeAllForUser(userId: string, exceptSessionId?: string): Promise<void>;
+  /** Acrescentado na Task 8: o MFA limpa `mfaPending` após TOTP correto. */
+  setMfaPending(sessionId: string, mfaPending: boolean, now: Date): Promise<void>;
 }
 
 export interface AuthUserRepo {
@@ -39,4 +41,11 @@ export interface AuthUserRepo {
 export interface MfaPort {
   startSetup(input: { userId: string; email: string; now: Date }): Promise<{ otpauthUrl: string }>; // gera+persiste segredo cifrado
   verifyAndFinish(input: { sessionId: string; userId: string; code: string; now: Date }): Promise<boolean>;
+}
+
+/** Repos de TOTP (Task 8): o segredo em BD é SEMPRE cifrado com o AUTH_SECRET. */
+export interface UserTotpRepo {
+  getTotpState(userId: string): Promise<{ encryptedSecret: string; totpEnabledAt: Date | null } | null>;
+  setTotpSecret(userId: string, encryptedSecret: string, now: Date): Promise<void>;
+  setTotpEnabled(userId: string, now: Date): Promise<void>;
 }

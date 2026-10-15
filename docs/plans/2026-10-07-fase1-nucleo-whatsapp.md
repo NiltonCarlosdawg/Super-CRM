@@ -541,7 +541,7 @@ export function createMfaService(deps: { users: UserTotpRepo; sessions: SessionS
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/unit/totp.test.ts` (vetor oficial RFC 6238 — valores exatos):
+- [x] **1. Teste falhado** `tests/unit/totp.test.ts` (vetor oficial RFC 6238 — valores exatos):
 
 ```ts
 import assert from 'node:assert/strict';
@@ -570,11 +570,11 @@ test('encryptSecret/decryptSecret: roundtrip, IV distinto e chave errada falha',
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm test -- tests/unit/totp.test.ts` → `fail 1`.
-- [ ] **3. Implementar TOTP/cifra.** Base32 encode/decode próprios; HOTP: `HMAC-SHA1(secretBytes, floor(t/30))` big-endian 4 bytes → código 6 dígitos com `padStart`; comparação em tempo constante (`timingSafeEqual` sobre buffers de mesmo tamanho); `otpauthUrl` conforme o asserção exata; `encryptSecret` com `hkdfSync('sha256', authSecret, '', 'crm-totp', 32)` + IV aleatório de 12 bytes.
-- [ ] **4. Teste falhado** `tests/integration/mfa.test.ts`: `startSetup` persiste `totp_secret` **cifrado** (o valor base32 não aparece em claro na BD), `verifyAndFinish` com código correto limpa `mfaPending` e marca `totpEnabledAt`, código errado devolve `false` e não limpa; audit `auth.totp_enabled`.
-- [ ] **5. Correr → falhar → implementar `createMfaService` → passar.** `npm run test:integration -- tests/integration/mfa.test.ts` → `pass, fail 0`.
-- [ ] **6. Commit.** `feat: add rfc 6238 totp with encrypted secret storage`
+- [x] **2. Correr e ver falhar.** `npm test -- tests/unit/totp.test.ts` → `fail 1`.
+- [x] **3. Implementar TOTP/cifra.** Base32 encode/decode próprios; HOTP: `HMAC-SHA1(secretBytes, floor(t/30))` big-endian 4 bytes → código 6 dígitos com `padStart`; comparação em tempo constante (`timingSafeEqual` sobre buffers de mesmo tamanho); `otpauthUrl` conforme o asserção exata; `encryptSecret` com `hkdfSync('sha256', authSecret, '', 'crm-totp', 32)` + IV aleatório de 12 bytes.
+- [x] **4. Teste falhado** `tests/integration/mfa.test.ts`: `startSetup` persiste `totp_secret` **cifrado** (o valor base32 não aparece em claro na BD), `verifyAndFinish` com código correto limpa `mfaPending` e marca `totpEnabledAt`, código errado devolve `false` e não limpa; audit `auth.totp_enabled`.
+- [x] **5. Correr → falhar → implementar `createMfaService` → passar.** `npm run test:integration -- tests/integration/mfa.test.ts` → `pass, fail 0`.
+- [x] **6. Commit.** `feat: add rfc 6238 totp with encrypted secret storage`
 
 ### Task 9: App Fastify, guards, erros RFC 9457, OpenAPI e `buildTestApp`
 
