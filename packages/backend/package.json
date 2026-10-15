@@ -32,5 +32,10 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
     "ws": "^8.22.0"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.4"
+    }
   }
 }
