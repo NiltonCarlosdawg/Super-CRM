@@ -460,7 +460,7 @@ export function createLoginLimiter(cfg: { max: number; windowMs: number; lockMax
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/unit/login-limiter.test.ts` (relógio falso — nada de espera real):
+- [x] **1. Teste falhado** `tests/unit/login-limiter.test.ts` (relógio falso — nada de espera real):
 
 ```ts
 import assert from 'node:assert/strict';
@@ -484,9 +484,9 @@ test('bloqueio progressivo: 5 falhas bloqueiam; 2.º bloqueio dobra; sucesso lim
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm test -- tests/unit/login-limiter.test.ts` → `fail 1`.
-- [ ] **3. Implementar o limiter** com as fórmulas exatas: falhas dentro da janela; `failures >= max` → `lockedUntil = now + min(lockMaxMs, 2^(failures-max) * 30000)`; `reset` limpa; entrada expirada é removida no acesso (cap de 10000 chaves, descarta a mais antiga).
-- [ ] **4. Teste falhado** `tests/integration/login.test.ts` (Postgres real, MfaPort fake):
+- [x] **2. Correr e ver falhar.** `npm test -- tests/unit/login-limiter.test.ts` → `fail 1`.
+- [x] **3. Implementar o limiter** com as fórmulas exatas: falhas dentro da janela; `failures >= max` → `lockedUntil = now + min(lockMaxMs, 2^(failures-max) * 30000)`; `reset` limpa; entrada expirada é removida no acesso (cap de 10000 chaves, descarta a mais antiga).
+- [x] **4. Teste falhado** `tests/integration/login.test.ts` (Postgres real, MfaPort fake):
 
 ```ts
 test('login: password errada 5× → rate_limited; certa → sessão criada e audit', async () => {
@@ -511,10 +511,10 @@ test('utilizador inativo e password errada devolvem a MESMA resposta (anti-enume
 });
 ```
 
-- [ ] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/login.test.ts` → `fail 1`.
-- [ ] **6. Implementar.** `createSessionStore` (`sessions` da Fase 0; PK é a cookie: `randomUUID()`, `expires_at = now + ttlHours`, revogação = DELETE); `createAuthUserRepo` (email lowercase+trim; `dummyHash` = hash argon2 de constante gerado uma vez no arranque); `createLoginService`: limiter (`key = email|ip`) → verificação com `dummyHash` quando o utilizador não existe → `active === false` ⇒ `invalid_credentials` (mesma resposta) → ok: se `role === 'admin' && totpEnabledAt === null` ⇒ `mfa.startSetup` + sessão `mfaPending` ⇒ `mfa_setup_required`; audit `auth.login` (sucesso) e `auth.login_failed` (falha, `actorId: null`, `detail.email` sem password); `changePassword` valida a atual, aplica `assertPasswordPolicy`, `revokeAllForUser(userId, except sessionId atual)`, audit `auth.password_changed`. Relógio sempre via `deps.now()`.
-- [ ] **7. Correr e ver passar.** → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **8. Commit.** `feat: add session login service with progressive rate limiting`
+- [x] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/login.test.ts` → `fail 1`.
+- [x] **6. Implementar.** `createSessionStore` (`sessions` da Fase 0; PK é a cookie: `randomUUID()`, `expires_at = now + ttlHours`, revogação = DELETE); `createAuthUserRepo` (email lowercase+trim; `dummyHash` = hash argon2 de constante gerado uma vez no arranque); `createLoginService`: limiter (`key = email|ip`) → verificação com `dummyHash` quando o utilizador não existe → `active === false` ⇒ `invalid_credentials` (mesma resposta) → ok: se `role === 'admin' && totpEnabledAt === null` ⇒ `mfa.startSetup` + sessão `mfaPending` ⇒ `mfa_setup_required`; audit `auth.login` (sucesso) e `auth.login_failed` (falha, `actorId: null`, `detail.email` sem password); `changePassword` valida a atual, aplica `assertPasswordPolicy`, `revokeAllForUser(userId, except sessionId atual)`, audit `auth.password_changed`. Relógio sempre via `deps.now()`.
+- [x] **7. Correr e ver passar.** → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **8. Commit.** `feat: add session login service with progressive rate limiting`
 
 ### Task 8: TOTP para `admin`
 
