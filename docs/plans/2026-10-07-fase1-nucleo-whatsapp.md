@@ -323,8 +323,8 @@ export class WebhookError extends Error { readonly code: 'invalid_signature' | '
 
 **Steps:**
 
-- [ ] **1. Copiar o contrato.** `src/ports/messaging-provider.ts` com os tipos de `docs/04` §5 literalmente (o port é só tipos + as classes de erro; a prova é `npm run typecheck` e o uso integral na Task 11).
-- [ ] **2. Teste falhado** `tests/integration/audit.test.ts`:
+- [x] **1. Copiar o contrato.** `src/ports/messaging-provider.ts` com os tipos de `docs/04` §5 literalmente (o port é só tipos + as classes de erro; a prova é `npm run typecheck` e o uso integral na Task 11).
+- [x] **2. Teste falhado** `tests/integration/audit.test.ts`:
 
 ```ts
 import assert from 'node:assert/strict';
@@ -348,10 +348,10 @@ test('audit.record grava ator, ação, entidade e detalhes com o at recebido', a
 });
 ```
 
-- [ ] **3. Correr e ver falhar.** `npm run test:integration -- tests/integration/audit.test.ts` → `fail 1` (`Cannot find module ... audit-adapter.ts`; os nomes de colunas reais vêm de `audit.schema.ts` da Fase 0).
-- [ ] **4. Implementar.** `createAuditAdapter`: um INSERT parametrizado; `detail` serializado com `JSON.stringify` (coluna `text`/`jsonb` do Fase 0); erros de escrita são propagados (nunca engolidos, `docs/02` §3).
-- [ ] **5. Correr e ver passar.** → `pass 1, fail 0`; `npm run typecheck` → `0 erros` (port de messaging incluído).
-- [ ] **6. Commit.** `feat: add audit and messaging provider ports with audit adapter`
+- [x] **3. Correr e ver falhar.** `npm run test:integration -- tests/integration/audit.test.ts` → `fail 1` (`Cannot find module ... audit-adapter.ts`; os nomes de colunas reais vêm de `audit.schema.ts` da Fase 0).
+- [x] **4. Implementar.** `createAuditAdapter`: um INSERT parametrizado; `detail` serializado com `JSON.stringify` (coluna `text`/`jsonb` do Fase 0); erros de escrita são propagados (nunca engolidos, `docs/02` §3).
+- [x] **5. Correr e ver passar.** → `pass 1, fail 0`; `npm run typecheck` → `0 erros` (port de messaging incluído).
+- [x] **6. Commit.** `feat: add audit and messaging provider ports with audit adapter`
 
 ### Task 6: Palavras-passe argon2id, script de bootstrap e ADR-0006
 
