@@ -22,5 +22,15 @@ export interface JobQueue {
     name: string,
     handler: (payload: Record<string, unknown>, ctx: JobContext) => Promise<void>,
   ): Promise<void>;
+  /**
+   * Job recorrente (Task 18): dispara a cada `opts.everyMs` com payload VAZIO
+   * por design (nada de dados em jobs, docs/02 §6) — o handler valida `{}`.
+   * Dedupe em memória por nome: a 2.ª chamada com o mesmo `name` é no-op.
+   */
+  registerRecurring(
+    name: string,
+    handler: (payload: Record<string, unknown>, ctx: JobContext) => Promise<void>,
+    opts: { everyMs: number },
+  ): Promise<void>;
   close(): Promise<void>;
 }

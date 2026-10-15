@@ -83,6 +83,48 @@ export class BullMqJobQueue implements JobQueue {
     this.workers.set(name, worker);
   }
 
+  async registerRecurring(
+    name: string,
+    handler: (payload: Record<string, unknown>, ctx: JobContext) => Promise<void>,
+    opts: { everyMs: number },
+  ): Promise<void> {
+    // Dedupe em memória por nome (Map de workers): 2.ª chamada = no-op.
+    if (this.workers.has(name)) return;
+    // BullMQ v6: repetição via Job Scheduler (o `add(..., {repeat})` foi
+    // removido). `override` substitui a instância adiada anterior — sem
+    // restos entre arranques. Envelope com payload vazio (nada de dados);
+    // ticks nunca acumulam no Redis.
+    const envelope: JobEnvelope = { payload: {}, correlationId: `repeat:${name}` };
+    await this.queueFor(name).upsertJobScheduler(name, { every: opts.everyMs }, {
+      name,
+      data: envelope,
+      opts: { removeOnComplete: true, removeOnFail: true },
+    });
+    const worker = new Worker<unknown>(
+      name,
+      async (job) => {
+        // Fronteira: valida-se o mesmo envelope dos jobs normais (docs/02 §3).
+        const parsed = envelopeSchema.safeParse(job.data);
+        if (!parsed.success) {
+          throw new UnrecoverableError(`invalid job envelope on queue "${name}"`);
+        }
+        const jobId = job.id;
+        if (jobId === undefined) {
+          throw new UnrecoverableError(`job without id on queue "${name}"`);
+        }
+        const ctx: JobContext = {
+          correlationId: parsed.data.correlationId,
+          jobId,
+          attempt: job.attemptsMade,
+        };
+        // O payload do tick é `{}` validado pelo handler (docs/02 §6).
+        await handler(parsed.data.payload, ctx);
+      },
+      { connection: this.connection, concurrency: 1 },
+    );
+    this.workers.set(name, worker);
+  }
+
   async close(): Promise<void> {
     // Primeiro os workers (param de consumir), depois as filas.
     await Promise.all([...this.workers.values()].map((worker) => worker.close()));

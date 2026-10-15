@@ -1218,7 +1218,7 @@ export function runOutboxWorker(overrides?: Partial<OutboxWorkerDeps>): Promise<
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/job-recurring.test.ts`:
+- [x] **1. Teste falhado** `tests/integration/job-recurring.test.ts`:
 
 ```ts
 test('registerRecurring: dispara a cada everyMs; registrar duas vezes não duplica execuções', async () => {
@@ -1233,8 +1233,8 @@ test('registerRecurring: dispara a cada everyMs; registrar duas vezes não dupli
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/job-recurring.test.ts` → `fail 1` (`registerRecurring is not a function`).
-- [ ] **3. Implementar `registerRecurring`** no port e no adaptador BullMQ (conforme Interfaces; dedupe por nome num `Map`; se o Redis estiver no ramo B da Fase 0 — `pg-boss` — implementar a repetição com o mecanismo equivalente **no mesmo port**, o teste acima é o contrato e não muda).
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/job-recurring.test.ts` → `fail 1` (`registerRecurring is not a function`).
+- [x] **3. Implementar `registerRecurring`** no port e no adaptador BullMQ (conforme Interfaces; dedupe por nome num `Map`; se o Redis estiver no ramo B da Fase 0 — `pg-boss` — implementar a repetição com o mecanismo equivalente **no mesmo port**, o teste acima é o contrato e não muda).
 - [ ] **4. Teste falhado** `tests/integration/outbox-worker.test.ts`:
 
 ```ts
