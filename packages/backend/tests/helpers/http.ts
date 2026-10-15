@@ -1,0 +1,122 @@
+// buildTestApp (Task 9): app HTTP real com BD de teste migrada, utilizadores
+// sintéticos um por papel (mesma password), MfaPort fake (código fixo
+// '123456') e login DIRETO pelo serviço para criar as cookies de teste.
+// A BD é reiniciada entre apps: a segunda buildTestApp não vê dados da primeira.
+
+import type { FastifyInstance } from 'fastify';
+import { randomUUID } from 'node:crypto';
+import { buildHttpApp } from '../../src/adapters/http/app.js';
+import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
+import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
+import { users } from '../../src/adapters/db/schema/users.schema.js';
+import { createLoginService } from '../../src/application/auth/login.js';
+import { createLoginLimiter } from '../../src/application/auth/login-limiter.js';
+import type { AuthConfig } from '../../src/infra/config-app.js';
+import { createArgon2Hasher } from '../../src/infra/security/argon2.js';
+import type { MfaPort, SessionStore } from '../../src/ports/auth.js';
+import pino from 'pino';
+import { migratedDb } from './db.js';
+
+export const TEST_PASSWORD = 'senha-muito-forte-123';
+
+export const testAuthConfig: AuthConfig = {
+  authSecret: 'x'.repeat(32),
+  sessionTtlHours: 72,
+  // loginRateMax alto de propósito: os testes fazem vários logins do mesmo
+  // email sem querer exercitar o limiter (coberto no teste unitário da Task 7
+  // e no de integração do login).
+  loginRateMax: 100,
+  loginRateWindowMs: 60_000,
+  loginLockMaxMs: 3_600_000,
+  totpIssuer: 'MilVendas',
+  httpRateMax: 300,
+  httpRateWindowMs: 60_000,
+  bodyLimitBytes: 1_048_576,
+};
+
+/** MfaPort fake (passo 7): código fixo '123456'; limpa mfaPending sem ativar TOTP. */
+function createFakeMfa(sessions: SessionStore): MfaPort {
+  return {
+    startSetup: async ({ email }) => ({
+      otpauthUrl: `otpauth://totp/MilVendas:${email}?secret=FAKESECRET23456789&issuer=MilVendas`,
+    }),
+    verifyAndFinish: async ({ sessionId, code }) => {
+      if (code !== '123456') return false;
+      await sessions.setMfaPending(sessionId, false, new Date());
+      return true;
+    },
+  };
+}
+
+export interface TestApp extends FastifyInstance {
+  sessions: { agent: string; editor: string; admin: string };
+  csrf: { agent: string; editor: string; admin: string };
+  users: { agent: UserInfo; editor: UserInfo; admin: UserInfo };
+  close(): Promise<void>;
+}
+
+export interface UserInfo {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export async function buildTestApp(): Promise<TestApp> {
+  const db = await migratedDb();
+  const hasher = createArgon2Hasher();
+  const passwordHash = await hasher.hash(TEST_PASSWORD);
+
+  const mk = async (name: string, email: string, role: 'agent' | 'editor' | 'admin'): Promise<UserInfo> => {
+    const [row] = await db
+      .insert(users)
+      .values({ name, email, passwordHash, role, active: true })
+      .returning({ id: users.id, name: users.name, email: users.email });
+    if (row === undefined) throw new Error('falhou criar utilizador sintético');
+    return row;
+  };
+  const agent = await mk('Agente', 'agent@test.local', 'agent');
+  const editor = await mk('Editor', 'editor@test.local', 'editor');
+  const admin = await mk('Admin', 'admin@test.local', 'admin');
+
+  const sessions = createSessionStore({ db });
+  const usersRepo = createAuthUserRepo({ db, hasher });
+  const audit = createAuditAdapter({ db });
+  const mfa = createFakeMfa(sessions);
+  const cfg = { nodeEnv: 'test' as const, auth: testAuthConfig };
+  const limiter = createLoginLimiter(
+    { max: testAuthConfig.loginRateMax, windowMs: testAuthConfig.loginRateWindowMs, lockMaxMs: testAuthConfig.loginLockMaxMs },
+    () => new Date(),
+  );
+  const login = createLoginService({ users: usersRepo, sessions, hasher, mfa, limiter, audit, cfg: testAuthConfig, now: () => new Date() });
+
+  const app = buildHttpApp({
+    cfg,
+    db,
+    users: usersRepo,
+    audit,
+    sessions,
+    login,
+    mfa,
+    logger: pino({ level: 'silent' }),
+  });
+
+  // login direto pelo serviço (não HTTP) para criar as cookies de teste
+  const viaLogin = async (email: string): Promise<{ sessionId: string }> => {
+    const r = await login.login({ email, password: TEST_PASSWORD, ip: '127.0.0.1' });
+    if (r.status === 'ok' || r.status === 'mfa_setup_required' || r.status === 'mfa_required') {
+      return { sessionId: r.sessionId };
+    }
+    throw new Error(`login direto falhou para ${email}: ${r.status}`);
+  };
+  const agentS = await viaLogin(agent.email);
+  const editorS = await viaLogin(editor.email);
+  const adminS = await viaLogin(admin.email); // admin sem TOTP → mfa_setup_required
+  // completa o MFA do admin com o código fixo do fake → sessão utilizável
+  await mfa.verifyAndFinish({ sessionId: adminS.sessionId, userId: admin.id, code: '123456', now: new Date() });
+
+  const withHelpers = app as TestApp;
+  withHelpers.sessions = { agent: agentS.sessionId, editor: editorS.sessionId, admin: adminS.sessionId };
+  withHelpers.csrf = { agent: randomUUID(), editor: randomUUID(), admin: randomUUID() };
+  withHelpers.users = { agent, editor, admin };
+  return withHelpers;
+}

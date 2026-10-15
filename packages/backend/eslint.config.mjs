@@ -24,6 +24,26 @@ export default tseslint.config(
       'no-console': 'off',
     },
   },
+  // WA-AKG só pelo adaptador (docs/04 §2): nenhuma importação de wa-akg fora
+  // de src/adapters/wa-akg/. Verificado também por
+  // tests/unit/lint-wa-akg-isolation.test.ts (API do ESLint sobre este config).
+  {
+    files: ['src/**'],
+    ignores: ['src/adapters/wa-akg/**', 'src/domain/**', 'src/application/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/wa-akg/**', '**/wa-akg'],
+              message: 'WA-AKG só pelo adaptador src/adapters/wa-akg (docs/04 §2).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   {
     files: ['src/domain/**', 'src/application/**'],
     rules: {
@@ -45,6 +65,10 @@ export default tseslint.config(
                 'ioredis',
               ],
               message: 'Camada domain/application só fala por ports (docs/02 §1).',
+            },
+            {
+              group: ['**/wa-akg/**', '**/wa-akg'],
+              message: 'WA-AKG só pelo adaptador src/adapters/wa-akg (docs/04 §2).',
             },
           ],
         },

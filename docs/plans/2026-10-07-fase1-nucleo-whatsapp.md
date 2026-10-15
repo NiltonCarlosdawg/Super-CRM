@@ -628,7 +628,7 @@ export function createFakeMessaging(): {
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/http-foundations.test.ts` (raw body + isolamento do adaptador + estática de envios):
+- [x] **1. Teste falhado** `tests/integration/http-foundations.test.ts` (raw body + isolamento do adaptador + estática de envios):
 
 ```ts
 test('raw body preservado: o Buffer é byte a byte o corpo enviado', async () => {
@@ -659,13 +659,13 @@ test('sendText/sendMedia só aparecem no adaptador e no worker da outbox (análi
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/http-foundations.test.ts && npm test -- tests/unit/lint-wa-akg-isolation.test.ts` → `fail` (`req.rawBody` inexistente; regra ESLint ausente).
-- [ ] **3. Implementar fundamentos do HTTP.**
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/http-foundations.test.ts && npm test -- tests/unit/lint-wa-akg-isolation.test.ts` → `fail` (`req.rawBody` inexistente; regra ESLint ausente).
+- [x] **3. Implementar fundamentos do HTTP.**
   - `app.ts`: registar `@fastify/swagger`; parser de conteúdo JSON `parseAs: 'buffer'` que preenche `request.rawBody` (module augmentation, sem `any`) e faz `JSON.parse` → 400 problem em caso inválido; `bodyLimit: deps.cfg.auth.bodyLimitBytes`; `@fastify/rate-limit` global `max: httpRateMax`, `timeWindow: httpRateWindowMs`; hook de erros único → `toProblem` + `Content-Type: application/problem+json` + `requestId` no body; logger com `requestId` (Fase 0) e sem corpos de mensagem/PIDs inteiros.
   - ESLint: `no-restricted-imports` com `files: ['src/**']`, `ignore: ['src/infra/**', 'src/adapters/wa-akg/**']`, padrão `**/adapters/wa-akg/*`, mensagem `WA-AKG é acessível só do composition root (docs/04 §5)`.
   - `guards.ts` e `errors.ts` conforme a Interfaces.
   - `main.ts`: `loadFullConfig` (Task 4), `buildHttpApp`, escuta, e graceful shutdown (SIGTERM/SIGINT: para de aceitar ligações, fecha servidor → io → queue).
-- [ ] **4. Teste falhado** `tests/integration/auth-routes.test.ts`:
+- [x] **4. Teste falhado** `tests/integration/auth-routes.test.ts`:
 
 ```ts
 test('login, me, logout e CSRF', async () => {
@@ -704,15 +704,15 @@ test('admin pendente de TOTP: /v1/auth/me → 403 mfa_required; totp/verify → 
 });
 ```
 
-- [ ] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/auth-routes.test.ts` → `fail 1` (rotas inexistentes → 404).
-- [ ] **6. Implementar rotas de auth.**
+- [x] **5. Correr e ver falhar.** `npm run test:integration -- tests/integration/auth-routes.test.ts` → `fail 1` (rotas inexistentes → 404).
+- [x] **6. Implementar rotas de auth.**
   - `POST /v1/auth/login` (zod `{ email, password }`; isento de CSRF): mapeia `LoginResult` → `ok`/`mfa_required`/`mfa_setup_required` = 200 com cookies `session` (HttpOnly, SameSite=Lax, Path=/, `Secure` se `NODE_ENV==='production'`, `Expires=expiresAt`) e `csrf` (leitura JS); `invalid_credentials` = 401 problem genérico; `rate_limited` = 429 + header `Retry-After`. Exceção de rate: rota regista `max: loginRateMax`, `timeWindow: loginRateWindowMs` no `@fastify/rate-limit`.
   - `POST /v1/auth/logout` (204, revoga sessão se existir, apaga cookies), `GET /v1/auth/me` (200 `{id,name,email,role}`; garante cookie `csrf` se ausente), `POST /v1/auth/password` (`currentPassword`/`newPassword`, `assertPasswordPolicy`, revoga as outras sessões, audit `auth.password_changed`).
   - `POST /v1/auth/totp/setup` (pendente; devolve `otpauthUrl`, idempotente) e `POST /v1/auth/totp/verify` (`{ code }`, rate `max: 10/timeWindow 1 min`, sucesso ⇒ sessão não-pendente, audit `auth.totp_enabled`).
   - OpenAPI: registar schemas zod via `z.toJSONSchema` (confirmar `npm ls zod`; v3 ⇒ `zod-to-json-schema`, registar a escolha no ADR-0006), servir `GET /v1/openapi.json` (autenticado, qualquer papel) e `/health/live` + `/health/ready` públicos (ready: db, Redis, `messagingProvider.health()` com timeout 2s → 503 se algum falhar).
-- [ ] **7. Teste falhado de `buildTestApp`** (no mesmo ficheiro de auth-routes): `const app = await buildTestApp(); assert.ok(app.sessions.agent && app.sessions.editor && app.sessions.admin && app.csrf.admin && app.users.admin.id);` + reset de BD entre apps (segunda `buildTestApp` não vê dados da primeira) — correr, falhar, implementar (`migratedDb`/`resetDb` da Task 1, utilizadores sintéticos um por papel com a mesma password de teste `senha-muito-forte-123`, MfaPort fake com código fixo `123456`, login direto na criação das cookies), correr → `pass, fail 0`.
-- [ ] **8. lint/typecheck e prova estática.** `npm run lint && npm run typecheck` → `0 erros`; `npm test -- tests/unit/lint-wa-akg-isolation.test.ts` → `pass 2, fail 0`.
-- [ ] **9. Commit.** `feat: add fastify app with session guards csrf and problem json errors`
+- [x] **7. Teste falhado de `buildTestApp`** (no mesmo ficheiro de auth-routes): `const app = await buildTestApp(); assert.ok(app.sessions.agent && app.sessions.editor && app.sessions.admin && app.csrf.admin && app.users.admin.id);` + reset de BD entre apps (segunda `buildTestApp` não vê dados da primeira) — correr, falhar, implementar (`migratedDb`/`resetDb` da Task 1, utilizadores sintéticos um por papel com a mesma password de teste `senha-muito-forte-123`, MfaPort fake com código fixo `123456`, login direto na criação das cookies), correr → `pass, fail 0`.
+- [x] **8. lint/typecheck e prova estática.** `npm run lint && npm run typecheck` → `0 erros`; `npm test -- tests/unit/lint-wa-akg-isolation.test.ts` → `pass 2, fail 0`.
+- [x] **9. Commit.** `feat: add fastify app with session guards csrf and problem json errors`
 
 ### Task 10: API de utilizadores
 
