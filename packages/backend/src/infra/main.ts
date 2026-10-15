@@ -6,12 +6,14 @@ import { randomUUID } from 'node:crypto';
 import { Redis } from 'ioredis';
 import { Pool } from 'pg';
 import { buildHttpApp } from '../adapters/http/app.js';
+import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb } from '../adapters/db/index.js';
 import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
-import { attachRealtime } from '../adapters/realtime/socket.js';
+import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
+import { createWaAkgAdapter } from '../adapters/wa-akg/index.js';
 import { createLoginService } from '../application/auth/login.js';
 import { createLoginLimiter } from '../application/auth/login-limiter.js';
 import { createMfaService } from '../application/auth/mfa.js';
@@ -56,6 +58,21 @@ async function main(): Promise<void> {
     now,
   });
 
+  // Task 15/16: o sink resolve o io NO MOMENTO DO EMIT — o Socket.IO só nasce
+  // depois do Fastify (precisa do httpServer), mas as rotas já pedem o sink no
+  // arranque. Wrapper {to,emit} sobre o handle, atribuído após o attach.
+  const realtime: { handle?: RealtimeHandle } = {};
+  const socketNotify = createSocketNotify(
+    {
+      to: (room) => ({
+        emit: (event, payload) => {
+          realtime.handle?.io.to(room).emit(event, payload);
+        },
+      }),
+    },
+    log,
+  );
+
   const app = buildHttpApp({
     cfg: config,
     db,
@@ -68,17 +85,28 @@ async function main(): Promise<void> {
     mfa,
     logger: log,
     now,
+    accounts: createAccountsRepository({ db }),
+    // adaptador REAL do WA-AKG (docs/04 §1: só pelo adaptador MessagingProvider)
+    waProvider: createWaAkgAdapter({
+      baseUrl: config.messaging.waAkgBaseUrl,
+      apiKey: config.messaging.waAkgApiKey,
+      webhookSecret: config.messaging.waWebhookSecret,
+      sendTimeoutMs: config.messaging.sendTimeoutMs,
+      cbThreshold: config.messaging.cbThreshold,
+      cbCooldownMs: config.messaging.cbCooldownMs,
+    }),
+    notifySink: socketNotify,
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });
 
   // Task 15: Socket.IO no mesmo httpServer (handshake autenticado por sessão).
-  const realtime = attachRealtime({ server: app.server, sessions, now });
+  realtime.handle = attachRealtime({ server: app.server, sessions, now });
 
   const shutdown = (signal: string): void => {
     log.info({ signal }, 'application.shutdown');
     void (async () => {
       try {
-        await realtime.close(); // desliga clientes de socket e o server
+        await realtime.handle?.close(); // desliga clientes de socket e o server
         await app.close(); // para de aceitar ligações novas (tolera o 2º fecho)
         await jobs.close();
         redis.disconnect();

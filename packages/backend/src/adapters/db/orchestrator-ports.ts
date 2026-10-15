@@ -6,6 +6,7 @@
 import { sql } from 'drizzle-orm';
 import type { DbClient } from './index.js';
 import { normalizeQuestion } from '../../domain/question.js';
+import type { NotifyEvent } from '../../ports/notify.js';
 import type {
   AiMode,
   CatalogFact,
@@ -21,16 +22,9 @@ import type {
   Turn,
 } from '../../ports/ai-provider.js';
 
-/**
- * Evento de notificação ao painel. Mesma forma que o adaptador realtime
- * (Task 15, `src/adapters/realtime/socket.ts`) expõe — pass-through puro:
- * campos extra (ex.: outsideHours, opensAt) seguem intactos.
- */
-export type NotifyEvent = {
-  type: 'handoff' | 'flag' | 'alert' | 'message' | 'account';
-  phase?: string;
-  [k: string]: unknown;
-};
+// Re-export do tipo único (ports/notify.ts): a superfície pública deste módulo
+// mantém-se da Task 14; a fonte passou a ser ports (application consome-a).
+export type { NotifyEvent };
 
 /** Vocabulário de linhas do domínio (docs/01 §6) — slug fora disto é erro, nunca se adivinha. */
 const LINE_SLUGS: readonly string[] = ['software', 'custom', 'telecom', 'cctv'];

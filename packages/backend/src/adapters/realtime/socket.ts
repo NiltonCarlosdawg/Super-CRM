@@ -4,11 +4,11 @@
 
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
-import type { NotifyEvent } from '../db/orchestrator-ports.js';
+import type { NotifyEvent } from '../../ports/notify.js';
 import type { Role, SessionStore } from '../../ports/auth.js';
 
-// Fonte única do tipo (definida na Task 14 com os ports): aqui só se re-exporta
-// para que a Fase 3 consume o adaptador realtime sem alcançar o de base de dados.
+// Fonte única do tipo (ports/notify.ts, definido na Task 14): aqui só se
+// re-exporta para que a Fase 3 consume o adaptador realtime sem alcançar ports.
 export type { NotifyEvent };
 
 /** Os 5 eventos mínimos do painel (docs/02 §9). Nada disto sai por outro nome. */

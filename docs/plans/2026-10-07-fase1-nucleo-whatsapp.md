@@ -1098,7 +1098,7 @@ export function createAccountLifecycle(deps: {
 
 **Steps:**
 
-- [ ] **1. Teste falhado** `tests/integration/account-lifecycle.test.ts`:
+- [x] **1. Teste falhado** `tests/integration/account-lifecycle.test.ts`:
 
 ```ts
 test('logged_out inesperado (connected) → suspected_ban; após logout de admin → no-op', async () => {
@@ -1123,17 +1123,17 @@ test('connected: telefone associa-se; reconexão de número de conta antiga desc
 });
 ```
 
-- [ ] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/account-lifecycle.test.ts` → `fail 1`.
-- [ ] **3. Implementar o ciclo de vida.** Tabela de transições (docs/04 §6), tudo com `setStatus` condicional (só emite audit/evento se a transição mudou algo):
+- [x] **2. Correr e ver falhar.** `npm run test:integration -- tests/integration/account-lifecycle.test.ts` → `fail 1`.
+- [x] **3. Implementar o ciclo de vida.** Tabela de transições (docs/04 §6), tudo com `setStatus` condicional (só emite audit/evento se a transição mudou algo):
   - `connected` → `connected`; guarda o `phone` de `provider.getSession` (`normalizePhoneE164`); conflito de `phone_e164` com outra conta **não-`connected`** → limpa o telefone da antiga + audit `account.phone_reassigned`; com conta `connected` (impossível na prática) → log de erro e telefone nulo.
   - `disconnected`/`unknown` → `disconnected`; `connecting`/`qr_pending` → mantém `connecting`.
   - `logged_out`: estado atual `connected` → `suspected_ban` + audit `account.suspected_ban` + alerta estruturado (bloqueia envios — o worker da Task 18 não envia contas `suspected_ban`; sem qualquer automação de recuperação); qualquer outro estado → no-op.
   - `onQr` → só notifica `{ type: 'account', status: 'connecting', accountId, qr }` (o QR também vai por evento, `docs/04` §6; o REST `GET :id` devolve-o por polling, `docs/02` §9).
   - `recordSendResult` → consulta as últimas `WA_FAIL_WINDOW` mensagens outbound da conta (por `updated_at` desc; usar `outbox_messages` se tiver `account_id`, senão `messages`) e se `falhas / janela >= WA_FAIL_RATIO` → `suspected_ban` (uma vez). Falha = estado `failed` (rejeição permanente); timeouts `unknown` **não** contam (ver lacunas).
   - Toda a transição → `notifySink({ type: 'account', accountId, status })`.
-- [ ] **4. Teste falhado das rotas** `tests/integration/accounts-api.test.ts`: sem sessão → 401; `agent`/`editor` → 403; criação sem `purpose` → 400; criação ok → 201 `status:'connecting'`; `GET :id` devolve `qr` do provider falso; `POST :id/logout` → `disconnected` + audit `account.logout` + limpa telefone; `label` vazio → 400 (`detail` menciona `label`).
-- [ ] **5. Correr → falhar → implementar rotas → passar.** `npm run test:integration -- tests/integration/accounts-api.test.ts` → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
-- [ ] **6. Commit.** `feat: add whatsapp account lifecycle and admin routes`
+- [x] **4. Teste falhado das rotas** `tests/integration/accounts-api.test.ts`: sem sessão → 401; `agent`/`editor` → 403; criação sem `purpose` → 400; criação ok → 201 `status:'connecting'`; `GET :id` devolve `qr` do provider falso; `POST :id/logout` → `disconnected` + audit `account.logout` + limpa telefone; `label` vazio → 400 (`detail` menciona `label`).
+- [x] **5. Correr → falhar → implementar rotas → passar.** `npm run test:integration -- tests/integration/accounts-api.test.ts` → `pass, fail 0`; `npm run lint && npm run typecheck` → `0 erros`.
+- [x] **6. Commit.** `feat: add whatsapp account lifecycle and admin routes`
 
 ### Task 17: Port de outbox com enqueue transacional
 

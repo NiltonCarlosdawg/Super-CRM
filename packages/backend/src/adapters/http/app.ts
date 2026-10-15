@@ -21,7 +21,11 @@ import { toProblem } from './errors.js';
 import { authenticate, csrfGuard } from './guards.js';
 import { authRoutes } from './routes/auth.js';
 import { usersRoutes } from './routes/users.js';
+import { whatsappAccountsRoutes } from './routes/whatsapp-accounts.js';
 import type { createLoginService } from '../../application/auth/login.js';
+import type { AccountsRepository } from '../../ports/accounts.js';
+import type { MessagingProvider } from '../../ports/messaging-provider.js';
+import type { NotifyEvent } from '../../ports/notify.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -42,6 +46,11 @@ export interface HttpDeps {
   mfa: MfaPort;
   logger: Logger;
   now(): Date; // relógio injetado (docs/02 §3)
+  /** Task 16: contas WhatsApp — as rotas admin só registam com os dois presentes. */
+  accounts?: AccountsRepository;
+  waProvider?: MessagingProvider;
+  /** Sinks de evento (realtime Task 15); o logout de admin notifica a transição. */
+  notifySink?: (e: NotifyEvent) => Promise<void>;
   /** Checks de readiness adicionais (ex.: ping Redis no arranque real). */
   readyChecks?: Array<{ name: string; run: () => Promise<unknown> }>;
 }
@@ -133,6 +142,10 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
     async (instance) => {
       await authRoutes(instance, deps);
       await usersRoutes(instance, deps);
+      // Task 16: só com repo + provider monta as rotas de contas (padrão `db?`).
+      if (deps.accounts !== undefined && deps.waProvider !== undefined) {
+        await whatsappAccountsRoutes(instance, deps);
+      }
     },
     { prefix: '' },
   );

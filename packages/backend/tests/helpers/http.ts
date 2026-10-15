@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { buildHttpApp } from '../../src/adapters/http/app.js';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
+import { createAccountsRepository } from '../../src/adapters/db/accounts.js';
 import type { DbClient } from '../../src/adapters/db/index.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
@@ -17,6 +18,9 @@ import { createLoginLimiter } from '../../src/application/auth/login-limiter.js'
 import type { AuthConfig } from '../../src/infra/config-app.js';
 import { createArgon2Hasher } from '../../src/infra/security/argon2.js';
 import type { MfaPort, SessionStore } from '../../src/ports/auth.js';
+import type { AccountsRepository } from '../../src/ports/accounts.js';
+import type { MessagingProvider } from '../../src/ports/messaging-provider.js';
+import type { NotifyEvent } from '../../src/ports/notify.js';
 import pino from 'pino';
 import { migratedDb } from './db.js';
 
@@ -51,6 +55,21 @@ function createFakeMfa(sessions: SessionStore): MfaPort {
   };
 }
 
+/** MessagingProvider fake (Task 16): sem rede; sessões `fake-<uuid>` e QR fixo. */
+export function createFakeWaProvider(): MessagingProvider {
+  return {
+    name: 'fake-wa',
+    health: async () => ({ ok: true }),
+    createSession: async () => ({ sessionId: `fake-${randomUUID()}` }),
+    getSession: async () => ({ status: 'connected' as const }),
+    getQr: async () => ({ qr: 'QR-FAKE' }),
+    logout: async () => {},
+    sendText: async () => ({ providerMessageId: null, outcome: 'unknown' as const }),
+    sendMedia: async () => ({ providerMessageId: null, outcome: 'unknown' as const }),
+    verifyAndParseWebhook: () => [],
+  };
+}
+
 export interface TestApp extends FastifyInstance {
   sessions: { agent: string; editor: string; admin: string };
   csrf: { agent: string; editor: string; admin: string };
@@ -58,6 +77,10 @@ export interface TestApp extends FastifyInstance {
   db: DbClient;
   /** Task 15: Socket.IO ligado ao httpServer (fecha antes do Fastify). */
   realtime: RealtimeHandle;
+  /** Task 16: contas WhatsApp — repo real, provider fake e eventos emitidos. */
+  accounts: AccountsRepository;
+  waProvider: MessagingProvider;
+  notifyLog: NotifyEvent[];
   close(): Promise<void>;
 }
 
@@ -88,6 +111,11 @@ export async function buildTestApp(): Promise<TestApp> {
   const usersRepo = createAuthUserRepo({ db, hasher });
   const audit = createAuditAdapter({ db });
   const mfa = createFakeMfa(sessions);
+  // Task 16: provider falso determinístico (não há rede em testes) + repo de
+  // contas real; os eventos de logout/transição ficam no notifyLog do TestApp.
+  const waProvider = createFakeWaProvider();
+  const accounts = createAccountsRepository({ db });
+  const notifyLog: NotifyEvent[] = [];
   const cfg = { nodeEnv: 'test' as const, auth: testAuthConfig };
   const limiter = createLoginLimiter(
     { max: testAuthConfig.loginRateMax, windowMs: testAuthConfig.loginRateWindowMs, lockMaxMs: testAuthConfig.loginLockMaxMs },
@@ -107,6 +135,11 @@ export async function buildTestApp(): Promise<TestApp> {
     mfa,
     logger: pino({ level: 'silent' }),
     now: () => new Date(),
+    accounts,
+    waProvider,
+    notifySink: async (e) => {
+      notifyLog.push(e);
+    },
   });
 
   // login direto pelo serviço (não HTTP) para criar as cookies de teste
@@ -128,6 +161,9 @@ export async function buildTestApp(): Promise<TestApp> {
   withHelpers.csrf = { agent: randomUUID(), editor: randomUUID(), admin: randomUUID() };
   withHelpers.users = { agent, editor, admin };
   withHelpers.db = db;
+  withHelpers.accounts = accounts;
+  withHelpers.waProvider = waProvider;
+  withHelpers.notifyLog = notifyLog;
   // Task 15: Socket.IO no mesmo httpServer; o fecho vai primeiro pelo realtime
   // (desliga clientes e o server) e depois pelo Fastify (que tolera o 2º fecho).
   const realtime = attachRealtime({ server: app.server, sessions, now: () => new Date() });

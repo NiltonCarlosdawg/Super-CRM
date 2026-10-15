@@ -23,7 +23,10 @@ export const whatsappAccounts = pgTable(
     id: pk(),
     label: text('label').notNull(),
     // E.164 (+244…): normalização e máscara numa única função testada (docs/02 §2).
-    phoneE164: text('phone_e164').notNull().unique(),
+    // Anulável: a conta nasce sem telefone e o número só se associa quando a
+    // sessão conecta (docs/04 §6); logout/reassinificação limpa para null.
+    // Único: um número só pode pertencer a uma conta (null não colide).
+    phoneE164: text('phone_e164').unique(),
     provider: text('provider').notNull().default('wa-akg'), // fornecedor único desta fase (docs/01 §6)
     providerSessionId: text('provider_session_id').notNull().unique(), // id da sessão no WA-AKG
     status: whatsappAccountStatusEnum('status').notNull().default('connecting'), // docs/04 §6
