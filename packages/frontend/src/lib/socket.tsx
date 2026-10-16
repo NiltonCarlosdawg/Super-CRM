@@ -18,6 +18,9 @@ export type HandoffPriority = "urgent" | "high" | "normal";
 
 /** Payloads `{ v: 1, ... }` — espelho do createSocketNotify do backend. */
 export interface PanelEventPayloads {
+  // `createdAt` presente nos EMITIDORES reais (handle-inbound.ts:156,
+  // outbox.ts:105, message-status.ts:51, outbox-worker.ts:153) — o payload
+  // NÃO traz body/direction: o cliente recupera o estado por REST (docs/02 §9).
   "message.created": {
     v: 1;
     messageId: string;
@@ -25,6 +28,7 @@ export interface PanelEventPayloads {
     accountId: string;
     sender: MessageSender;
     status: MessageStatus;
+    createdAt: string;
   };
   "message.status": {
     v: 1;
@@ -34,6 +38,7 @@ export interface PanelEventPayloads {
     sender: MessageSender;
     status: MessageStatus;
     providerMessageId?: string;
+    createdAt: string;
   };
   "account.status": {
     v: 1;

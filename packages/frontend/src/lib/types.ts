@@ -62,3 +62,16 @@ export interface ConversationsList {
   conversations: ConversationView[];
   nextCursor: string | null;
 }
+
+// Envelopes reais das rotas de detalhe/mensagens (conversations.ts:43 e :50).
+export interface ConversationDetail {
+  conversation: ConversationView;
+  lastMessage: MessageView | null;
+}
+
+// Mensagens vêm em ordem DESC (mais recente primeiro; conversations.ts:41-50) e
+// o nextCursor aponta para as ANTIGORES — inverter para exibir cronológicamente.
+export interface MessagesList {
+  messages: MessageView[];
+  nextCursor: string | null;
+}

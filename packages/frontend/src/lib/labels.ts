@@ -1,7 +1,8 @@
 // Rótulos PT-AO partilhados por toda a UI (docs do desenho, Global
 // Constraints). Tarefas futuras acrescentam os seus vocabulários aqui.
 
-import type { AccountPurpose, AccountStatus, AiMode, Role } from "./types";
+import type { AccountPurpose, AccountStatus, AiMode, MessageStatus, Role } from "./types";
+import type { HandoffPriority } from "./socket";
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -42,4 +43,26 @@ const AI_MODE_LABELS: Record<AiMode, string> = {
 
 export function aiModeLabel(mode: AiMode): string {
   return AI_MODE_LABELS[mode];
+}
+
+const MESSAGE_STATUS_LABELS: Record<MessageStatus, string> = {
+  queued: "Na fila",
+  sent: "Enviada",
+  delivered: "Entregue",
+  read: "Lida",
+  failed: "Falhou",
+};
+
+export function messageStatusLabel(status: MessageStatus): string {
+  return MESSAGE_STATUS_LABELS[status];
+}
+
+const HANDOFF_PRIORITY_LABELS: Record<HandoffPriority, string> = {
+  urgent: "Urgente",
+  high: "Alta",
+  normal: "Normal",
+};
+
+export function handoffPriorityLabel(priority: HandoffPriority): string {
+  return HANDOFF_PRIORITY_LABELS[priority];
 }
