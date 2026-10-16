@@ -17,13 +17,9 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "strictNullChecks": true,
-    "baseUrl": ".",
     "paths": {
-      "@/components": ["src/components"],
-      "@/lib": ["src/lib"],
-      "@/pages": ["src/pages"]
-    },
-    "ignoreDeprecations": "6.0"
+      "@/*": ["./src/*"]
+    }
   },
   "include": [
     "**/*.ts",

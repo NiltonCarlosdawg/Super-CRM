@@ -10,8 +10,13 @@ export default defineConfig({
   // Server
   server: {
     port: 3000,
-    open: true,
+    open: false,
     host: "localhost",
+    // Same-origin com o backend: cookies de sessão e CSRF sem CORS.
+    proxy: {
+      "/v1": "http://localhost:3001",
+      "/socket.io": { target: "http://localhost:3001", ws: true },
+    },
   },
 
   // Build

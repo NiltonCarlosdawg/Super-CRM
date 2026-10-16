@@ -10,7 +10,7 @@ type Conversation = {
 };
 
 export function ConversationsQueue() {
-  const [conversas, setConversas] = useState<Conversation[]>([
+  const [conversas] = useState<Conversation[]>([
     {
       id: "conv-1",
       cliente: "Empresa Tech Ltda",
@@ -44,32 +44,6 @@ export function ConversationsQueue() {
       status: "ia",
     },
   ]);
-
-  const [newMessage, setNewMessage] = useState<any>(null);
-
-  const socket = new EventSource("/api/sse");
-
-  socket.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    setNewMessage(msg);
-  };
-
-  if (newMessage) {
-    const updated: Conversation[] = [
-      ...conversas.slice(0, 1),
-      {
-        id: `new-${Date.now()}`,
-        cliente: "Novo cliente",
-        ultimaMensagem: newMessage.message.text.substring(0, 30) + (newMessage.message.text.length > 30 ? "..." : ""),
-        hora: newMessage.message.timestamp ? new Date(newMessage.message.timestamp).toLocaleTimeString() : "now",
-        conta: "Conta Padrão",
-        status: "nova" as "nova",
-      },
-      ...conversas.slice(1),
-    ];
-    setConversas(updated);
-    setNewMessage(null);
-  }
 
   return (
     <div className="bg-card rounded-lg shadow-sm p-4">

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 export function TopCards() {
-  const [stats, setStats] = useState({
+  const [stats] = useState({
     contasAtivas: 3,
     campanhasRodando: 1,
     mensagensHoje: 842,

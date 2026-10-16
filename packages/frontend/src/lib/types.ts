@@ -1,0 +1,62 @@
+// Tipos do contrato API do backend — escritos à mão a partir do código real
+// (packages/backend/src/ports/* e adapters/http/routes/*). Datas vêm como
+// string ISO no JSON.
+
+export type Role = "admin" | "editor" | "agent";
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+}
+
+/** Docs/04 §6 — estados guardados em whatsapp_accounts.status. */
+export type AccountStatus = "connecting" | "connected" | "disconnected" | "suspected_ban";
+
+export type AccountPurpose = "support" | "sales" | "campaigns";
+
+export interface AccountRow {
+  id: string;
+  label: string;
+  phoneE164: string | null;
+  providerSessionId: string;
+  status: AccountStatus;
+  purpose: AccountPurpose;
+}
+
+export type AiMode = "ai_active" | "ai_suggest" | "human_only";
+
+export interface ConversationView {
+  id: string;
+  accountId: string;
+  contactId: string;
+  contactPhone: string;
+  leadId: string | null;
+  line: string | null;
+  aiMode: AiMode;
+  missStreak: number;
+  lastMessageAt: string | null;
+  createdAt: string;
+}
+
+export type MessageStatus = "queued" | "sent" | "delivered" | "read" | "failed";
+export type MessageDirection = "inbound" | "outbound";
+export type MessageSender = "customer" | "ai" | "human" | "campaign";
+
+export interface MessageView {
+  id: string;
+  conversationId: string;
+  direction: MessageDirection;
+  sender: MessageSender;
+  kind: string;
+  body: string;
+  status: MessageStatus;
+  mediaRef: string | null;
+  createdAt: string;
+}
+
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}

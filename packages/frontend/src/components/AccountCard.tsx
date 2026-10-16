@@ -11,7 +11,6 @@ type AccountCardProps = {
 };
 
 export default function AccountCard({
-  id,
   nome,
   status,
   ultimaMensagem,
@@ -24,8 +23,6 @@ export default function AccountCard({
     : status === "offline"
       ? "bg-gray-100 text-gray-800"
       : "bg-red-100 text-red-800";
-
-  const progresso = (mensagensHoje / limite) * 100;
 
   return (
     <div className="bg-card rounded-lg shadow-sm p-5 hover:bg-muted/50 transition-colors cursor-pointer">
