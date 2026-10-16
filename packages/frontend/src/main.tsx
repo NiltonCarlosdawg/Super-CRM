@@ -14,7 +14,7 @@ import { RequireAdmin, RequireAuth } from "./components/guards";
 import { ToastProvider } from "./components/ui/Toast";
 
 import LoginPage from "./pages/login";
-import DashboardPage from "./pages/index";
+import DashboardPage from "./pages/dashboard";
 import AccountsPage from "./pages/accounts";
 import ConversationsPage from "./pages/conversations";
 import CampaignsPage from "./pages/campaigns";
