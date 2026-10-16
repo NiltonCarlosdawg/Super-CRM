@@ -162,6 +162,7 @@ Integração: login → `/me` inclui `scope`; suspender o tenant na BD → qualq
 **Files:**
 - Modify: `src/adapters/db/users.ts` (`UsersRepository`), `src/ports/accounts.ts` + `src/adapters/db/accounts.ts`, `src/ports/conversations.ts` + `src/adapters/db/conversations.ts`, `src/adapters/db/outbox.ts` (envio humano), `src/ports/audit.ts` + `src/adapters/db/audit-adapter.ts` (+ `tenantId: string | null` no input de `record`)
 - Modify: `src/adapters/http/routes/users.ts`, `whatsapp-accounts.ts`, `conversations.ts`, `src/application/messaging.ts`
+- Modify: `src/adapters/realtime/socket.ts` (handshake: papel vem da linha `users` por pedido — nunca do snapshot da sessão — e `tenancy.getStatus` rejeita sockets de tenants suspensos; descoberto no review da Task 3)
 - Test: `tests/integration/repo-scope.test.ts` (novo) + actualização dos unitários com fakes
 
 **Interfaces:**
@@ -176,15 +177,17 @@ test('conversations.list(scopeA) não devolve conversas de B');
 test('users.list(scopeA) não devolve users de B');
 test('PATCH /v1/users/:idDeB com sessão de A → 404');
 test('GET /v1/conversations/:idDeB com sessão de A → 404');
+test('handshake realtime com user despromovido não recebe papel antigo (papel vem da linha users)');
+test('handshake realtime de tenant suspenso → rejeitado');
 ```
 
 - [ ] **Step 2: Correr e ver falhar** — `npm run test:integration -- repo-scope` → FAIL (ids alheios ainda visíveis).
 
-- [ ] **Step 3: Implementar** — primeiro parâmetro `scope` em todos os métodos; `where(and(eq(t.tenantId, scope.tenantId), …))` como primeira condição; rotas passam o scope da sessão; `messaging` deriva o scope da conversa/conta já escopada. Atualizar fakes dos unitários existentes (sem apagar asserções).
+- [ ] **Step 3: Implementar** — primeiro parâmetro `scope` em todos os métodos; `where(and(eq(t.tenantId, scope.tenantId), …))` como primeira condição; rotas passam o scope da sessão; `messaging` deriva o scope da conversa/conta já escopada. No `socket.ts`: resolver o user na linha `users` no handshake e verificar `tenancy.getStatus` (suspensos → rejeitar). Atualizar fakes dos unitários existentes (sem apagar asserções).
 
 - [ ] **Step 4: Gates** — `npm run lint && npm run typecheck && npm test && npm run test:integration -- repo-scope` → PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: require tenant scope in http-facing repositories"`.
+- [ ] **Step 5: Commit** — `git commit -m "feat: require tenant scope in http repositories and realtime handshake"`.
 
 ---
 
