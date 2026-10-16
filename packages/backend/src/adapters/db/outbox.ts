@@ -12,6 +12,7 @@ import type { NotifyEvent } from '../../ports/notify.js';
 import type { Outbox } from '../../ports/outbox.js';
 import type { DbClient } from './index.js';
 import { contacts, conversations, messages, outboxMessages, whatsappAccounts } from './schema/index.js';
+import { MILVENDAS_TENANT_ID } from './schema/tenants.schema.js';
 
 /** Sinal interno: a transação fez rollback por chave já existente. */
 class DuplicateEnqueue extends Error {
@@ -47,6 +48,8 @@ export function createOutbox(deps: {
             .insert(messages)
             .values({
               id: messageId,
+              // Onda 1 (Task 1): tenant fixo até o escopo chegar pela sessão (Tasks 3–5).
+              tenantId: MILVENDAS_TENANT_ID,
               conversationId: input.conversationId,
               accountId: input.accountId,
               direction: 'outbound',
@@ -63,6 +66,8 @@ export function createOutbox(deps: {
             .insert(outboxMessages)
             .values({
               messageId,
+              // Onda 1 (Task 1): tenant fixo até o escopo chegar pela sessão (Tasks 3–5).
+              tenantId: MILVENDAS_TENANT_ID,
               accountId: input.accountId,
               idempotencyKey: input.idempotencyKey,
               priority: input.sender === 'campaign' ? 2 : 1, // resposta primeiro (docs/04 §7)

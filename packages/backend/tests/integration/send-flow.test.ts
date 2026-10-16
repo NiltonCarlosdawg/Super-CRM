@@ -97,11 +97,11 @@ async function mkConversation(
   await app.accounts.setStatus(accId, 'connected', new Date());
   const [contact] = await app.db
     .insert(base.contacts)
-    .values({ phoneE164: PHONE })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: PHONE })
     .returning({ id: base.contacts.id });
   const [conv] = await app.db
     .insert(base.conversations)
-    .values({ accountId: accId, contactId: contact!.id, aiMode: opts?.aiMode })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId: accId, contactId: contact!.id, aiMode: opts?.aiMode })
     .returning({ id: base.conversations.id });
   if (contact === undefined || conv === undefined) throw new Error('falhou fixture T22');
   return { cid: conv.id };

@@ -7,6 +7,7 @@ import { index, integer, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-o
 import { aiModeEnum, businessLines } from '../../../modules/knowledge/knowledge.schema.js';
 import { contacts } from './contacts.schema.js';
 import { leads } from './leads.schema.js';
+import { tenants } from './tenants.schema.js';
 import { whatsappAccounts } from './whatsapp-accounts.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
@@ -26,6 +27,9 @@ export const conversations = pgTable(
   'conversations',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     accountId: uuid('account_id')
       .notNull()
       .references(() => whatsappAccounts.id),
@@ -51,5 +55,8 @@ export const conversations = pgTable(
     // Listagem filtrada por conta, ordenada por last_message_at.
     index('conversations_account_lastmsg_idx').on(t.accountId, t.lastMessageAt),
     index('conversations_contact_idx').on(t.contactId),
+    // Listagem por tenant (spec §4.2): (tenant_id) + composto por data.
+    index('conversations_tenant_idx').on(t.tenantId),
+    index('conversations_tenant_created_idx').on(t.tenantId, t.createdAt),
   ],
 );

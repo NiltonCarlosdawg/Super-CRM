@@ -4,6 +4,7 @@
 import { index, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { messageDirectionEnum, messageKindEnum, messageSenderEnum, messageStatusEnum } from './enums.js';
 import { conversations } from './conversations.schema.js';
+import { tenants } from './tenants.schema.js';
 import { whatsappAccounts } from './whatsapp-accounts.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
@@ -23,6 +24,9 @@ export const messages = pgTable(
   'messages',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     conversationId: uuid('conversation_id')
       .notNull()
       .references(() => conversations.id),
@@ -47,5 +51,8 @@ export const messages = pgTable(
     uniqueIndex('messages_account_provider_uq').on(t.accountId, t.providerMessageId),
     // Paginação por cursor (docs/02 §5): conversa + created_at + id estável.
     index('messages_conversation_created_idx').on(t.conversationId, t.createdAt, t.id),
+    // Listagem por tenant (spec §4.2): (tenant_id) + composto por data.
+    index('messages_tenant_idx').on(t.tenantId),
+    index('messages_tenant_created_idx').on(t.tenantId, t.createdAt),
   ],
 );

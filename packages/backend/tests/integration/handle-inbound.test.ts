@@ -124,11 +124,11 @@ async function createInboundHarness(): Promise<InboundHarness> {
     async precreateContactAndConversation() {
       const [contact] = await db
         .insert(base.contacts)
-        .values({ phoneE164: normalizePhoneE164(PHONE)!, name: 'Cliente T19' })
+        .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: normalizePhoneE164(PHONE)!, name: 'Cliente T19' })
         .returning({ id: base.contacts.id });
       const [conv] = await db
         .insert(base.conversations)
-        .values({ accountId: accId, contactId: contact!.id })
+        .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId: accId, contactId: contact!.id })
         .returning({ id: base.conversations.id });
       conversationId = conv!.id;
     },

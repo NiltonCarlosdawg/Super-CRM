@@ -13,6 +13,7 @@ import { sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import { createDb, type DbClient } from '../../src/adapters/db/index.js';
+import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 
 const DEFAULT_TEST_DATABASE_URL = 'postgres://crm_test:crm_test@127.0.0.1:5433/crm_test';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -61,6 +62,12 @@ export async function resetDb(): Promise<void> {
   if (names.length > 0) {
     await client().execute(sql.raw(`TRUNCATE TABLE ${names.map((n) => `"${n}"`).join(', ')} CASCADE`));
   }
+  // O TRUNCATE acima apaga o seed da migração; o tenant "MilVendas" é infra
+  // (alvo de FK de todos os fixtures) e volta a existir após cada reset.
+  await client().execute(sql`
+    INSERT INTO tenants (id, name, status)
+    VALUES (${MILVENDAS_TENANT_ID}::uuid, 'MilVendas', 'active')
+    ON CONFLICT (id) DO NOTHING`);
 }
 
 /** migrateFromEmptyDb + resetDb + cliente (convenção da Fase 1). */

@@ -5,6 +5,7 @@
 
 import { sql } from 'drizzle-orm';
 import type { DbClient } from './index.js';
+import { MILVENDAS_TENANT_ID } from './schema/tenants.schema.js';
 import { normalizeQuestion } from '../../domain/question.js';
 import type { NotifyEvent } from '../../ports/notify.js';
 import type {
@@ -219,8 +220,8 @@ export function createOrchestratorPorts(
 
     async createHandoff(h: NewHandoff): Promise<string> {
       const res = await db.execute(sql`
-        INSERT INTO handoffs (conversation_id, trigger_id, reason, summary, lead_snapshot, priority)
-        VALUES (${h.conversationId}, ${h.triggerId}, ${h.reason}, ${h.summary},
+        INSERT INTO handoffs (tenant_id, conversation_id, trigger_id, reason, summary, lead_snapshot, priority)
+        VALUES (${MILVENDAS_TENANT_ID}::uuid, ${h.conversationId}, ${h.triggerId}, ${h.reason}, ${h.summary},
                 ${JSON.stringify(h.leadSnapshot)}::jsonb, ${h.priority}::handoff_priority)
         RETURNING id`);
       return (res.rows[0] as { id: string }).id;
@@ -248,8 +249,8 @@ export function createOrchestratorPorts(
       const id = (existing.rows[0] as { id: string } | undefined)?.id;
       if (id === undefined) {
         await db.execute(sql`
-          INSERT INTO knowledge_gaps (question, normalized_question, conversation_id, line_id)
-          VALUES (${g.question}, ${normalized}, ${g.conversationId}, ${lineId})`);
+          INSERT INTO knowledge_gaps (tenant_id, question, normalized_question, conversation_id, line_id)
+          VALUES (${MILVENDAS_TENANT_ID}::uuid, ${g.question}, ${normalized}, ${g.conversationId}, ${lineId})`);
       } else {
         await db.execute(sql`
           UPDATE knowledge_gaps
@@ -260,8 +261,8 @@ export function createOrchestratorPorts(
 
     async saveTrace(t: TraceInput): Promise<void> {
       await db.execute(sql`
-        INSERT INTO answer_traces (conversation_id, question, answer, sources, model, handoff_id, latency_ms, is_test)
-        VALUES (${t.conversationId}, ${t.question}, ${t.answer}, ${JSON.stringify(t.sources)}::jsonb,
+        INSERT INTO answer_traces (tenant_id, conversation_id, question, answer, sources, model, handoff_id, latency_ms, is_test)
+        VALUES (${MILVENDAS_TENANT_ID}::uuid, ${t.conversationId}, ${t.question}, ${t.answer}, ${JSON.stringify(t.sources)}::jsonb,
                 ${t.model}, ${t.handoffId}, ${t.latencyMs}, ${t.isTest})`);
     },
 

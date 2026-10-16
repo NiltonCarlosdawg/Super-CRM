@@ -7,6 +7,7 @@ import { index, jsonb, pgTable, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { businessLines } from '../../../modules/knowledge/knowledge.schema.js';
 import { contacts } from './contacts.schema.js';
 import { leadStageEnum } from './enums.js';
+import { tenants } from './tenants.schema.js';
 import { users } from './users.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
@@ -26,6 +27,9 @@ export const leads = pgTable(
   'leads',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     contactId: uuid('contact_id')
       .notNull()
       .references(() => contacts.id),
@@ -40,5 +44,8 @@ export const leads = pgTable(
     index('leads_contact_idx').on(t.contactId),
     index('leads_line_idx').on(t.lineId),
     index('leads_owner_idx').on(t.ownerId),
+    // Listagem por tenant (spec §4.2): (tenant_id) + composto por data.
+    index('leads_tenant_idx').on(t.tenantId),
+    index('leads_tenant_created_idx').on(t.tenantId, t.createdAt),
   ],
 );

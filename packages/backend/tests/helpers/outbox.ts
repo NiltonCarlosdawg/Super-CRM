@@ -121,6 +121,7 @@ export async function createOutboxHarness(): Promise<OutboxHarness> {
         await db
           .insert(base.contacts)
           .values({
+            tenantId: base.MILVENDAS_TENANT_ID,
             phoneE164: `+244923777${String(fixtureCounter).padStart(4, '0')}`,
             name: `Cliente T18-${fixtureCounter}`,
           })
@@ -129,7 +130,7 @@ export async function createOutboxHarness(): Promise<OutboxHarness> {
       const conversation = (
         await db
           .insert(base.conversations)
-          .values({ accountId: acc.id, contactId: contact.id })
+          .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId: acc.id, contactId: contact.id })
           .returning({ id: base.conversations.id })
       )[0]!;
       const { outboxId } = await outbox.enqueue({

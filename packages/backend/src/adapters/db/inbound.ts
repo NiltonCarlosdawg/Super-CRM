@@ -12,6 +12,7 @@ import {
   messages,
   whatsappAccounts,
 } from './schema/index.js';
+import { MILVENDAS_TENANT_ID } from './schema/tenants.schema.js';
 
 export type InboundEventRow = {
   payload: unknown;
@@ -64,7 +65,13 @@ export async function findOrCreateContact(
 ): Promise<{ id: string }> {
   const [row] = await db
     .insert(contacts)
-    .values({ phoneE164: input.phoneE164, createdAt: input.at, updatedAt: input.at })
+    .values({
+      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
+      tenantId: MILVENDAS_TENANT_ID,
+      phoneE164: input.phoneE164,
+      createdAt: input.at,
+      updatedAt: input.at,
+    })
     .onConflictDoUpdate({
       target: contacts.phoneE164,
       set: { updatedAt: input.at },
@@ -83,6 +90,8 @@ export async function findOrCreateConversation(
   const [row] = await db
     .insert(conversations)
     .values({
+      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
+      tenantId: MILVENDAS_TENANT_ID,
       accountId: input.accountId,
       contactId: input.contactId,
       lastMessageAt: input.at,
@@ -113,6 +122,8 @@ export async function ensureLeadForConversation(
   const [lead] = await db
     .insert(leads)
     .values({
+      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
+      tenantId: MILVENDAS_TENANT_ID,
       contactId: input.contactId,
       lineId: null,
       stage: 'open',
@@ -144,6 +155,8 @@ export async function storeInboundMessage(
   const inserted = await db
     .insert(messages)
     .values({
+      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
+      tenantId: MILVENDAS_TENANT_ID,
       conversationId: input.conversationId,
       accountId: input.accountId,
       direction: 'inbound',

@@ -2,6 +2,7 @@
 // antes de qualquer campanha (docs/04 §7).
 
 import { boolean, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { tenants } from './tenants.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
 
@@ -20,6 +21,9 @@ export const contacts = pgTable(
   'contacts',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     // E.164 (+244…): normalização e máscara numa única função testada (docs/02 §2).
     phoneE164: text('phone_e164').notNull().unique(),
     name: text('name'),
@@ -34,5 +38,8 @@ export const contacts = pgTable(
     // Audiência de campanha: marketing_consent = true e opted_out_at is null
     // (docs/04 §7).
     index('contacts_consent_optout_idx').on(t.marketingConsent, t.optedOutAt),
+    // Listagem por tenant (spec §4.2): (tenant_id) + composto por data.
+    index('contacts_tenant_idx').on(t.tenantId),
+    index('contacts_tenant_created_idx').on(t.tenantId, t.createdAt),
   ],
 );

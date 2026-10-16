@@ -29,6 +29,13 @@
       "when": 1792059396595,
       "tag": "0003_chunky_dust",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792175272652,
+      "tag": "0004_charming_weapon_omega",
+      "breakpoints": true
     }
   ]
 }

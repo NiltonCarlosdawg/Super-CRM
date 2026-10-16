@@ -174,13 +174,14 @@ test('job: message.status avança o estado (só avança) e notifica message.stat
     });
     const [contact] = await app.db
       .insert(base.contacts)
-      .values({ phoneE164: '+2449237770001' })
+      .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: '+2449237770001' })
       .returning({ id: base.contacts.id });
     const [conv] = await app.db
       .insert(base.conversations)
-      .values({ accountId: accId, contactId: contact!.id })
+      .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId: accId, contactId: contact!.id })
       .returning({ id: base.conversations.id });
     await app.db.insert(base.messages).values({
+      tenantId: base.MILVENDAS_TENANT_ID,
       conversationId: conv!.id,
       accountId: accId,
       direction: 'outbound',

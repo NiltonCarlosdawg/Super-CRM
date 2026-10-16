@@ -5,7 +5,7 @@
 import { desc, eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import type { DbClient } from './index.js';
-import { outboxMessages, whatsappAccounts } from './schema/index.js';
+import { MILVENDAS_TENANT_ID, outboxMessages, whatsappAccounts } from './schema/index.js';
 import type { AccountRow, AccountsRepository, OutboxStatus } from '../../ports/accounts.js';
 
 // select explícito: a linha devolvida É um AccountRow (sem colunas extra).
@@ -28,6 +28,8 @@ export function createAccountsRepository(deps: { db: DbClient }): AccountsReposi
           label: input.label,
           purpose: input.purpose,
           providerSessionId: input.providerSessionId,
+          // Onda 1 (Task 1): tenant fixo até o escopo chegar pela sessão (Tasks 3–5).
+          tenantId: MILVENDAS_TENANT_ID,
           createdAt: input.now,
           updatedAt: input.now,
         })

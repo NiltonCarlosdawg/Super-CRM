@@ -10,6 +10,7 @@ import { Pool } from 'pg';
 import { createAuditAdapter } from '../src/adapters/db/audit-adapter.js';
 import { createDb } from '../src/adapters/db/index.js';
 import { users } from '../src/adapters/db/schema/users.schema.js';
+import { MILVENDAS_TENANT_ID } from '../src/adapters/db/schema/tenants.schema.js';
 import { DomainError } from '../src/domain/error.js';
 import { assertPasswordPolicy } from '../src/domain/password.js';
 import { loadFullConfig } from '../src/infra/config-app.js';
@@ -80,7 +81,15 @@ async function main(): Promise<number> {
     const passwordHash = await createArgon2Hasher().hash(plain); // nunca imprimido
     const inserted = await db
       .insert(users)
-      .values({ name, email, passwordHash, role, active: true })
+      .values({
+        // Onda 1 (Task 1): tenant fixo até a Task 2 acrescentar --platform/--tenant.
+        tenantId: MILVENDAS_TENANT_ID,
+        name,
+        email,
+        passwordHash,
+        role,
+        active: true,
+      })
       .returning({ id: users.id });
     const row = inserted[0];
     if (row === undefined) throw new Error('insert de users não devolveu linha');

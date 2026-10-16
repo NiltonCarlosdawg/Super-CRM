@@ -3,6 +3,7 @@
 
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { whatsappAccountStatusEnum, whatsappPurposeEnum } from './enums.js';
+import { tenants } from './tenants.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
 
@@ -21,6 +22,9 @@ export const whatsappAccounts = pgTable(
   'whatsapp_accounts',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     label: text('label').notNull(),
     // E.164 (+244…): normalização e máscara numa única função testada (docs/02 §2).
     // Anulável: a conta nasce sem telefone e o número só se associa quando a

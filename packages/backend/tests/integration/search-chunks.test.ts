@@ -3,6 +3,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { knowledgeChunks, searchChunks } from '../../src/modules/knowledge/knowledge.schema.js';
 import { migratedDb, resetDb } from '../helpers/db.js';
 
@@ -17,6 +18,7 @@ test('searchChunks: vetor igual devolve o próprio chunk; base vazia devolve []'
   await db
     .insert(knowledgeChunks)
     .values({
+      tenantId: MILVENDAS_TENANT_ID,
       source: 'doc',
       position: 0,
       content: 'Chunk sintético para o teste de similaridade vetorial.',

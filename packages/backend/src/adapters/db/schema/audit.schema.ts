@@ -3,6 +3,7 @@
 // knowledge.schema.ts).
 
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { tenants } from './tenants.schema.js';
 import { users } from './users.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
@@ -17,6 +18,9 @@ export const auditLog = pgTable(
   'audit_log',
   {
     id: pk(),
+    // Onda 1 (spec §4.2): ANULÁVEL — NULL = ação de plataforma/sistema sem
+    // tenant (ex.: login de platform admin).
+    tenantId: uuid('tenant_id').references(() => tenants.id),
     actorId: uuid('actor_id').references(() => users.id), // nulo = ação da IA/sistema
     action: text('action').notNull(), // PERGUNTA DO GATE: ex.: 'auth.login', 'campaign.started'
     entityId: uuid('entity_id'), // entidade afetada (lead, campanha, contacto…)
@@ -28,5 +32,8 @@ export const auditLog = pgTable(
     index('audit_log_created_idx').on(t.createdAt), // listagem recente por cursor
     index('audit_log_actor_idx').on(t.actorId), // o que fez este utilizador
     index('audit_log_entity_idx').on(t.entityId), // histórico de uma entidade
+    // Listagem por tenant (spec §4.2): (tenant_id) + composto por data.
+    index('audit_log_tenant_idx').on(t.tenantId),
+    index('audit_log_tenant_created_idx').on(t.tenantId, t.createdAt),
   ],
 );

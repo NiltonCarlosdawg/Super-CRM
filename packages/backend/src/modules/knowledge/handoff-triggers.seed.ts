@@ -5,11 +5,13 @@
 // determinística (palavras-chave) como rede de segurança, sem depender só do modelo.
 
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import { MILVENDAS_TENANT_ID } from '../../adapters/db/schema/tenants.schema.js';
 import { businessLines, handoffTriggers } from './knowledge.schema.js';
 
 type LineSlug = 'software' | 'custom' | 'telecom' | 'cctv';
 
-type TriggerSeed = Omit<typeof handoffTriggers.$inferInsert, 'id' | 'lineId'> & {
+// tenantId fica de fora: atribuído no insert (tenant fixo, Onda 1 Task 1).
+type TriggerSeed = Omit<typeof handoffTriggers.$inferInsert, 'id' | 'lineId' | 'tenantId'> & {
   lineSlug: LineSlug | null; // null = global
 };
 
@@ -204,7 +206,8 @@ export async function seedHandoffTriggers(db: PgDatabase<any, any, any>): Promis
     if (lineSlug && !idBySlug.has(lineSlug)) {
       throw new Error(`Linha de negócio inexistente: ${lineSlug}`);
     }
-    return { ...t, lineId: lineSlug ? idBySlug.get(lineSlug)! : null };
+    // Onda 1 (Task 1): tenant fixo até o seed crescer escopo por tenant (Task 10+).
+    return { ...t, tenantId: MILVENDAS_TENANT_ID, lineId: lineSlug ? idBySlug.get(lineSlug)! : null };
   });
 
   const existing = await db

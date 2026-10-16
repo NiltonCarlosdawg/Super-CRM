@@ -4,6 +4,7 @@
 
 import { sql } from 'drizzle-orm';
 import { index, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { tenants } from './tenants.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
 
@@ -16,6 +17,9 @@ export const inboundEvents = pgTable(
   'inbound_events',
   {
     id: pk(),
+    // Onda 1 (spec §4.2): ANULÁVEL — o evento é gravado antes de resolver a
+    // conta; preenchido no job inbound.process quando a conta resolve.
+    tenantId: uuid('tenant_id').references(() => tenants.id),
     providerEventId: text('provider_event_id').notNull().unique(), // idempotência do webhook (docs/01 §6)
     payload: jsonb('payload').notNull(), // payload bruto validado na fronteira (docs/02 §3)
     receivedAt: ts('received_at').notNull().defaultNow(),
@@ -30,5 +34,9 @@ export const inboundEvents = pgTable(
     index('inbound_events_pending_idx')
       .on(t.receivedAt)
       .where(sql`${t.processedAt} is null`),
+    // Listagem por tenant (spec §4.2): (tenant_id) + composto por received_at
+    // (a tabela não tem created_at; received_at é o seu momento de criação).
+    index('inbound_events_tenant_idx').on(t.tenantId),
+    index('inbound_events_tenant_received_idx').on(t.tenantId, t.receivedAt),
   ],
 );

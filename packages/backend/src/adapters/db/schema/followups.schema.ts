@@ -10,6 +10,7 @@ import { businessLines } from '../../../modules/knowledge/knowledge.schema.js';
 import { contacts } from './contacts.schema.js';
 import { conversations } from './conversations.schema.js';
 import { leads } from './leads.schema.js';
+import { tenants } from './tenants.schema.js';
 import { users } from './users.schema.js';
 import { whatsappAccounts } from './whatsapp-accounts.schema.js';
 
@@ -30,6 +31,9 @@ export const followupSequences = pgTable(
   'followup_sequences',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     lineId: uuid('line_id')
       .notNull()
       .references(() => businessLines.id), // sequência por linha (docs/05 §9)
@@ -48,6 +52,9 @@ export const followupSteps = pgTable(
   'followup_steps',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     sequenceId: uuid('sequence_id')
       .notNull()
       .references(() => followupSequences.id, { onDelete: 'cascade' }),
@@ -74,6 +81,9 @@ export const followupRuns = pgTable(
   'followup_runs',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     leadId: uuid('lead_id')
       .notNull()
       .references(() => leads.id),

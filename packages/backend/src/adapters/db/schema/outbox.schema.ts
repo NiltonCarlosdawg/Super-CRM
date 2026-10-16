@@ -5,6 +5,7 @@
 import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { outboxStatusEnum } from './enums.js';
 import { messages } from './messages.schema.js';
+import { tenants } from './tenants.schema.js';
 import { whatsappAccounts } from './whatsapp-accounts.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
@@ -24,6 +25,9 @@ export const outboxMessages = pgTable(
   'outbox_messages',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     messageId: uuid('message_id')
       .notNull()
       .references(() => messages.id),
@@ -47,5 +51,8 @@ export const outboxMessages = pgTable(
     // Contagem de pendentes da conta: filas 'queued' + 'sending'
     // (docs/plans/2026-10-07-fase1-nucleo-whatsapp.md, Task 18).
     index('outbox_messages_account_status_idx').on(t.accountId, t.status),
+    // Listagem por tenant (spec §4.2): (tenant_id) + composto por data.
+    index('outbox_messages_tenant_idx').on(t.tenantId),
+    index('outbox_messages_tenant_created_idx').on(t.tenantId, t.createdAt),
   ],
 );

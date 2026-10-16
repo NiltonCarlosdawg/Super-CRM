@@ -23,11 +23,11 @@ async function mkConversation(app: TestApp): Promise<{ cid: string; accId: strin
   });
   const [contact] = await app.db
     .insert(base.contacts)
-    .values({ phoneE164: '+244923777111' })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: '+244923777111' })
     .returning({ id: base.contacts.id });
   const [conv] = await app.db
     .insert(base.conversations)
-    .values({ accountId: accId, contactId: contact!.id })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId: accId, contactId: contact!.id })
     .returning({ id: base.conversations.id });
   if (contact === undefined || conv === undefined) throw new Error('falhou fixture T21');
   return { cid: conv.id, accId };
@@ -40,6 +40,7 @@ test('paginação por cursor: 5 mensagens, limit 2 → 3 páginas sem repetir ne
     const t0 = Date.now();
     for (let i = 0; i < 5; i++) {
       await app.db.insert(base.messages).values({
+        tenantId: base.MILVENDAS_TENANT_ID,
         conversationId: cid,
         accountId: accId,
         direction: i % 2 === 0 ? 'inbound' : 'outbound',

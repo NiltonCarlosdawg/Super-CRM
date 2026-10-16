@@ -7,6 +7,7 @@ import test from 'node:test';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
 import { auditLog } from '../../src/adapters/db/schema/audit.schema.js';
+import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createMfaService } from '../../src/application/auth/mfa.js';
 import { createArgon2Hasher } from '../../src/infra/security/argon2.js';
@@ -33,6 +34,7 @@ test('mfa: segredo cifrado em BD; verify correto ativa, errado não; audit', asy
   const inserted = await db
     .insert(users)
     .values({
+      tenantId: MILVENDAS_TENANT_ID,
       name: 'Admin', email,
       passwordHash: await hasher.hash('senha-muito-forte-123'),
       role: 'admin', active: true,

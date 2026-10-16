@@ -12,6 +12,7 @@ import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/au
 import { createConversationsRepository } from '../../src/adapters/db/conversations.js';
 import type { DbClient } from '../../src/adapters/db/index.js';
 import { createOutbox } from '../../src/adapters/db/outbox.js';
+import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
 import { attachRealtime, type RealtimeHandle } from '../../src/adapters/realtime/socket.js';
@@ -118,7 +119,7 @@ export async function buildTestApp(
   const mk = async (name: string, email: string, role: 'agent' | 'editor' | 'admin'): Promise<UserInfo> => {
     const [row] = await db
       .insert(users)
-      .values({ name, email, passwordHash, role, active: true })
+      .values({ tenantId: MILVENDAS_TENANT_ID, name, email, passwordHash, role, active: true })
       .returning({ id: users.id, name: users.name, email: users.email });
     if (row === undefined) throw new Error('falhou criar utilizador sintético');
     return row;

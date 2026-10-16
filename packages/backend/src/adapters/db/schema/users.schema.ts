@@ -3,6 +3,7 @@
 
 import { boolean, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { userRoleEnum } from './enums.js';
+import { tenants } from './tenants.schema.js';
 
 // ───────────── Helpers (padrão knowledge.schema.ts) ─────────────
 
@@ -19,6 +20,9 @@ const updatedAt = () =>
 
 export const users = pgTable('users', {
   id: pk(),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
   name: text('name').notNull(),
   // Normalização (lower+trim) na fronteira antes do insert (docs/02 §3).
   email: text('email').notNull().unique(),

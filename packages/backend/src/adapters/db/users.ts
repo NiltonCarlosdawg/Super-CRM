@@ -7,6 +7,7 @@ import { DomainError } from '../../domain/error.js';
 import type { Role } from '../../ports/auth.js';
 import type { DbClient } from './index.js';
 import { users } from './schema/users.schema.js';
+import { MILVENDAS_TENANT_ID } from './schema/tenants.schema.js';
 
 export interface UserSummary {
   id: string;
@@ -53,7 +54,15 @@ export function createUsersRepository(deps: { db: DbClient }): UsersRepository {
       try {
         const [row] = await deps.db
           .insert(users)
-          .values({ name: input.name, email, role: input.role, passwordHash: input.passwordHash, active: true })
+          .values({
+            // Onda 1 (Task 1): tenant fixo até o registo multi-tenant (Task 7).
+            tenantId: MILVENDAS_TENANT_ID,
+            name: input.name,
+            email,
+            role: input.role,
+            passwordHash: input.passwordHash,
+            active: true,
+          })
           .returning(summary);
         if (row === undefined) throw new Error('insert de users não devolveu linha');
         return row;

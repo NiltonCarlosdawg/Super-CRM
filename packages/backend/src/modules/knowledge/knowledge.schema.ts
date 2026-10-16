@@ -21,6 +21,7 @@ import {
   vector,
 } from 'drizzle-orm/pg-core';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
+import { tenants } from '../../adapters/db/schema/tenants.schema.js';
 
 // ───────────── Helpers ─────────────
 
@@ -86,6 +87,9 @@ export const catalogItems = pgTable(
   'catalog_items',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     lineId: uuid('line_id')
       .notNull()
       .references(() => businessLines.id),
@@ -120,6 +124,9 @@ export const knowledgeDocs = pgTable(
   'knowledge_docs',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     lineId: uuid('line_id').references(() => businessLines.id), // null = vale para toda a empresa
     type: docTypeEnum('type').notNull(),
     title: text('title').notNull(),
@@ -146,6 +153,9 @@ export const knowledgeChunks = pgTable(
   'knowledge_chunks',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     source: chunkSourceEnum('source').notNull(),
     docId: uuid('doc_id').references(() => knowledgeDocs.id, { onDelete: 'cascade' }),
     catalogItemId: uuid('catalog_item_id').references(() => catalogItems.id, { onDelete: 'cascade' }),
@@ -168,6 +178,9 @@ export const rules = pgTable(
   'rules',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     lineId: uuid('line_id').references(() => businessLines.id),
     kind: ruleKindEnum('kind').notNull(),
     title: text('title').notNull(),
@@ -187,6 +200,9 @@ export const qualificationQuestions = pgTable(
   'qualification_questions',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     lineId: uuid('line_id')
       .notNull()
       .references(() => businessLines.id),
@@ -207,6 +223,9 @@ export const handoffTriggers = pgTable(
   'handoff_triggers',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     lineId: uuid('line_id').references(() => businessLines.id), // null = global
     // PURCHASE_INTENT, COMPLAINT, HUMAN_REQUESTED, LOW_CONFIDENCE, OUT_OF_SCOPE,
     // PRICE_NEGOTIATION, REPEATED_MISUNDERSTANDING
@@ -224,6 +243,9 @@ export const handoffs = pgTable(
   'handoffs',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     conversationId: uuid('conversation_id').notNull(),
     triggerId: uuid('trigger_id').references(() => handoffTriggers.id),
     reason: text('reason').notNull(),
@@ -249,6 +271,9 @@ export const knowledgeGaps = pgTable(
   'knowledge_gaps',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     question: text('question').notNull(),
     normalizedQuestion: text('normalized_question').notNull(), // para agrupar repetições
     occurrences: integer('occurrences').notNull().default(1),
@@ -272,6 +297,9 @@ export const knowledgeSuggestions = pgTable(
   'knowledge_suggestions',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     conversationId: uuid('conversation_id'),
     messageId: uuid('message_id'),
     gapId: uuid('gap_id').references(() => knowledgeGaps.id),
@@ -293,6 +321,9 @@ export const knowledgeRevisions = pgTable(
   'knowledge_revisions',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     entityType: text('entity_type').notNull(), // catalog_item | knowledge_doc | rule
     entityId: uuid('entity_id').notNull(),
     version: integer('version').notNull(),
@@ -312,6 +343,9 @@ export const answerTraces = pgTable(
   'answer_traces',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     conversationId: uuid('conversation_id'),
     messageId: uuid('message_id'),
     isTest: boolean('is_test').notNull().default(false),

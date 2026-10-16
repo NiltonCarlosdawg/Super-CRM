@@ -5,6 +5,7 @@
 import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { campaignRecipientStatusEnum, campaignStatusEnum } from './enums.js';
 import { contacts } from './contacts.schema.js';
+import { tenants } from './tenants.schema.js';
 import { users } from './users.schema.js';
 import { whatsappAccounts } from './whatsapp-accounts.schema.js';
 
@@ -25,6 +26,9 @@ export const campaigns = pgTable(
   'campaigns',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     name: text('name').notNull(),
     messageTemplate: text('message_template').notNull(), // modelo com variáveis (docs/01 §6)
     status: campaignStatusEnum('status').notNull().default('draft'),
@@ -46,6 +50,9 @@ export const campaignRecipients = pgTable(
   'campaign_recipients',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     campaignId: uuid('campaign_id')
       .notNull()
       .references(() => campaigns.id),
@@ -81,6 +88,9 @@ export const campaignAccounts = pgTable(
   'campaign_accounts',
   {
     id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     campaignId: uuid('campaign_id')
       .notNull()
       .references(() => campaigns.id),

@@ -4,6 +4,7 @@
 // src/modules/knowledge/knowledge.schema.ts.
 
 export * from './enums.js';
+export * from './tenants.schema.js';
 export * from './users.schema.js';
 export * from './sessions.schema.js';
 export * from './whatsapp-accounts.schema.js';

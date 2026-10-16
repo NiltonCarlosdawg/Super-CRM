@@ -33,24 +33,24 @@ async function seedConversation(db: DbClient) {
     .returning())[0]!;
   const account = (await db
     .insert(base.whatsappAccounts)
-    .values({ label: 'Vendas', phoneE164: '+244923111111', providerSessionId: 'sess-t14', purpose: 'sales' })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, label: 'Vendas', phoneE164: '+244923111111', providerSessionId: 'sess-t14', purpose: 'sales' })
     .returning())[0]!;
   const contact = (await db
     .insert(base.contacts)
-    .values({ phoneE164: '+244923222222', name: 'Cliente T14' })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: '+244923222222', name: 'Cliente T14' })
     .returning())[0]!;
   const lead = (await db
     .insert(base.leads)
-    .values({ contactId: contact.id, lineId: line.id, qualification: {} })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, contactId: contact.id, lineId: line.id, qualification: {} })
     .returning())[0]!;
   const conversation = (await db
     .insert(base.conversations)
-    .values({ accountId: account.id, contactId: contact.id, leadId: lead.id, lineId: line.id })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId: account.id, contactId: contact.id, leadId: lead.id, lineId: line.id })
     .returning())[0]!;
   await db.insert(base.messages).values([
-    { conversationId: conversation.id, accountId: account.id, direction: 'outbound', sender: 'ai',
+    { tenantId: base.MILVENDAS_TENANT_ID, conversationId: conversation.id, accountId: account.id, direction: 'outbound', sender: 'ai',
       body: 'Bom dia! Como posso ajudar?', createdAt: new Date(T0) },
-    { conversationId: conversation.id, accountId: account.id, direction: 'inbound', sender: 'customer',
+    { tenantId: base.MILVENDAS_TENANT_ID, conversationId: conversation.id, accountId: account.id, direction: 'inbound', sender: 'customer',
       body: 'olá', createdAt: new Date(T0 + 1_000) },
   ]);
   return { line, account, contact, lead, conversation };
@@ -122,42 +122,45 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
 
   // regras: da linha (publicada) + global ativa + global expirada (archived)
   const ruleLine = (await db.insert(k.rules).values({
+    tenantId: base.MILVENDAS_TENANT_ID,
     lineId: line.id, kind: 'tone', title: 'Tom formal', instruction: 'Tratar por Você.',
     status: 'published', ownerId: owner, priority: 10,
   }).returning())[0]!;
   const ruleGlobal = (await db.insert(k.rules).values({
+    tenantId: base.MILVENDAS_TENANT_ID,
     lineId: null, kind: 'may_promise', title: 'Promessas', instruction: 'Nunca prometer prazo.',
     status: 'published', ownerId: owner,
   }).returning())[0]!;
   await db.insert(k.rules).values({
+    tenantId: base.MILVENDAS_TENANT_ID,
     lineId: null, kind: 'discount_limit', title: 'Desconto velho', instruction: 'Até 50%.',
     status: 'archived', ownerId: owner,
   });
 
   // pergunta ativa + inativa
   await db.insert(k.qualificationQuestions).values([
-    { lineId: line.id, key: 'empresa', question: 'Como se chama a sua empresa?', active: true },
-    { lineId: line.id, key: 'orcamento', question: 'Qual o orçamento?', active: false },
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, key: 'empresa', question: 'Como se chama a sua empresa?', active: true },
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, key: 'orcamento', question: 'Qual o orçamento?', active: false },
   ]);
 
   // gatilhos: global + da linha (ativos) + inativo
   await db.insert(k.handoffTriggers).values([
-    { lineId: null, code: 'HUMAN_REQUESTED', description: 'Cliente pede humano',
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: null, code: 'HUMAN_REQUESTED', description: 'Cliente pede humano',
       detectionHint: 'pedir atendimento humano', action: 'handoff_now', priority: 'high', active: true },
-    { lineId: line.id, code: 'PRICE_NEGOTIATION', description: 'Negociação de preço',
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, code: 'PRICE_NEGOTIATION', description: 'Negociação de preço',
       detectionHint: 'pedir desconto', action: 'handoff_now', priority: 'normal', active: true },
-    { lineId: line.id, code: 'OUT_OF_SCOPE', description: 'Fora de âmbito',
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, code: 'OUT_OF_SCOPE', description: 'Fora de âmbito',
       detectionHint: 'assunto alheio', action: 'flag_only', priority: 'normal', active: false },
   ]);
 
   // catálogo: publicado válido + rascunho + publicado expirado
   const past = new Date(T0 - 86_400_000);
   await db.insert(k.catalogItems).values([
-    { lineId: line.id, kind: 'service', name: 'CRM à medida', slug: 'crm-medida', summary: 'CRM personalizado',
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, kind: 'service', name: 'CRM à medida', slug: 'crm-medida', summary: 'CRM personalizado',
       pricingMode: 'quote_only', status: 'published', ownerId: owner },
-    { lineId: line.id, kind: 'service', name: 'CRM rascunho', slug: 'crm-rascunho', summary: 'ainda não pronto',
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, kind: 'service', name: 'CRM rascunho', slug: 'crm-rascunho', summary: 'ainda não pronto',
       pricingMode: 'quote_only', status: 'draft', ownerId: owner },
-    { lineId: line.id, kind: 'service', name: 'CRM expirado', slug: 'crm-expirado', summary: 'campanha antiga',
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, kind: 'service', name: 'CRM expirado', slug: 'crm-expirado', summary: 'campanha antiga',
       pricingMode: 'fixed', priceAmount: '100.00', status: 'published', validUntil: past, ownerId: owner },
   ]);
 

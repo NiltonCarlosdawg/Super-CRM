@@ -6,6 +6,7 @@ import test from 'node:test';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
 import { auditLog } from '../../src/adapters/db/schema/audit.schema.js';
+import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createLoginService } from '../../src/application/auth/login.js';
 import { createLoginLimiter } from '../../src/application/auth/login-limiter.js';
@@ -57,6 +58,7 @@ test('login: password errada 5× → rate_limited; certa → sessão criada e au
   const hasher = createArgon2Hasher();
   const email = 'agent@test.local';
   await db.insert(users).values({
+    tenantId: MILVENDAS_TENANT_ID,
     name: 'Agente', email, passwordHash: await hasher.hash(senhaForte), role: 'agent', active: true,
   });
 
@@ -90,6 +92,7 @@ test('login de admin sem TOTP → mfa_setup_required e sessão mfaPending', asyn
   const hasher = createArgon2Hasher();
   const email = 'admin@test.local';
   await db.insert(users).values({
+    tenantId: MILVENDAS_TENANT_ID,
     name: 'Admin', email, passwordHash: await hasher.hash(senhaForte), role: 'admin', active: true,
   });
   const clock = { t: Date.parse('2026-10-07T11:00:00.000Z') };
@@ -105,6 +108,7 @@ test('utilizador inativo e password errada devolvem a MESMA resposta (anti-enume
   const db = await migratedDb();
   const hasher = createArgon2Hasher();
   await db.insert(users).values({
+    tenantId: MILVENDAS_TENANT_ID,
     name: 'Inativo', email: 'inativo@test.local', passwordHash: await hasher.hash(senhaForte),
     role: 'agent', active: false,
   });

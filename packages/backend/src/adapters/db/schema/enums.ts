@@ -84,3 +84,7 @@ export const campaignRecipientStatusEnum = pgEnum('campaign_recipient_status', [
   'replied',
   'opted_out',
 ]);
+
+// Onda 1, multitenancy (spec docs/superpowers/specs/2026-10-16-multitenant-design.md §4.1):
+// estado do tenant — 'suspended' = sem logins/envios até o platform admin reativar.
+export const tenantStatusEnum = pgEnum('tenant_status', ['active', 'suspended']);

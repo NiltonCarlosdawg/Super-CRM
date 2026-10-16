@@ -82,19 +82,20 @@ test('pico de falhas: 7 de 20 (35% > 30%) → suspected_ban; 6 de 20 (30%) e jan
   const seedWindow = async (accountId: string, phone: string, failed: number, total = 20): Promise<void> => {
     const contact = (await db
       .insert(base.contacts)
-      .values({ phoneE164: phone, name: 'Cliente' })
+      .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: phone, name: 'Cliente' })
       .returning({ id: base.contacts.id }))[0]!;
     const conv = (await db
       .insert(base.conversations)
-      .values({ accountId, contactId: contact.id })
+      .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId, contactId: contact.id })
       .returning({ id: base.conversations.id }))[0]!;
     for (let i = 0; i < total; i++) {
       const status = i < failed ? 'failed' : 'sent';
       const msg = (await db
         .insert(base.messages)
-        .values({ conversationId: conv.id, accountId, direction: 'outbound', sender: 'ai', body: 'x', status })
+        .values({ tenantId: base.MILVENDAS_TENANT_ID, conversationId: conv.id, accountId, direction: 'outbound', sender: 'ai', body: 'x', status })
         .returning({ id: base.messages.id }))[0]!;
       await db.insert(base.outboxMessages).values({
+        tenantId: base.MILVENDAS_TENANT_ID,
         messageId: msg.id,
         accountId,
         idempotencyKey: `k-${accountId}-${i}`,

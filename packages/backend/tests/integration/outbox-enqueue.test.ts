@@ -30,13 +30,13 @@ async function fixtures(db: Awaited<ReturnType<typeof migratedDb>>): Promise<Fix
   const contact = (
     await db
       .insert(base.contacts)
-      .values({ phoneE164: '+244923777001', name: 'Cliente T17' })
+      .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: '+244923777001', name: 'Cliente T17' })
       .returning({ id: base.contacts.id })
   )[0]!;
   const conversation = (
     await db
       .insert(base.conversations)
-      .values({ accountId, contactId: contact.id })
+      .values({ tenantId: base.MILVENDAS_TENANT_ID, accountId, contactId: contact.id })
       .returning({ id: base.conversations.id })
   )[0]!;
   return { accountId, contactId: contact.id, conversationId: conversation.id };
