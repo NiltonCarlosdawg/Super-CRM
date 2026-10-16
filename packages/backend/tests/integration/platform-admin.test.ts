@@ -93,35 +93,41 @@ test('migrações aplicam de zero (enum separado — sem unsafe use of new value
   );
 });
 
+/** Contrato completo do CHECK (spec §4.3): (role = 'platform_admin') = (tenant_id IS NULL).
+ *  Tabular, no padrão das listas da Task 1: todas as combinações relevantes de
+ *  papel × tenant — 'ok' = insert aceite; '23514' = CHECK violado. As duas
+ *  direções da bicondicional estão sempre exercitadas (drift protection). */
+const CHECK_CONTRACT = [
+  { role: 'admin', tenant: 'milvendas', expected: 'ok' },
+  { role: 'editor', tenant: 'milvendas', expected: 'ok' },
+  { role: 'platform_admin', tenant: 'none', expected: 'ok' },
+  { role: 'platform_admin', tenant: 'milvendas', expected: '23514' },
+  { role: 'admin', tenant: 'none', expected: '23514' },
+] as const;
+
 test('INSERT platform_admin COM tenant_id viola o CHECK (e admin sem tenant também)', async () => {
   const db = await migratedDb();
 
-  // estado pré-existente conforme: platform_admin sem tenant + papéis de tenant com MilVendas
-  await db.execute(sql`
-    INSERT INTO users (name, email, password_hash, role, tenant_id)
-    VALUES ('Plat', 'plat-check@test.local', 'hash', 'platform_admin', NULL)`);
-  await db.execute(sql`
-    INSERT INTO users (name, email, password_hash, role, tenant_id)
-    VALUES ('Admin', 'admin-check@test.local', 'hash', 'admin', ${MILVENDAS_TENANT_ID}::uuid)`);
-
-  // violações da invariante → 23514
-  await assert.rejects(
-    db.execute(sql`
+  for (const [i, row] of CHECK_CONTRACT.entries()) {
+    const tenantId = row.tenant === 'milvendas' ? MILVENDAS_TENANT_ID : null;
+    const label = `role=${row.role} tenant=${row.tenant} → ${row.expected}`;
+    const insert = db.execute(sql`
       INSERT INTO users (name, email, password_hash, role, tenant_id)
-      VALUES ('X', 'plat-com-tenant@test.local', 'hash', 'platform_admin', ${MILVENDAS_TENANT_ID}::uuid)`),
-    (e: unknown) => sqlState(e) === '23514',
-    'platform_admin COM tenant_id deve violar o CHECK (23514)',
-  );
-  await assert.rejects(
-    db.execute(sql`
-      INSERT INTO users (name, email, password_hash, role, tenant_id)
-      VALUES ('Y', 'admin-sem-tenant@test.local', 'hash', 'admin', NULL)`),
-    (e: unknown) => sqlState(e) === '23514',
-    'admin sem tenant_id deve violar o CHECK (23514)',
-  );
+      VALUES ('Check', ${`check-${i}@test.local`}, 'hash', ${row.role}, ${tenantId}::uuid)`);
+    if (row.expected === 'ok') {
+      await insert;
+    } else {
+      await assert.rejects(
+        insert,
+        (e: unknown) => sqlState(e) === '23514',
+        `${label} deve violar o CHECK (23514)`,
+      );
+    }
+  }
 
-  // estado existente: re-adicionar o CHECK valida as linhas já na tabela — se
-  // alguma violasse a invariante, o ADD CONSTRAINT falhava (como no upgrade real)
+  // estado existente: re-adicionar o CHECK valida as linhas já na tabela (as 3
+  // 'ok' do contrato) — se alguma violasse a invariante, o ADD CONSTRAINT
+  // falhava (como no upgrade real).
   await db.execute(sql`ALTER TABLE users DROP CONSTRAINT users_platform_tenant_check`);
   await db.execute(sql`
     ALTER TABLE users ADD CONSTRAINT users_platform_tenant_check
