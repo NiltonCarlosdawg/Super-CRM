@@ -1,7 +1,7 @@
 # Design — Multitenancy (SaaS multi-tenant) do CRM MilVendas
 
 Data: 2026-10-16
-Estado: secções aprovadas por delegação do utilizador ("sim, auto aprova as próximas secções"); revisão integral deste ficheiro pendente antes do plano de implementação.
+Estado: secções aprovadas por delegação do utilizador; adição posterior aprovada: os **gaps Fase 1** (definições de conta, reposição de password em `/users`, esconder "Contas" a não-admins) entram no mesmo ciclo de implementação (secção 7.1). O resto das telas em falta (conhecimento, campanhas reais, follow-ups, contactos/leads) são ondas posteriores com spec/plano próprios — esta spec cobre a Onda 1.
 
 ## 1. Contexto e propósito
 
@@ -116,6 +116,12 @@ O `tenant_id` **nunca vem do corpo do pedido**. Os services derivam-no do regist
 - Shell de tenant **inalterado** — o servidor já devolve só o tenant da sessão; nenhum componente precisa de filtrar.
 - Sidebar: `platform_admin` vê apenas `/platform`; `admin|editor|agent` mantêm o actual.
 - UI em PT-AO, tema dark existente, primitivas existentes (`Button`, `Toast`, `Modal`, `EmptyState`), **axe violations 0**.
+
+### 7.1 Gaps Fase 1 incluídos nesta onda (API já existe; só UI)
+
+- **`/settings` (Definições)**: mudar a password própria (`POST /v1/auth/password`) e mostrar/ativar o estado do TOTP (`POST /v1/auth/totp/setup` + `verify` já existem; gestão completa de "desativar TOTP" não tem API — fica fora, nota honesta no UI).
+- **`/users` — reposição de palavra-passe**: controlo por linha que chama `PATCH /v1/users/:id {password}` (backend já suporta; hoje só via curl). Só admin; nunca mostra a password; aviso de que as sessões do utilizador alvo são revogadas.
+- **"Contas" só para admin**: a sidebar condicional já existe como padrão; passar a `/accounts` a rota condicionada por `admin` no cliente **e** confirmar o `403` server-side já presente (`requireRole`), com toast honesto se um não-admin aceder por URL directo.
 
 ## 8. Testes e critérios de aceitação
 
