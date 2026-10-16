@@ -1,67 +1,56 @@
 import type { Config } from "tailwindcss";
 
+/**
+ * Tokens do desenho (docs/plans/2026-10-16-frontend-completo.md §3): valores
+ * medidos na referência veranolabs.pages.dev. Raio 0 em todo o lado; sem
+ * sombras — a separação é sempre por borda de 1px.
+ */
 const config: Config = {
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
-      fontFamily:
-      {
-        sans: ["Outfit", "sans-serif"],
-        serif: ["DM Serif Display", "serif"],
-        display: ["Space Grotesk", "sans-serif"],
-        ibm: ["IBM Plex Sans", "sans-serif"],
-      },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background) - 0 15% 99%)",
-        foreground: "hsl(var(--foreground) - 0 10% 10%)",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
+        background: "#0a0a0c",
+        surface: "#121215",
+        border: "#26262b",
+        fg: "#f2f2f3",
+        muted: "#c6c6c6",
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "#3b6ef6",
+          hover: "#2f5ce0",
+          soft: "rgba(59,110,246,0.10)",
         },
+        success: "#3fb950",
+        warning: "#d29922",
+        danger: "#f85149",
+        // Aliases lidos pelos componentes legados até serem substituídos
+        // pelas páginas novas (T7/T8/T11/T12/T13) — mesmos valores escuros.
+        card: "#121215",
+        foreground: "#f2f2f3",
+        primary: {
+          DEFAULT: "#3b6ef6",
+          foreground: "#ffffff",
+        },
+        "muted-foreground": "#c6c6c6",
+      },
+      fontFamily: {
+        sans: ["Outfit", "system-ui", "sans-serif"],
+        display: ["IBM Plex Sans", "Outfit", "sans-serif"],
       },
       borderRadius: {
-        DEFAULT: "var(--radius)",
-        sm: "var(--radius-sm)",
-        lg: "var(--radius-lg)",
-      },
-      keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-height)" },
-          to: { height: "0" },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
+        DEFAULT: "0",
+        none: "0",
+        sm: "0",
+        md: "0",
+        lg: "0",
+        xl: "0",
+        "2xl": "0",
+        "3xl": "0",
+        full: "9999px",
       },
     },
   },
   plugins: [],
 };
+
 export default config;

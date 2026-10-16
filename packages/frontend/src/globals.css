@@ -2,18 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Custom variables */
+/* Paleta dark do desenho (§3) — hex fixos, não HSL de scaffold. */
 :root {
-  --primary: 220 98% 61%;
-  --primary-foreground: 210 20% 98%;
-  --secondary: 210 20% 96%;
-  --secondary-foreground: 210 20% 15%;
-  --muted: 210 20% 90%;
-  --muted-foreground: 210 20% 45%;
-  --background: 215 25% 98%;
-  --foreground: 215 25% 15%;
-  --card: 0 0% 100%;
-  --card-foreground: 215 25% 15%;
-  --border: 210 30% 85%;
-  --radius: 0.5rem;
+  --background: #0a0a0c;
+  --surface: #121215;
+  --border: #26262b;
+  --fg: #f2f2f3;
+  --muted: #c6c6c6;
+  --accent: #3b6ef6;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--fg);
+  font-family: Outfit, system-ui, sans-serif;
+  font-size: 16px;
+}
+
+/* Cantos rectos como a referência (o Tailwind também tem borderRadius: 0). */
+* {
+  border-radius: 0;
+}
+
+/* Foco visível sempre visível no fundo escuro (a11y §6). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
