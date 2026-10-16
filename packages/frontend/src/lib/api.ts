@@ -71,8 +71,9 @@ async function request<T>(
 }
 
 export const api = {
-  get<T>(path: string): Promise<T> {
-    return request<T>("GET", path);
+  get<T>(path: string, params?: Record<string, string>): Promise<T> {
+    const query = params === undefined ? "" : `?${new URLSearchParams(params).toString()}`;
+    return request<T>("GET", `${path}${query}`);
   },
   post<T>(path: string, body?: unknown, opts?: RequestOptions): Promise<T> {
     return request<T>("POST", path, body, opts);

@@ -1,7 +1,7 @@
 // Rótulos PT-AO partilhados por toda a UI (docs do desenho, Global
 // Constraints). Tarefas futuras acrescentam os seus vocabulários aqui.
 
-import type { AccountPurpose, AccountStatus, Role } from "./types";
+import type { AccountPurpose, AccountStatus, AiMode, Role } from "./types";
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -32,4 +32,14 @@ const ACCOUNT_PURPOSE_LABELS: Record<AccountPurpose, string> = {
 
 export function accountPurposeLabel(purpose: AccountPurpose): string {
   return ACCOUNT_PURPOSE_LABELS[purpose];
+}
+
+const AI_MODE_LABELS: Record<AiMode, string> = {
+  ai_active: "IA activa",
+  ai_suggest: "IA só sugere",
+  human_only: "Só humanos",
+};
+
+export function aiModeLabel(mode: AiMode): string {
+  return AI_MODE_LABELS[mode];
 }

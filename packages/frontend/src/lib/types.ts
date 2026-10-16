@@ -56,7 +56,9 @@ export interface MessageView {
   createdAt: string;
 }
 
-export interface Page<T> {
-  items: T[];
+// Envelope real de GET /v1/conversations (rota conversations.ts:36 do backend
+// devolve {conversations, nextCursor} — o nome da chave NÃO é genérico).
+export interface ConversationsList {
+  conversations: ConversationView[];
   nextCursor: string | null;
 }

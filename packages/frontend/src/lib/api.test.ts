@@ -68,4 +68,10 @@ describe("api client", () => {
 
     await expect(api.del("/v1/x")).resolves.toBeUndefined();
   });
+
+  it("get com params monta a querystring", async () => {
+    await api.get("/v1/conversations", { limit: "20", cursor: "c1" });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/v1/conversations?limit=20&cursor=c1");
+  });
 });
