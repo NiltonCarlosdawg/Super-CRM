@@ -111,12 +111,16 @@ export function createAuthUserRepo(deps: {
 
     async getTotpState(userId) {
       const rows = await deps.db
-        .select({ encryptedSecret: users.totpSecret, totpEnabledAt: users.totpEnabledAt })
+        .select({
+          encryptedSecret: users.totpSecret,
+          totpEnabledAt: users.totpEnabledAt,
+          tenantId: users.tenantId, // Task 4: auditoria de auth.totp_enabled
+        })
         .from(users)
         .where(eq(users.id, userId));
       const r = rows[0];
       if (r === undefined || r.encryptedSecret === null) return null;
-      return { encryptedSecret: r.encryptedSecret, totpEnabledAt: r.totpEnabledAt };
+      return { encryptedSecret: r.encryptedSecret, totpEnabledAt: r.totpEnabledAt, tenantId: r.tenantId };
     },
 
     async setTotpSecret(userId, encryptedSecret, now) {

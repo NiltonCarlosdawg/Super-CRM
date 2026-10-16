@@ -15,12 +15,15 @@ import { buildTestApp, createFakeWaProvider, type TestApp } from '../helpers/htt
 
 /** Conta + contacto + conversa sintéticos (sem mensagens). */
 async function mkConversation(app: TestApp): Promise<{ cid: string; accId: string }> {
-  const { id: accId } = await app.accounts.create({
-    label: 'T21',
-    purpose: 'support',
-    providerSessionId: 'sess-t21',
-    now: new Date(),
-  });
+  const { id: accId } = await app.accounts.create(
+    { tenantId: base.MILVENDAS_TENANT_ID }, // Task 4: escopo do tenant MilVendas
+    {
+      label: 'T21',
+      purpose: 'support',
+      providerSessionId: 'sess-t21',
+      now: new Date(),
+    },
+  );
   const [contact] = await app.db
     .insert(base.contacts)
     .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: '+244923777111' })

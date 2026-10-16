@@ -12,6 +12,9 @@ export function createAuditAdapter(deps: { db: DbClient }): Audit {
       // entidade é guardado em `details` para nada se perder no histórico.
       const details = { entity: input.entity, ...(input.detail ?? {}) };
       await deps.db.insert(auditLog).values({
+        // Onda 1 (Task 4): dono do registo — null só para ações de
+        // plataforma/sistema sem tenant (spec §4.2).
+        tenantId: input.tenantId,
         actorId: input.actorId,
         action: input.action,
         entityId: input.entityId,

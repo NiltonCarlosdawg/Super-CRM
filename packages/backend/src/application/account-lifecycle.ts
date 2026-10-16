@@ -6,12 +6,15 @@
 // - `suspected_ban` bloqueia envios (o worker da Task 18 não envia contas banidas);
 // - janela de falhas: últimas WA_FAIL_WINDOW linhas da outbox da conta, falha
 //   = estado 'failed' (timeouts 'unknown_delivery' NÃO contam, docs/04 §7).
+// Onda 1 (Task 4): o scope de cada operação vem do contexto da conta resolvida
+// (AccountRow.tenantId; ruling R1) — nunca de um hardcode de tenant.
 
 import { maskPhone, normalizePhoneE164 } from '../domain/phone.js';
 import type { AccountsRepository, AccountLifecycle, AccountStatus, AccountRow } from '../ports/accounts.js';
 import type { Audit } from '../ports/audit.js';
 import type { MessagingProvider } from '../ports/messaging-provider.js';
 import type { NotifyEvent } from '../ports/notify.js';
+import type { TenantScope } from '../ports/tenancy.js';
 
 export interface AccountLifecycleDeps {
   accounts: AccountsRepository;
@@ -27,10 +30,14 @@ export interface AccountLifecycleDeps {
 export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifecycle {
   const { accounts, provider, notifySink, audit, cfg, log } = deps;
 
+  // Onda 1 (Task 4): o scope vem do contexto da conta já resolvida (ruling R1)
+  // — a linha AccountRow carrega o tenant dono.
   const emit = async (account: AccountRow, to: AccountStatus, at: Date): Promise<void> => {
-    const changed = await accounts.setStatus(account.id, to, at);
+    const scope: TenantScope = { tenantId: account.tenantId };
+    const changed = await accounts.setStatus(scope, account.id, to, at);
     if (!changed) return;
     await audit.record({
+      tenantId: account.tenantId,
       actorId: null, // ação de sistema (webhook)
       action: 'account.status_changed',
       entity: 'whatsapp_account',
@@ -42,9 +49,10 @@ export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifec
   };
 
   const markSuspectedBan = async (account: AccountRow, at: Date, detail: Record<string, unknown>): Promise<void> => {
-    const changed = await accounts.setStatus(account.id, 'suspected_ban', at);
+    const changed = await accounts.setStatus({ tenantId: account.tenantId }, account.id, 'suspected_ban', at);
     if (!changed) return; // já banida → "uma vez" (sem audit/evento duplicado)
     await audit.record({
+      tenantId: account.tenantId,
       actorId: null,
       action: 'account.suspected_ban',
       entity: 'whatsapp_account',
@@ -71,10 +79,12 @@ export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifec
               if (holder.status === 'connected') {
                 // impossível na prática (um número só se liga a uma sessão)
                 log?.error({ accountId: account.id, other: holder.id }, 'account.phone_conflict');
-                await accounts.setPhone(account.id, null);
+                await accounts.setPhone({ tenantId: account.tenantId }, account.id, null);
               } else {
-                await accounts.setPhone(holder.id, null);
+                // Cada mutação usa o scope do DONO da linha que toca.
+                await accounts.setPhone({ tenantId: holder.tenantId }, holder.id, null);
                 await audit.record({
+                  tenantId: holder.tenantId,
                   actorId: null,
                   action: 'account.phone_reassigned',
                   entity: 'whatsapp_account',
@@ -82,10 +92,10 @@ export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifec
                   detail: { toAccountId: account.id, phone: maskPhone(phone) },
                   at: input.at,
                 });
-                await accounts.setPhone(account.id, phone);
+                await accounts.setPhone({ tenantId: account.tenantId }, account.id, phone);
               }
             } else {
-              await accounts.setPhone(account.id, phone);
+              await accounts.setPhone({ tenantId: account.tenantId }, account.id, phone);
             }
           }
           await emit(account, 'connected', input.at);
@@ -118,12 +128,15 @@ export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifec
     async recordSendResult(input) {
       // Avalia a janela já gravada na outbox (a Task 18 marca as linhas antes
       // de chamar; `ok` é informativo para o worker). Falha = estado 'failed'.
-      const rows = await accounts.recentOutboxStatuses(input.accountId, cfg.failWindow);
+      // Onda 1 (Task 4): o scope vem do contexto da conta — o worker passa o
+      // tenant da linha da outbox reivindicada (ruling R1).
+      const scope: TenantScope = { tenantId: input.tenantId };
+      const rows = await accounts.recentOutboxStatuses(scope, input.accountId, cfg.failWindow);
       if (rows.length < cfg.failWindow) return; // janela incompleta: nunca banir cedo
       const failed = rows.filter((r) => r.status === 'failed').length;
       // comparador ESTRICTO: 6/20 = 30% com limiar 30% NÃO bane (plano Task 16).
       if (failed / cfg.failWindow > cfg.failRatio) {
-        const account = await accounts.get(input.accountId);
+        const account = await accounts.get(scope, input.accountId);
         if (account === null) return;
         await markSuspectedBan(account, input.at, { window: cfg.failWindow, failed });
       }

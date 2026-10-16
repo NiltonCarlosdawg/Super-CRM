@@ -139,7 +139,9 @@ async function main(): Promise<void> {
   });
 
   // Task 15: Socket.IO no mesmo httpServer (handshake autenticado por sessão).
-  realtime.handle = attachRealtime({ server: app.server, sessions, now });
+  // Onda 1 (Task 4, R14): papel da linha `users` por ligação + tenant suspenso
+  // rejeitado no handshake.
+  realtime.handle = attachRealtime({ server: app.server, sessions, users, tenancy, now });
 
   // Task 16/18: ciclo de vida partilhado (webhook de sessão + worker da outbox).
   const lifecycle = createAccountLifecycle({

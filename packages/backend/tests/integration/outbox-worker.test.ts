@@ -70,7 +70,7 @@ test('serialização e prioridade: nunca 2 envios simultâneos; resposta antes d
 test('conta não-connected adia SEM gastar tentativa; suspected_ban adia igual', async () => {
   const h = await createOutboxHarness();
   await h.enqueueFixture({ sender: 'human', text: 'olá', idempotencyKey: 'defer:1' });
-  await h.accounts.setStatus(h.acc.id, 'disconnected', h.now());
+  await h.accounts.setStatus({ tenantId: h.acc.tenantId }, h.acc.id, 'disconnected', h.now());
   await h.runOutboxWorker();
   let row = await h.getOutboxRow();
   assert.equal(row.status, 'queued');
@@ -81,7 +81,7 @@ test('conta não-connected adia SEM gastar tentativa; suspected_ban adia igual',
     'requeue com WA_OUTBOX_RETRY_DELAY_MS',
   );
   // suspected_ban adia exatamente igual
-  await h.accounts.setStatus(h.acc.id, 'suspected_ban', h.now());
+  await h.accounts.setStatus({ tenantId: h.acc.tenantId }, h.acc.id, 'suspected_ban', h.now());
   h.advance(40_000); // a fila volta a ficar devida
   await h.runOutboxWorker();
   row = await h.getOutboxRow();

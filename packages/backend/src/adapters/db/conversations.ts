@@ -2,6 +2,8 @@
 // cursor `base64url({ t, id })` (docs/02 §5) — sem OFFSET, estável sob escritas
 // concorrentes (o par (timestamp, id) é total e determinístico). SELECT
 // explícito de colunas (sem SELECT *); junção ao contacto para o telefone.
+// Onda 1 (Task 4): toda a leitura opera sob um TenantScope — o tenant é a
+// 1.ª condição de cada query (spec §4.3).
 
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -85,9 +87,11 @@ function toMessageView(row: {
 
 export function createConversationsRepository(db: DbClient): ConversationsRepository {
   return {
-    async list(input) {
+    async list(scope, input) {
       const cursor = input.cursor === undefined ? null : decodeCursor(input.cursor);
       const conditions = [
+        // Onda 1 (Task 4): o tenant é SEMPRE a 1.ª condição (spec §4.3).
+        eq(conversations.tenantId, scope.tenantId),
         input.accountId === undefined ? undefined : eq(conversations.accountId, input.accountId),
         cursor === null
           ? undefined
@@ -109,12 +113,12 @@ export function createConversationsRepository(db: DbClient): ConversationsReposi
       };
     },
 
-    async get(id) {
+    async get(scope, id) {
       const [conv] = await db
         .select(convSelect)
         .from(conversations)
         .innerJoin(contacts, eq(contacts.id, conversations.contactId))
-        .where(eq(conversations.id, id))
+        .where(and(eq(conversations.tenantId, scope.tenantId), eq(conversations.id, id)))
         .limit(1);
       if (conv === undefined) return null;
       const [last] = await db
@@ -126,9 +130,11 @@ export function createConversationsRepository(db: DbClient): ConversationsReposi
       return { conversation: conv, lastMessage: last === undefined ? null : toMessageView(last) };
     },
 
-    async listMessages(input) {
+    async listMessages(scope, input) {
       const cursor = input.cursor === undefined ? null : decodeCursor(input.cursor);
       const conditions = [
+        // Onda 1 (Task 4): o tenant é SEMPRE a 1.ª condição (spec §4.3).
+        eq(messages.tenantId, scope.tenantId),
         eq(messages.conversationId, input.conversationId),
         cursor === null
           ? undefined
@@ -149,12 +155,12 @@ export function createConversationsRepository(db: DbClient): ConversationsReposi
       };
     },
 
-    async getMessageByOutbox(outboxId) {
+    async getMessageByOutbox(scope, outboxId) {
       const [row] = await db
         .select(msgSelect)
         .from(outboxMessages)
         .innerJoin(messages, eq(messages.id, outboxMessages.messageId))
-        .where(eq(outboxMessages.id, outboxId))
+        .where(and(eq(outboxMessages.id, outboxId), eq(outboxMessages.tenantId, scope.tenantId)))
         .limit(1);
       return row === undefined ? null : toMessageView(row);
     },

@@ -68,12 +68,15 @@ async function createInboundHarness(): Promise<InboundHarness> {
   };
 
   const accounts = createAccountsRepository({ db });
-  const { id: accId } = await accounts.create({
-    label: 'T19-account',
-    purpose: 'support',
-    providerSessionId: 'sess-19',
-    now: now(),
-  });
+  const { id: accId } = await accounts.create(
+    { tenantId: base.MILVENDAS_TENANT_ID }, // Task 4: escopo do tenant MilVendas
+    {
+      label: 'T19-account',
+      purpose: 'support',
+      providerSessionId: 'sess-19',
+      now: now(),
+    },
+  );
   const ports = createOrchestratorPorts({ db, notifySink, claimTtlMs: 60_000, now });
   const outbox = createOutbox({
     db,

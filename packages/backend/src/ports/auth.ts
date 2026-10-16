@@ -52,7 +52,8 @@ export interface MfaPort {
 
 /** Repos de TOTP (Task 8): o segredo em BD é SEMPRE cifrado com o AUTH_SECRET. */
 export interface UserTotpRepo {
-  getTotpState(userId: string): Promise<{ encryptedSecret: string; totpEnabledAt: Date | null } | null>;
+  /** `tenantId` devolvido para a auditoria de `auth.totp_enabled` (Task 4). */
+  getTotpState(userId: string): Promise<{ encryptedSecret: string; totpEnabledAt: Date | null; tenantId: string | null } | null>;
   setTotpSecret(userId: string, encryptedSecret: string, now: Date): Promise<void>;
   setTotpEnabled(userId: string, now: Date): Promise<void>;
 }

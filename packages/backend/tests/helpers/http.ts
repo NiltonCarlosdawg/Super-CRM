@@ -215,7 +215,9 @@ export async function buildTestApp(
   withHelpers.notifyLog = notifyLog;
   // Task 15: Socket.IO no mesmo httpServer; o fecho vai primeiro pelo realtime
   // (desliga clientes e o server) e depois pelo Fastify (que tolera o 2º fecho).
-  const realtime = attachRealtime({ server: app.server, sessions, now: () => new Date() });
+  // Onda 1 (Task 4, R14): papel da linha `users` por ligação + tenant suspenso
+  // rejeitado no handshake.
+  const realtime = attachRealtime({ server: app.server, sessions, users: usersRepo, tenancy, now: () => new Date() });
   withHelpers.realtime = realtime;
   const baseClose = app.close.bind(app);
   withHelpers.close = async (): Promise<void> => {

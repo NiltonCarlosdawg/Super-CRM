@@ -15,6 +15,9 @@ import { migratedDb } from '../helpers/db.js';
 
 const now = (): Date => new Date('2026-10-15T10:00:00.000Z');
 
+/** Onda 1 (Task 4): os repositórios operam sob um TenantScope. */
+const SCOPE = { tenantId: base.MILVENDAS_TENANT_ID } as const;
+
 /** Provider falso: getSession devolve o telefone mapeado por sessão. */
 function fakeProvider(phones: Record<string, string | undefined>): MessagingProvider {
   return {
@@ -49,20 +52,20 @@ test('logged_out inesperado (connected) → suspected_ban; após logout de admin
   });
   const audits = async (): Promise<Array<{ action: string }>> => db.select().from(auditLog);
 
-  const acc = await accounts.create({ label: 'A1', purpose: 'support', providerSessionId: 'sess1', now: now() });
-  await accounts.setStatus(acc.id, 'connected', now());
+  const acc = await accounts.create(SCOPE, { label: 'A1', purpose: 'support', providerSessionId: 'sess1', now: now() });
+  await accounts.setStatus(SCOPE, acc.id, 'connected', now());
   await life.onSessionStatus({ sessionId: 'sess1', status: 'logged_out', at: now() });
-  assert.equal((await accounts.get(acc.id))?.status, 'suspected_ban');
+  assert.equal((await accounts.get(SCOPE, acc.id))?.status, 'suspected_ban');
   assert.equal((await audits()).filter((a) => a.action === 'account.suspected_ban').length, 1);
   assert.ok(notified.some((n) => n.type === 'account' && n.status === 'suspected_ban'));
 
   // cenário 2: admin fez logout primeiro (estado já 'disconnected') → continua
   // 'disconnected', sem audit novo (o logged_out do webhook é no-op)
-  const acc2 = await accounts.create({ label: 'A2', purpose: 'sales', providerSessionId: 'sess2', now: now() });
-  await accounts.setStatus(acc2.id, 'disconnected', now());
+  const acc2 = await accounts.create(SCOPE, { label: 'A2', purpose: 'sales', providerSessionId: 'sess2', now: now() });
+  await accounts.setStatus(SCOPE, acc2.id, 'disconnected', now());
   const auditsBefore = (await audits()).length;
   await life.onSessionStatus({ sessionId: 'sess2', status: 'logged_out', at: now() });
-  assert.equal((await accounts.get(acc2.id))?.status, 'disconnected');
+  assert.equal((await accounts.get(SCOPE, acc2.id))?.status, 'disconnected');
   assert.equal((await audits()).length, auditsBefore, 'sem audit novo no no-op');
 });
 
@@ -104,23 +107,23 @@ test('pico de falhas: 7 de 20 (35% > 30%) → suspected_ban; 6 de 20 (30%) e jan
     }
   };
 
-  const accBan = await accounts.create({ label: 'B1', purpose: 'campaigns', providerSessionId: 's-ban', now: now() });
-  await accounts.setStatus(accBan.id, 'connected', now());
+  const accBan = await accounts.create(SCOPE, { label: 'B1', purpose: 'campaigns', providerSessionId: 's-ban', now: now() });
+  await accounts.setStatus(SCOPE, accBan.id, 'connected', now());
   await seedWindow(accBan.id, '+244923600001', 7);
-  await life.recordSendResult({ accountId: accBan.id, ok: false, at: now() });
-  assert.equal((await accounts.get(accBan.id))?.status, 'suspected_ban', '35% > 30% → ban');
+  await life.recordSendResult({ accountId: accBan.id, tenantId: base.MILVENDAS_TENANT_ID, ok: false, at: now() });
+  assert.equal((await accounts.get(SCOPE, accBan.id))?.status, 'suspected_ban', '35% > 30% → ban');
 
-  const accOk = await accounts.create({ label: 'B2', purpose: 'campaigns', providerSessionId: 's-ok', now: now() });
-  await accounts.setStatus(accOk.id, 'connected', now());
+  const accOk = await accounts.create(SCOPE, { label: 'B2', purpose: 'campaigns', providerSessionId: 's-ok', now: now() });
+  await accounts.setStatus(SCOPE, accOk.id, 'connected', now());
   await seedWindow(accOk.id, '+244923600002', 6);
-  await life.recordSendResult({ accountId: accOk.id, ok: false, at: now() });
-  assert.equal((await accounts.get(accOk.id))?.status, 'connected', '30% não ultrapassa o limiar');
+  await life.recordSendResult({ accountId: accOk.id, tenantId: base.MILVENDAS_TENANT_ID, ok: false, at: now() });
+  assert.equal((await accounts.get(SCOPE, accOk.id))?.status, 'connected', '30% não ultrapassa o limiar');
 
-  const accFew = await accounts.create({ label: 'B3', purpose: 'campaigns', providerSessionId: 's-few', now: now() });
-  await accounts.setStatus(accFew.id, 'connected', now());
+  const accFew = await accounts.create(SCOPE, { label: 'B3', purpose: 'campaigns', providerSessionId: 's-few', now: now() });
+  await accounts.setStatus(SCOPE, accFew.id, 'connected', now());
   await seedWindow(accFew.id, '+244923600003', 3, 3);
-  await life.recordSendResult({ accountId: accFew.id, ok: false, at: now() });
-  assert.equal((await accounts.get(accFew.id))?.status, 'connected', 'janela incompleta nunca ban');
+  await life.recordSendResult({ accountId: accFew.id, tenantId: base.MILVENDAS_TENANT_ID, ok: false, at: now() });
+  assert.equal((await accounts.get(SCOPE, accFew.id))?.status, 'connected', 'janela incompleta nunca ban');
 });
 
 test('connected: telefone associa-se; reconexão migra o telefone da conta antiga desconectada', async () => {
@@ -139,15 +142,15 @@ test('connected: telefone associa-se; reconexão migra o telefone da conta antig
   });
   const audits = async (): Promise<Array<{ action: string }>> => db.select().from(auditLog);
 
-  const oldAcc = await accounts.create({ label: 'Old', purpose: 'support', providerSessionId: 'sess-old', now: now() });
-  await accounts.setStatus(oldAcc.id, 'disconnected', now());
-  await accounts.setPhone(oldAcc.id, '+244923111222');
+  const oldAcc = await accounts.create(SCOPE, { label: 'Old', purpose: 'support', providerSessionId: 'sess-old', now: now() });
+  await accounts.setStatus(SCOPE, oldAcc.id, 'disconnected', now());
+  await accounts.setPhone(SCOPE, oldAcc.id, '+244923111222');
 
-  const newAcc = await accounts.create({ label: 'New', purpose: 'support', providerSessionId: 'sess-new', now: now() });
+  const newAcc = await accounts.create(SCOPE, { label: 'New', purpose: 'support', providerSessionId: 'sess-new', now: now() });
   await life.onSessionStatus({ sessionId: 'sess-new', status: 'connected', at: now() });
 
-  assert.equal((await accounts.get(newAcc.id))?.phoneE164, '+244923111222');
-  assert.equal((await accounts.get(oldAcc.id))?.phoneE164, null, 'conta antiga perdeu o telefone');
+  assert.equal((await accounts.get(SCOPE, newAcc.id))?.phoneE164, '+244923111222');
+  assert.equal((await accounts.get(SCOPE, oldAcc.id))?.phoneE164, null, 'conta antiga perdeu o telefone');
   assert.ok((await audits()).some((a) => a.action === 'account.phone_reassigned'));
   assert.ok(notified.some((n) => n.type === 'account' && n.status === 'connected'), 'transição notificada');
 });

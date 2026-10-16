@@ -39,6 +39,7 @@ export function createMfaService(deps: {
       await deps.users.setTotpEnabled(userId, now);
       await deps.sessions.setMfaPending(sessionId, false, now);
       await deps.audit.record({
+        tenantId: state.tenantId, // Task 4: null = platform_admin (spec §4.2)
         actorId: userId,
         action: 'auth.totp_enabled',
         entity: 'user',

@@ -7,6 +7,7 @@ import { DomainError } from '../domain/error.js';
 import type { Audit } from '../ports/audit.js';
 import type { ConversationsRepository, MessageView } from '../ports/conversations.js';
 import type { Outbox } from '../ports/outbox.js';
+import type { TenantScope } from '../ports/tenancy.js';
 
 export function createMessageSender(deps: {
   outbox: Outbox;
@@ -16,7 +17,10 @@ export function createMessageSender(deps: {
   now(): Date;
 }) {
   return {
-    async sendHumanMessage(input: {
+    /** Onda 1 (Task 4): o escopo do utilizador autenticado é o primeiro
+     *  parâmetro — a conversa é lida SOB ele (alheia → 404 not_found) e o
+     *  tenant da auditoria vem do mesmo scope. */
+    async sendHumanMessage(scope: TenantScope, input: {
       conversationId: string;
       text: string;
       idempotencyKey: string;
@@ -28,7 +32,7 @@ export function createMessageSender(deps: {
       if (input.text.trim().length === 0) throw new DomainError('message_empty');
       if (input.text.length > deps.cfg.maxMessageChars) throw new DomainError('message_too_long');
 
-      const found = await deps.repo.get(input.conversationId);
+      const found = await deps.repo.get(scope, input.conversationId);
       if (found === null) throw new DomainError('not_found');
 
       const { outboxId, duplicate } = await deps.outbox.enqueue({
@@ -40,7 +44,7 @@ export function createMessageSender(deps: {
         idempotencyKey: `rest:${input.conversationId}:${input.idempotencyKey}`,
       });
 
-      const message = await deps.repo.getMessageByOutbox(outboxId);
+      const message = await deps.repo.getMessageByOutbox(scope, outboxId);
       if (message === null) throw new Error('mensagem criada pelo enqueue não encontrada');
 
       if (duplicate) {
@@ -52,6 +56,7 @@ export function createMessageSender(deps: {
 
       // 1.ª entrega: audita (o evento message.created já saiu do enqueue).
       await deps.audit.record({
+        tenantId: scope.tenantId,
         actorId: input.actorId,
         action: 'message.sent',
         entity: 'message',

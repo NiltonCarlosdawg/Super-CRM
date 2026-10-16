@@ -12,7 +12,6 @@ import type { NotifyEvent } from '../../ports/notify.js';
 import type { Outbox } from '../../ports/outbox.js';
 import type { DbClient } from './index.js';
 import { contacts, conversations, messages, outboxMessages, whatsappAccounts } from './schema/index.js';
-import { MILVENDAS_TENANT_ID } from './schema/tenants.schema.js';
 
 /** Sinal interno: a transação fez rollback por chave já existente. */
 class DuplicateEnqueue extends Error {
@@ -44,12 +43,21 @@ export function createOutbox(deps: {
       const messageId = randomUUID();
       const committed = await db
         .transaction(async (tx) => {
+          // Onda 1 (Task 4, ruling R9): o tenant do enqueue vem DA CONVERSA —
+          // a única fonte verdadeira partilhada pelo caminho humano (conversa
+          // já lida sob o scope da sessão) e pelo inbound (conversa criada a
+          // partir da conta resolvida pelo webhook). Nada de hardcode.
+          const [conv] = await tx
+            .select({ tenantId: conversations.tenantId })
+            .from(conversations)
+            .where(eq(conversations.id, input.conversationId))
+            .limit(1);
+          if (conv === undefined) throw new Error('conversa inexistente no enqueue');
           const [m] = await tx
             .insert(messages)
             .values({
               id: messageId,
-              // Onda 1 (Task 1): tenant fixo até o escopo chegar pela sessão (Tasks 3–5).
-              tenantId: MILVENDAS_TENANT_ID,
+              tenantId: conv.tenantId,
               conversationId: input.conversationId,
               accountId: input.accountId,
               direction: 'outbound',
@@ -66,8 +74,7 @@ export function createOutbox(deps: {
             .insert(outboxMessages)
             .values({
               messageId,
-              // Onda 1 (Task 1): tenant fixo até o escopo chegar pela sessão (Tasks 3–5).
-              tenantId: MILVENDAS_TENANT_ID,
+              tenantId: conv.tenantId, // o mesmo tenant da conversa (Task 4)
               accountId: input.accountId,
               idempotencyKey: input.idempotencyKey,
               priority: input.sender === 'campaign' ? 2 : 1, // resposta primeiro (docs/04 §7)
@@ -144,6 +151,7 @@ const parseTimestamptz = pgTypes.getTypeParser(
 
 type ClaimedRaw = {
   id: string;
+  tenant_id: string;
   message_id: string;
   account_id: string;
   idempotency_key: string;
@@ -154,6 +162,8 @@ type ClaimedRaw = {
 
 export type ClaimedOutboxRow = {
   id: string;
+  /** Onda 1 (Task 4): dono da linha — o worker passa-o a recordSendResult. */
+  tenantId: string;
   messageId: string;
   accountId: string;
   idempotencyKey: string;
@@ -192,12 +202,13 @@ export async function sweepAndClaim(
       SELECT id FROM claimed
     ) AS c
     WHERE o.id = c.id
-    RETURNING o.id, o.message_id, o.account_id, o.idempotency_key, o.attempts,
-              o.priority, o.scheduled_at`);
+    RETURNING o.id, o.tenant_id, o.message_id, o.account_id, o.idempotency_key,
+              o.attempts, o.priority, o.scheduled_at`);
 
   const rows = claim.rows
     .map((r) => ({
       id: r.id,
+      tenantId: r.tenant_id,
       messageId: r.message_id,
       accountId: r.account_id,
       idempotencyKey: r.idempotency_key,

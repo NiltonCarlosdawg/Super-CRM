@@ -166,12 +166,15 @@ test('assinatura inválida → 401 sem linha; mesmo evento 2× → 1 linha, 1 jo
 test('job: message.status avança o estado (só avança) e notifica message.status', async () => {
   const app = await buildTestApp();
   try {
-    const { id: accId } = await app.accounts.create({
-      label: 'T20-msg',
-      purpose: 'support',
-      providerSessionId: 'sess-t20-msg',
-      now: new Date(),
-    });
+    const { id: accId } = await app.accounts.create(
+      { tenantId: base.MILVENDAS_TENANT_ID }, // Task 4: escopo do tenant MilVendas
+      {
+        label: 'T20-msg',
+        purpose: 'support',
+        providerSessionId: 'sess-t20-msg',
+        now: new Date(),
+      },
+    );
     const [contact] = await app.db
       .insert(base.contacts)
       .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: '+2449237770001' })
@@ -239,12 +242,15 @@ test('job: message.status avança o estado (só avança) e notifica message.stat
 test('job: session.status atualiza a conta e notifica; payload inválido rejeita sem processar', async () => {
   const app = await buildTestApp();
   try {
-    const { id: accId } = await app.accounts.create({
-      label: 'T20-sess',
-      purpose: 'support',
-      providerSessionId: 'sess-t20-sess',
-      now: new Date(),
-    });
+    const { id: accId } = await app.accounts.create(
+      { tenantId: base.MILVENDAS_TENANT_ID }, // Task 4: escopo do tenant MilVendas
+      {
+        label: 'T20-sess',
+        purpose: 'support',
+        providerSessionId: 'sess-t20-sess',
+        now: new Date(),
+      },
+    );
     const handler = createInboundProcessHandler(makeHandlerDeps(app));
     const evId = await insertEvent(app, (id) => ({
       type: 'session.status',
@@ -254,7 +260,7 @@ test('job: session.status atualiza a conta e notifica; payload inválido rejeita
       // eventos de sessão normalizados NÃO têm timestamp (contrato do port)
     }));
     await handler({ eventId: evId, correlationId: 'c1' }, ctx);
-    const acc = await app.accounts.get(accId);
+    const acc = await app.accounts.get({ tenantId: base.MILVENDAS_TENANT_ID }, accId);
     assert.equal(acc!.status, 'connected');
     assert.ok(
       app.notifyLog.some((e) => e.type === 'account' && e.status === 'connected'),

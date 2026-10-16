@@ -48,6 +48,9 @@ export function createLoginService(deps: {
       if (user === null || !user.active || !valid) {
         deps.limiter.fail(key);
         await deps.audit.record({
+          // Onda 1 (Task 4): tenant do utilizador; null quando o email não
+          // corresponde a ninguém (ação de sistema — spec §4.2).
+          tenantId: user?.tenantId ?? null,
           actorId: null,
           action: 'auth.login_failed',
           entity: 'user',
@@ -76,6 +79,7 @@ export function createLoginService(deps: {
         ttlHours: deps.cfg.sessionTtlHours, ip: input.ip,
       });
       await deps.audit.record({
+        tenantId: user.tenantId, // Task 4: null = platform_admin (spec §4.2)
         actorId: user.id, action: 'auth.login', entity: 'user', entityId: user.id, at: now, ip: input.ip,
       });
       return {
@@ -107,6 +111,7 @@ export function createLoginService(deps: {
       // revoga as outras sessões do utilizador (mantém a atual)
       await deps.sessions.revokeAllForUser(user.id, input.sessionId);
       await deps.audit.record({
+        tenantId: user.tenantId, // Task 4: null = platform_admin (spec §4.2)
         actorId: user.id, action: 'auth.password_changed', entity: 'user', entityId: user.id,
         at: now, ip: input.ip,
       });

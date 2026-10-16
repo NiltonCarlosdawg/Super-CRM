@@ -21,12 +21,15 @@ interface Fixtures {
 }
 
 async function fixtures(db: Awaited<ReturnType<typeof migratedDb>>): Promise<Fixtures> {
-  const { id: accountId } = await createAccountsRepository({ db }).create({
-    label: 'T17',
-    purpose: 'support',
-    providerSessionId: 'sess-t17',
-    now: AT,
-  });
+  const { id: accountId } = await createAccountsRepository({ db }).create(
+    { tenantId: base.MILVENDAS_TENANT_ID }, // Task 4: escopo do tenant MilVendas
+    {
+      label: 'T17',
+      purpose: 'support',
+      providerSessionId: 'sess-t17',
+      now: AT,
+    },
+  );
   const contact = (
     await db
       .insert(base.contacts)

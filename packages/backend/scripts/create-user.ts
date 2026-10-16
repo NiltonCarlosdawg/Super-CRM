@@ -114,6 +114,7 @@ async function main(): Promise<number> {
     const row = inserted[0];
     if (row === undefined) throw new Error('insert de users não devolveu linha');
     await createAuditAdapter({ db }).record({
+      tenantId, // Task 4: null = bootstrap de platform_admin (ação de sistema)
       actorId: null, // ação de sistema (bootstrap sem sessão)
       action: 'user.created',
       entity: 'user',

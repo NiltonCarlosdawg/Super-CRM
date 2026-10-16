@@ -140,7 +140,7 @@ export async function runOutboxTick(
     if (outcome === 'accepted') {
       await setOutboxState(db, row.id, { status: 'sent' }, at);
       await setMessageState(db, row.messageId, 'sent', at, providerMessageId ?? undefined);
-      await accounts.recordSendResult({ accountId: row.accountId, ok: true, at });
+      await accounts.recordSendResult({ accountId: row.accountId, tenantId: row.tenantId, ok: true, at });
       await notifySink({
         type: 'message',
         phase: 'status',
@@ -157,13 +157,13 @@ export async function runOutboxTick(
     } else if (outcome === 'rejected') {
       await setOutboxState(db, row.id, { status: 'failed' }, at);
       await setMessageState(db, row.messageId, 'failed', at);
-      await accounts.recordSendResult({ accountId: row.accountId, ok: false, at });
+      await accounts.recordSendResult({ accountId: row.accountId, tenantId: row.tenantId, ok: false, at });
       logger.error({ deadLetter: true, outboxId: row.id }, 'outbox.rejected');
     } else {
       // Timeout/desconhecido: mensagem continua 'queued' e NUNCA reenvia
       // automaticamente (docs/04 §5) — humano reconcilia.
       await setOutboxState(db, row.id, { status: 'unknown_delivery' }, at);
-      await accounts.recordSendResult({ accountId: row.accountId, ok: false, at });
+      await accounts.recordSendResult({ accountId: row.accountId, tenantId: row.tenantId, ok: false, at });
       logger.error({ reason: 'send_unknown', outboxId: row.id }, 'outbox.unknown');
     }
   }

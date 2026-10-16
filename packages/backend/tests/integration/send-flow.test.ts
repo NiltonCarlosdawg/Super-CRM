@@ -88,13 +88,16 @@ async function mkConversation(
   app: TestApp,
   opts?: { aiMode?: 'ai_active' | 'ai_suggest' | 'human_only' },
 ): Promise<{ cid: string }> {
-  const { id: accId } = await app.accounts.create({
-    label: 'T22',
-    purpose: 'support',
-    providerSessionId: SESSION_ID,
-    now: new Date(),
-  });
-  await app.accounts.setStatus(accId, 'connected', new Date());
+  const { id: accId } = await app.accounts.create(
+    { tenantId: base.MILVENDAS_TENANT_ID }, // Task 4: escopo do tenant MilVendas
+    {
+      label: 'T22',
+      purpose: 'support',
+      providerSessionId: SESSION_ID,
+      now: new Date(),
+    },
+  );
+  await app.accounts.setStatus({ tenantId: base.MILVENDAS_TENANT_ID }, accId, 'connected', new Date());
   const [contact] = await app.db
     .insert(base.contacts)
     .values({ tenantId: base.MILVENDAS_TENANT_ID, phoneE164: PHONE })

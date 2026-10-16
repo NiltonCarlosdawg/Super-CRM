@@ -5,6 +5,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { TenantScope } from '../../../ports/tenancy.js';
 import type { HttpDeps } from '../app.js';
 import { authenticate, requireRole } from '../guards.js';
 import { HttpError } from '../errors.js';
@@ -26,18 +27,26 @@ export async function whatsappAccountsRoutes(app: FastifyInstance, deps: HttpDep
   const adminOnly = [authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy }), requireRole('admin')];
   const audit = deps.audit;
 
+  // Onda 1 (Task 4): rota de tenant SEMPRE opera no tenant da sessão —
+  // `requireRole('admin')` exclui platform_admin (sem tenant) destas rotas.
+  const scope = (request: { auth?: { tenantId: string | null } }): TenantScope => ({
+    tenantId: request.auth!.tenantId!,
+  });
+
   app.post('/v1/whatsapp-accounts', { preHandler: adminOnly }, async (request, reply) => {
     const body = createSchema.parse(request.body);
     const now = deps.now();
+    const s = scope(request);
     // A sessão nasce no provider PRIMEIRO (sem linha órfã na BD se falhar).
     const { sessionId } = await provider.createSession({ label: body.label });
-    const { id } = await accounts.create({
+    const { id } = await accounts.create(s, {
       label: body.label,
       purpose: body.purpose,
       providerSessionId: sessionId,
       now,
     });
     await audit.record({
+      tenantId: s.tenantId,
       actorId: request.auth?.userId ?? null,
       action: 'account.created',
       entity: 'whatsapp_account',
@@ -46,16 +55,17 @@ export async function whatsappAccountsRoutes(app: FastifyInstance, deps: HttpDep
       at: now,
       ip: request.ip,
     });
-    return reply.status(201).send({ account: await accounts.get(id) });
+    return reply.status(201).send({ account: await accounts.get(s, id) });
   });
 
-  app.get('/v1/whatsapp-accounts', { preHandler: adminOnly }, async () => ({
-    accounts: await accounts.list(),
+  app.get('/v1/whatsapp-accounts', { preHandler: adminOnly }, async (request) => ({
+    accounts: await accounts.list(scope(request)),
   }));
 
   app.get('/v1/whatsapp-accounts/:id', { preHandler: adminOnly }, async (request) => {
     const { id } = idSchema.parse(request.params);
-    const account = await accounts.get(id);
+    const s = scope(request);
+    const account = await accounts.get(s, id);
     if (account === null) {
       throw new HttpError(404, 'account_not_found', 'conta WhatsApp não encontrada');
     }
@@ -67,7 +77,8 @@ export async function whatsappAccountsRoutes(app: FastifyInstance, deps: HttpDep
 
   app.post('/v1/whatsapp-accounts/:id/logout', { preHandler: adminOnly }, async (request, reply) => {
     const { id } = idSchema.parse(request.params);
-    const account = await accounts.get(id);
+    const s = scope(request);
+    const account = await accounts.get(s, id);
     if (account === null) {
       throw new HttpError(404, 'account_not_found', 'conta WhatsApp não encontrada');
     }
@@ -80,9 +91,10 @@ export async function whatsappAccountsRoutes(app: FastifyInstance, deps: HttpDep
       throw error;
     }
     const now = deps.now();
-    const changed = await accounts.setStatus(id, 'disconnected', now);
-    await accounts.setPhone(id, null); // logout limpa o telefone (docs/04 §6)
+    const changed = await accounts.setStatus(s, id, 'disconnected', now);
+    await accounts.setPhone(s, id, null); // logout limpa o telefone (docs/04 §6)
     await audit.record({
+      tenantId: s.tenantId,
       actorId: request.auth?.userId ?? null,
       action: 'account.logout',
       entity: 'whatsapp_account',
@@ -91,6 +103,6 @@ export async function whatsappAccountsRoutes(app: FastifyInstance, deps: HttpDep
       ip: request.ip,
     });
     if (changed) await notify({ type: 'account', accountId: id, status: 'disconnected' });
-    return reply.send({ account: await accounts.get(id) });
+    return reply.send({ account: await accounts.get(s, id) });
   });
 }

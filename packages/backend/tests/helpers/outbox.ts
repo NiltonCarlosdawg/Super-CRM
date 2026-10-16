@@ -19,6 +19,9 @@ type Db = Awaited<ReturnType<typeof migratedDb>>;
 type OutboxRow = typeof base.outboxMessages.$inferSelect;
 type MessageRow = typeof base.messages.$inferSelect;
 
+/** Onda 1 (Task 4): os repositórios operam sob um TenantScope. */
+const SCOPE = { tenantId: base.MILVENDAS_TENANT_ID } as const;
+
 /** logs() do plano: `{ level, ...obj }` achatado (l.reason, l.deadLetter...). */
 export interface LogEntry {
   level: 'info' | 'warn' | 'error';
@@ -73,14 +76,14 @@ export async function createOutboxHarness(): Promise<OutboxHarness> {
   const accounts = createAccountsRepository({ db });
   const audit = createAuditAdapter({ db });
   const fake = createFakeMessaging();
-  const { id: accId } = await accounts.create({
+  const { id: accId } = await accounts.create(SCOPE, {
     label: 'T18-account',
     purpose: 'support',
     providerSessionId: 'sess-t18',
     now: now(),
   });
-  await accounts.setStatus(accId, 'connected', now());
-  const acc = (await accounts.get(accId))!;
+  await accounts.setStatus(SCOPE, accId, 'connected', now());
+  const acc = (await accounts.get(SCOPE, accId))!;
 
   const outbox = createOutbox({
     db,
