@@ -75,3 +75,11 @@ export interface MessagesList {
   messages: MessageView[];
   nextCursor: string | null;
 }
+
+// POST /v1/conversations/:id/messages (conversations.ts:53-72): 201 com a
+// mensagem criada, ou 200 com replayed=true (mesma Idempotency-Key + mesmo
+// corpo); 409 idempotency_conflict quando a chave volta com corpo diferente.
+export interface SendMessageResponse {
+  message: MessageView;
+  replayed: boolean;
+}

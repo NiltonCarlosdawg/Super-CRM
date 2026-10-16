@@ -8,10 +8,15 @@
 // recente, merge por id). message.status actualiza por messageId; handoff.*
 // pinta o banner. applyThreadEvent é puro e cobre os quatro.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import { aiModeLabel, handoffPriorityLabel, messageStatusLabel } from "../lib/labels";
+import {
+  aiModeLabel,
+  composerSendingLabel,
+  handoffPriorityLabel,
+  messageStatusLabel,
+} from "../lib/labels";
 import { relativeTime } from "../lib/time";
 import { useEvent, type PanelEventPayloads } from "../lib/socket";
 import type {
@@ -21,6 +26,7 @@ import type {
   ConversationsList,
   MessageView,
   MessagesList,
+  SendMessageResponse,
 } from "../lib/types";
 import { Badge, type BadgeTone } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -191,6 +197,11 @@ function Thread({ conversationId }: { conversationId: string }) {
       .catch((error: unknown) => toastError(errorText(error)));
   }, [messagesPath, toastError]);
 
+  // Envio confirmado pelo POST (REST, não depende do socket): anexa/substitui por id.
+  const absorbSent = useCallback((message: MessageView) => {
+    setThread((prev) => applySentMessage(prev, message));
+  }, []);
+
   const loadOlder = useCallback(() => {
     if (olderCursor === null) return;
     setLoadingOlder(true);
@@ -281,6 +292,200 @@ function Thread({ conversationId }: { conversationId: string }) {
           thread.messages.map((message) => <MessageBubble key={message.id} message={message} />)
         )}
       </div>
+
+      <Composer conversationId={conversationId} onSent={absorbSent} />
+    </div>
+  );
+}
+
+/* ----------------------------- Composer ---------------------------------- */
+
+export interface ComposerMsg {
+  /** Idempotency-Key: gerada UMA vez por mensagem lógica, reutilizada no retry. */
+  key: string;
+  text: string;
+  status: "queued" | "sent" | "failed" | "conflict";
+  /** Reconciliação: a mensagem que o servidor confirmou (sucesso/replayed). */
+  message: MessageView | null;
+  detail: string | null;
+}
+
+export interface ComposerDeps {
+  uuid(): string;
+  post(
+    path: string,
+    body: unknown,
+    opts: { idempotencyKey: string },
+  ): Promise<SendMessageResponse>;
+}
+
+export interface ComposerController {
+  send(text: string): Promise<ComposerMsg>;
+  /** Reenvio da MESMA mensagem lógica (mesma chave). Só quando falhou. */
+  retry(): Promise<ComposerMsg | null>;
+}
+
+/**
+ * Controller puro do envio (contrato: routes/conversations.ts:53-72). A chave
+ * nasce no `send` e o `retry` reutiliza-a — a rede pode ter gravado o envio
+ * mesmo tendo falhado a resposta, e o replay devolve a mensagem existente.
+ * Conflito (409) é terminal: reenviar a mesma chave com o mesmo corpo nunca
+ * produz 409, por isso o retry recusa e a interface só avisa.
+ */
+export function createComposer(
+  deps: ComposerDeps,
+  options: { conversationId: string; onState(state: ComposerMsg): void },
+): ComposerController {
+  let state: ComposerMsg | null = null;
+
+  function setState(next: ComposerMsg): ComposerMsg {
+    state = next;
+    options.onState(next);
+    return next;
+  }
+
+  async function attempt(msg: ComposerMsg): Promise<ComposerMsg> {
+    try {
+      const result = await deps.post(
+        `/v1/conversations/${options.conversationId}/messages`,
+        { text: msg.text },
+        { idempotencyKey: msg.key },
+      );
+      return setState({ ...msg, status: "sent", message: result.message, detail: null });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        return setState({ ...msg, status: "conflict", detail: error.detail ?? null });
+      }
+      const detail = error instanceof ApiError ? (error.detail ?? null) : null;
+      return setState({ ...msg, status: "failed", detail });
+    }
+  }
+
+  return {
+    send(text: string): Promise<ComposerMsg> {
+      if (state !== null && state.status === "queued") {
+        return Promise.resolve(state); // envio duplo: ignora, não gera chave nova
+      }
+      return attempt(
+        setState({ key: deps.uuid(), text, status: "queued", message: null, detail: null }),
+      );
+    },
+    retry(): Promise<ComposerMsg | null> {
+      if (state === null || state.status !== "failed") return Promise.resolve(state);
+      return attempt(state); // mesma chave, mesmo corpo
+    },
+  };
+}
+
+/** Reconcilia a mensagem confirmada pelo servidor na thread (por id). */
+export function applySentMessage(thread: ThreadState, message: MessageView): ThreadState {
+  const index = thread.messages.findIndex((existing) => existing.id === message.id);
+  if (index === -1) return { ...thread, messages: [...thread.messages, message] };
+  const messages = [...thread.messages];
+  messages[index] = message;
+  return { ...thread, messages };
+}
+
+export function Composer({
+  conversationId,
+  onSent,
+}: {
+  conversationId: string;
+  onSent(message: MessageView): void;
+}) {
+  const { error: toastError } = useToast();
+  const [text, setText] = useState("");
+  const [pending, setPending] = useState<ComposerMsg | null>(null);
+  const composer = useMemo(
+    () =>
+      createComposer(
+        {
+          uuid: () => crypto.randomUUID(),
+          post: (path, body, opts) => api.post(path, body, opts),
+        },
+        { conversationId, onState: setPending },
+      ),
+    [conversationId],
+  );
+
+  const settle = (result: ComposerMsg) => {
+    if (result.status === "sent" && result.message !== null) {
+      onSent(result.message); // a thread já tem a mensagem — o optimista desaparece
+      setPending(null);
+    } else if (result.status === "conflict") {
+      toastError("Esta mensagem já foi enviada — nada foi reenviado.");
+      setPending(null);
+    }
+  };
+
+  const enviar = () => {
+    const value = text.trim();
+    if (value === "" || pending?.status === "queued") return;
+    setText("");
+    void composer.send(value).then(settle);
+  };
+
+  const repetir = () => {
+    void composer.retry().then((result) => {
+      if (result !== null) settle(result);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-border p-4">
+      {pending !== null && pending.status !== "sent" && (
+        <div className="flex justify-end">
+          <div className="max-w-[75%] border border-accent/30 bg-accent/10 px-3 py-2 text-sm">
+            <p className="whitespace-pre-wrap break-words text-fg">{pending.text}</p>
+            <div className="mt-1 flex items-center gap-2 text-xs">
+              {pending.status === "queued" && (
+                <span className="text-muted">{composerSendingLabel()}</span>
+              )}
+              {pending.status === "failed" && (
+                <>
+                  <span className="text-warning">Falhou</span>
+                  {pending.detail !== null && (
+                    <span className="text-muted">— {pending.detail}</span>
+                  )}
+                  <Button variant="ghost" className="px-2 py-0.5" onClick={repetir}>
+                    Repetir
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          enviar();
+        }}
+      >
+        <textarea
+          aria-label="Mensagem"
+          rows={2}
+          value={text}
+          disabled={pending?.status === "queued"}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault(); // Enter envia; Shift+Enter deixa a quebra linha
+              enviar();
+            }
+          }}
+          placeholder="Escreve uma mensagem…"
+          className="min-h-[2.75rem] flex-1 resize-none border border-border bg-background px-3 py-2 text-sm text-fg placeholder:text-muted/60 focus:border-accent focus:outline-none"
+        />
+        <Button
+          type="submit"
+          variant="solid"
+          disabled={pending?.status === "queued" || text.trim() === ""}
+        >
+          Enviar
+        </Button>
+      </form>
     </div>
   );
 }

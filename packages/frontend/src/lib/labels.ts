@@ -57,6 +57,11 @@ export function messageStatusLabel(status: MessageStatus): string {
   return MESSAGE_STATUS_LABELS[status];
 }
 
+/** Estado optimista do composer enquanto o POST está no ar. */
+export function composerSendingLabel(): string {
+  return "A enviar…";
+}
+
 const HANDOFF_PRIORITY_LABELS: Record<HandoffPriority, string> = {
   urgent: "Urgente",
   high: "Alta",
