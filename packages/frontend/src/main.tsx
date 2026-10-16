@@ -6,26 +6,43 @@ import "@fontsource/ibm-plex-sans/400.css";
 
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 
-import HomePage from "./pages/index";
-import AccountsPage from "./pages/accounts";
-import CampaignsPage from "./pages/campaigns";
+import { SessionProvider } from "./lib/auth";
+import { AppShell } from "./components/AppShell";
+import { RequireAdmin, RequireAuth } from "./components/guards";
+import { ToastProvider } from "./components/ui/Toast";
+
 import LoginPage from "./pages/login";
-import RegisterPage from "./pages/register";
+import DashboardPage from "./pages/index";
+import AccountsPage from "./pages/accounts";
+import ConversationsPage from "./pages/conversations";
+import CampaignsPage from "./pages/campaigns";
+import UsersPage from "./pages/users";
 
 import "./globals.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/accounts" element={<AccountsPage />} />
-        <Route path="/campaigns" element={<CampaignsPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-      </Routes>
-    </BrowserRouter>
+    <ToastProvider>
+      <SessionProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/accounts" element={<AccountsPage />} />
+              <Route path="/conversations" element={<ConversationsPage />} />
+              <Route path="/conversations/:id" element={<ConversationsPage />} />
+              <Route path="/campaigns" element={<CampaignsPage />} />
+              <Route
+                path="/users"
+                element={<RequireAdmin><UsersPage /></RequireAdmin>}
+              />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </SessionProvider>
+    </ToastProvider>
   </React.StrictMode>,
 );

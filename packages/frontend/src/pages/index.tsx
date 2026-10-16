@@ -1,11 +1,8 @@
 import { Link } from "react-router-dom";
 
-import Header from "../components/Header";
-
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-background font-sans">
-      <Header />
       <main className="py-12 px-4 max-w-2xl mx-auto">
         <section className="hero-section">
           <h1 className="text-4xl sm:text-5xl font-serif font-medium tracking-tight">
