@@ -256,7 +256,7 @@ Integração: `POST /v1/auth/register` → 200 + cookies `session`/`csrf` + linh
 
 **Interfaces:**
 - Consumes: `AuthContext.isPlatform` (Task 3), `TenancyPort`/repos com scope (Tasks 3–4).
-- Produces: `requirePlatform(): preHandlerHookHandler` (403 `forbidden` se `!isPlatform`); `GET /v1/platform/tenants` → `[{ id, name, status, usersCount, accountsCount, createdAt }]`; `POST /v1/platform/tenants/:id/suspend` e `…/activate` → 204 + audit (`tenant.suspend`/`tenant.activate`); `GET /v1/platform/tenants/:tenantId/{users,accounts,conversations}` e `…/conversations/:id` (thread, read-only) + audit `platform.view_tenant` no primeiro acesso a cada tenant. Nenhuma rota de escrita dentro de tenant para plataforma.
+- Produces: `requirePlatform(): preHandlerHookHandler` (403 `forbidden` se `!isPlatform`); `requireTenant(): preHandlerHookHandler` (403 `forbidden` se `isPlatform` — preHandler das rotas de tenant, ruling R2/R15: a matriz de isolamento T8 exige "rota de tenant com sessão plataforma → 403"); `GET /v1/platform/tenants` → `[{ id, name, status, usersCount, accountsCount, createdAt }]`; `POST /v1/platform/tenants/:id/suspend` e `…/activate` → 204 + audit (`tenant.suspend`/`tenant.activate`); `GET /v1/platform/tenants/:tenantId/{users,accounts,conversations}` e `…/conversations/:id` (thread, read-only) + audit `platform.view_tenant` no primeiro acesso a cada tenant. Nenhuma rota de escrita dentro de tenant para plataforma.
 
 - [ ] **Step 1: Testes de falha**
 
@@ -267,6 +267,7 @@ test('drill read-only devolve users/contas/conversas do tenant pedido');
 test('sessão de tenant em /v1/platform/* → 403');
 test('sessão mfaPending (mesmo platform_admin) em /v1/platform/* → 403 (fora do MFA_ALLOWLIST)');
 test('platform_admin NÃO tem escrita dentro de tenant: POST /v1/users com sessão platform → 403');
+test('sessão platform em qualquer rota de tenant → 403 (requireTenant, R2/R15)');
 ```
 
 - [ ] **Step 2: Correr e ver falhar** — `npm run test:integration -- platform` → FAIL.
