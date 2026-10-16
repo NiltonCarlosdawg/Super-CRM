@@ -35,6 +35,8 @@ const DOMAIN: Record<string, [number, string]> = {
   csrf_invalid: [403, "header 'x-csrf-token' ausente ou inválido"],
   mfa_required: [403, 'segundo fator pendente: complete o TOTP'],
   cannot_modify_self: [403, 'não pode alterar o próprio papel ou estado'],
+  // Onda 1, Task 3: tenant suspenso — plano multitenancy (registo de erros novos)
+  tenant_suspended: [403, 'empresa suspensa'],
   not_found: [404, 'recurso não encontrado'],
   user_not_found: [404, 'utilizador não encontrado'],
   email_already_exists: [409, 'email já registado'],

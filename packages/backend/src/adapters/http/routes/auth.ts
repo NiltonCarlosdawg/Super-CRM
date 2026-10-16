@@ -34,7 +34,7 @@ function setCsrfCookie(deps: HttpDeps, reply: FastifyReply, token: string, expir
 }
 
 export async function authRoutes(app: FastifyInstance, deps: HttpDeps): Promise<void> {
-  const auth = authenticate({ sessions: deps.sessions });
+  const auth = authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy });
 
   // Login: isento de CSRF (não existe sessão ainda); rate limit próprio.
   app.post(
@@ -88,12 +88,19 @@ export async function authRoutes(app: FastifyInstance, deps: HttpDeps): Promise<
   // Quem sou eu: papel completo para o cliente; garante cookie csrf se ausente.
   app.get('/v1/auth/me', { preHandler: [auth] }, async (request, reply) => {
     const authCtx = request.auth!;
-    const user = deps.users !== undefined ? await deps.users.findById(authCtx.userId) : null;
+    const user = await deps.users.findById(authCtx.userId);
     if (user === null) throw new HttpError(401, 'unauthenticated');
     if (request.cookies.csrf === undefined) {
       setCsrfCookie(deps, reply, randomUUID(), new Date(Date.now() + 3_600_000));
     }
-    return reply.send({ id: user.id, name: user.name, email: user.email, role: user.role });
+    // Task 3: o cliente distingue âmbito de tenant de âmbito de plataforma
+    return reply.send({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      scope: authCtx.isPlatform ? ('platform' as const) : ('tenant' as const),
+    });
   });
 
   // Mudança de palavra-passe: revoga as outras sessões e audita.
@@ -112,7 +119,7 @@ export async function authRoutes(app: FastifyInstance, deps: HttpDeps): Promise<
   // Setup TOTP: pendente de TOTP pode chamá-lo (allowlist do guard); idempotente.
   app.post('/v1/auth/totp/setup', { preHandler: [auth] }, async (request, reply) => {
     const authCtx = request.auth!;
-    const user = deps.users !== undefined ? await deps.users.findById(authCtx.userId) : null;
+    const user = await deps.users.findById(authCtx.userId);
     if (user === null) throw new HttpError(401, 'unauthenticated');
     const { otpauthUrl } = await deps.mfa.startSetup({
       userId: authCtx.userId,

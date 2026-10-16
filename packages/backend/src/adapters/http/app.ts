@@ -15,6 +15,7 @@ import type { AuthConfig } from '../../infra/config-app.js';
 import type { Audit } from '../../ports/audit.js';
 import type { AuthUserRepo, MfaPort, SessionStore } from '../../ports/auth.js';
 import type { PasswordHasher } from '../../ports/security.js';
+import type { TenancyPort } from '../../ports/tenancy.js';
 import type { DbClient } from '../db/index.js';
 import type { UsersRepository } from '../db/users.js';
 import { toProblem } from './errors.js';
@@ -42,11 +43,13 @@ declare module 'fastify' {
 export interface HttpDeps {
   cfg: { nodeEnv: NodeEnv; auth: AuthConfig };
   db?: DbClient;
-  users?: AuthUserRepo; // /v1/auth/me devolve {id,name,email,role}
+  users: AuthUserRepo; // guard de auth (papel/tenant por pedido) + /v1/auth/me
   usersRepo: UsersRepository; // API de utilizadores (Task 10)
   audit: Audit;
   hasher: PasswordHasher;
   sessions: SessionStore;
+  /** Onda 1, Task 3: estado do tenant para o guard (suspensão → 403). */
+  tenancy: TenancyPort;
   login: ReturnType<typeof createLoginService>;
   mfa: MfaPort;
   logger: Logger;
@@ -144,7 +147,7 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
 
   // OpenAPI: qualquer papel autenticado pode lê-lo (docs/01 §3: APIs com OpenAPI);
   // sem sessão → 401, sem requireRole.
-  app.get('/v1/openapi.json', { preHandler: [authenticate({ sessions: deps.sessions })] }, async () =>
+  app.get('/v1/openapi.json', { preHandler: [authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy })] }, async () =>
     app.swagger(),
   );
 

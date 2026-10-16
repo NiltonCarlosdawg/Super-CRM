@@ -14,6 +14,7 @@ import type { DbClient } from '../../src/adapters/db/index.js';
 import { createOutbox } from '../../src/adapters/db/outbox.js';
 import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
+import { createTenancyPort } from '../../src/adapters/db/tenancy.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
 import { attachRealtime, type RealtimeHandle } from '../../src/adapters/realtime/socket.js';
 import { createLoginService } from '../../src/application/auth/login.js';
@@ -130,6 +131,7 @@ export async function buildTestApp(
 
   const sessions = createSessionStore({ db });
   const usersRepo = createAuthUserRepo({ db, hasher });
+  const tenancy = createTenancyPort({ db }); // Onda 1, Task 3: estado do tenant no guard
   const audit = createAuditAdapter({ db });
   const mfa = createFakeMfa(sessions);
   // Task 16: provider falso determinístico (não há rede em testes) + repo de
@@ -174,6 +176,7 @@ export async function buildTestApp(
     audit,
     hasher,
     sessions,
+    tenancy,
     login,
     mfa,
     logger: pino({ level: 'silent' }),

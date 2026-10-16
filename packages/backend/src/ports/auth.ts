@@ -9,6 +9,7 @@ export type Role = 'agent' | 'editor' | 'admin' | 'platform_admin';
 export interface SessionRecord {
   sessionId: string;
   userId: string;
+  /** Snapshot de criação (Task 3): NÃO autoriza nada — o papel por pedido vem da linha `users`. */
   role: Role;
   mfaPending: boolean;
   expiresAt: Date;
@@ -27,12 +28,16 @@ export interface SessionStore {
 
 export interface AuthUserRepo {
   findByEmail(email: string): Promise<{
+    // Task 3: `role`/`active`/`tenantId` são lidos POR PEDIDO pelo guard de
+    // auth — o papel gravado na sessão é só snapshot de criação.
     id: string; name: string; email: string; role: Role; active: boolean;
+    tenantId: string | null;
     passwordHash: string; totpEnabledAt: Date | null;
   } | null>;
   /** Acrescentado à lista do plano: `changePassword` recebe a sessão e precisa do utilizador por id. */
   findById(userId: string): Promise<{
     id: string; name: string; email: string; role: Role; active: boolean;
+    tenantId: string | null;
     passwordHash: string; totpEnabledAt: Date | null;
   } | null>;
   dummyHash(): Promise<string>; // hash constante para tempo de verificação igual (anti-enumeração)

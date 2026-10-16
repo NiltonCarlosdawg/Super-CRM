@@ -1,16 +1,25 @@
 // Guards de autenticação, CSRF e papel (Task 9). A sessão vem do cookie e é
 // validada contra o SessionStore (server-side, A2); o contexto fica em
 // `request.auth` para as rotas consumirem.
+//
+// Onda 1, Task 3: o `request.auth` resolve o âmbito POR PEDIDO — papel,
+// estado e tenant vêm da linha `users` (autoridade), nunca do snapshot da
+// sessão; tenant suspenso → 403 tenant_suspended (spec multitenant §4.3).
 
 import { timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest, onRequestHookHandler, preHandlerHookHandler } from 'fastify';
-import type { Role, SessionRecord, SessionStore } from '../../ports/auth.js';
+import type { AuthUserRepo, Role, SessionRecord, SessionStore } from '../../ports/auth.js';
+import type { TenancyPort } from '../../ports/tenancy.js';
 import { HttpError } from './errors.js';
 
 export interface AuthContext {
   sessionId: string;
   userId: string;
   role: Role;
+  /** Tenant do utilizador (null só para platform_admin, garantido pelo CHECK de users). */
+  tenantId: string | null;
+  /** platform_admin: administra a plataforma, não pertence a nenhum tenant. */
+  isPlatform: boolean;
   mfaPending: boolean;
   ip: string;
 }
@@ -32,7 +41,11 @@ const MFA_ALLOWLIST = new Set([
 ]);
 
 /** Lê o cookie 'session', valida contra o SessionStore e popula request.auth. */
-export function authenticate(deps: { sessions: SessionStore }): preHandlerHookHandler {
+export function authenticate(deps: {
+  sessions: SessionStore;
+  users: AuthUserRepo;
+  tenancy: TenancyPort;
+}): preHandlerHookHandler {
   return async (request) => {
     const sid = request.cookies.session;
     const session: SessionRecord | null = sid ? await deps.sessions.get(sid, new Date()) : null;
@@ -40,10 +53,21 @@ export function authenticate(deps: { sessions: SessionStore }): preHandlerHookHa
     if (session.mfaPending && !MFA_ALLOWLIST.has(route(request))) {
       throw new HttpError(403, 'mfa_required');
     }
+    // Autoridade por pedido: a linha `users` manda (papel, estado, tenant);
+    // `session.role` é snapshot de criação e não autoriza nada (Task 3).
+    const user = await deps.users.findById(session.userId);
+    if (user === null || !user.active) throw new HttpError(401, 'unauthenticated');
+    const isPlatform = user.role === 'platform_admin';
+    if (user.tenantId !== null) {
+      const status = await deps.tenancy.getStatus(user.tenantId);
+      if (status === 'suspended') throw new HttpError(403, 'tenant_suspended');
+    }
     request.auth = {
       sessionId: session.sessionId,
-      userId: session.userId,
-      role: session.role,
+      userId: user.id,
+      role: user.role,
+      tenantId: user.tenantId,
+      isPlatform,
       mfaPending: session.mfaPending,
       ip: request.ip,
     };

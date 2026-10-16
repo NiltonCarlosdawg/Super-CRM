@@ -28,7 +28,7 @@ export async function conversationsRoutes(app: FastifyInstance, deps: HttpDeps):
   const repo = deps.conversations;
   const sender = deps.messageSender;
   if (repo === undefined || sender === undefined) return;
-  const anyRole = [authenticate({ sessions: deps.sessions })];
+  const anyRole = [authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy })];
 
   app.get('/v1/conversations', { preHandler: anyRole }, async (request, reply) => {
     const q = listQuery.parse(request.query);

@@ -72,6 +72,7 @@ export function createAuthUserRepo(deps: {
     email: r.email,
     role: r.role,
     active: r.active,
+    tenantId: r.tenantId, // Task 3: âmbito resolvido por pedido no guard de auth
     passwordHash: r.passwordHash,
     totpEnabledAt: r.totpEnabledAt,
   });

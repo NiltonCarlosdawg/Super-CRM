@@ -32,7 +32,7 @@ export async function usersRoutes(app: FastifyInstance, deps: HttpDeps): Promise
   const repo = deps.usersRepo;
   const audit = deps.audit;
   const hasher = deps.hasher;
-  const adminOnly = [authenticate({ sessions: deps.sessions }), requireRole('admin')];
+  const adminOnly = [authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy }), requireRole('admin')];
 
   app.post('/v1/users', { preHandler: adminOnly }, async (request, reply) => {
     const body = createSchema.parse(request.body);

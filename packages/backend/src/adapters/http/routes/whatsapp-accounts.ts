@@ -23,7 +23,7 @@ export async function whatsappAccountsRoutes(app: FastifyInstance, deps: HttpDep
   if (accounts === undefined || provider === undefined) return;
 
   const notify = deps.notifySink ?? (async () => {});
-  const adminOnly = [authenticate({ sessions: deps.sessions }), requireRole('admin')];
+  const adminOnly = [authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy }), requireRole('admin')];
   const audit = deps.audit;
 
   app.post('/v1/whatsapp-accounts', { preHandler: adminOnly }, async (request, reply) => {

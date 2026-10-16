@@ -15,6 +15,7 @@ import { createDb } from '../adapters/db/index.js';
 import { createConversationsRepository } from '../adapters/db/conversations.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
+import { createTenancyPort } from '../adapters/db/tenancy.js';
 import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
 import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
@@ -49,6 +50,7 @@ async function main(): Promise<void> {
   const hasher = createArgon2Hasher();
   const sessions = createSessionStore({ db });
   const users = createAuthUserRepo({ db, hasher });
+  const tenancy = createTenancyPort({ db }); // Onda 1, Task 3: estado do tenant no guard
   const audit = createAuditAdapter({ db });
   const now = (): Date => new Date();
   const mfa = createMfaService({ users, sessions, totp: createTotp(), cfg: config.auth, audit, now });
@@ -122,6 +124,7 @@ async function main(): Promise<void> {
     audit,
     hasher,
     sessions,
+    tenancy,
     login,
     mfa,
     logger: log,
