@@ -19,9 +19,13 @@ function sqlState(e: unknown): unknown {
   return code(e) ?? code((e as { cause?: unknown }).cause);
 }
 
-/** As 24 tabelas de negócio com `tenant_id NOT NULL` (spec §4.2 — contrato completo). */
+/** As 23 tabelas de negócio com `tenant_id NOT NULL` (spec §4.2 — contrato
+ *  completo). `users` sai daqui na Onda 1 Task 2: `tenant_id` passou a anulável
+ *  para o platform_admin, com a invariante garantida pelo CHECK
+ *  `users_platform_tenant_check` (ver NULLABLE_TENANT_TABLES e
+ *  platform-admin.test.ts). */
 const NOT_NULL_TENANT_TABLES = [
-  'users', 'whatsapp_accounts', 'contacts', 'leads', 'conversations', 'messages',
+  'whatsapp_accounts', 'contacts', 'leads', 'conversations', 'messages',
   'outbox_messages', 'campaigns', 'campaign_recipients', 'campaign_accounts',
   'followup_sequences', 'followup_steps', 'followup_runs',
   'catalog_items', 'knowledge_docs', 'knowledge_chunks', 'rules',
@@ -29,8 +33,10 @@ const NOT_NULL_TENANT_TABLES = [
   'knowledge_suggestions', 'knowledge_revisions', 'answer_traces',
 ] as const;
 
-/** As 2 nullable (spec §4.2): NULL = ação de plataforma / evento órfão. */
-const NULLABLE_TENANT_TABLES = ['audit_log', 'inbound_events'] as const;
+/** As 3 anuláveis (spec §4.2): audit_log/inbound_events = ação de plataforma /
+ *  evento órfão; users = anulável SÓ para platform_admin (Onda 1 Task 2,
+ *  invariante `(role = 'platform_admin') = (tenant_id IS NULL)` em CHECK). */
+const NULLABLE_TENANT_TABLES = ['audit_log', 'inbound_events', 'users'] as const;
 
 /** Tabelas de listagem com `(tenant_id)` + composto por data (spec §4.2).
  *  `inbound_events` não tem `created_at`: o composto é `(tenant_id, received_at)`. */
@@ -63,7 +69,7 @@ test('migrações aplicam de zero e criam tenants + tenant_id obrigatório', asy
     ['active', 'suspended'],
   );
 
-  // Contrato das 24: tenant_id existe e é NOT NULL em todas.
+  // Contrato das 23: tenant_id existe e é NOT NULL em todas.
   for (const table of NOT_NULL_TENANT_TABLES) {
     assert.equal(
       await tenantIdNullable(db, table),
@@ -84,15 +90,17 @@ test('migrações aplicam de zero e criam tenants + tenant_id obrigatório', asy
   }
 });
 
-test('linhas novas sem tenant_id falham (NOT NULL) em users e conversations', async () => {
+// Onda 1 Task 2: em users a falha passou a ser do CHECK (tenant_id anulável
+// para platform_admin; papel de tenant sem tenant viola a invariante — 23514).
+test('linhas novas sem tenant_id falham (CHECK em users, NOT NULL em conversations)', async () => {
   const db = await migratedDb();
   await assert.rejects(
     db.execute(
       sql`INSERT INTO users (name, email, password_hash, role)
           VALUES ('Sem Tenant', 'sem-tenant@test.local', 'hash', 'agent')`,
     ),
-    (e: unknown) => sqlState(e) === '23502',
-    'users sem tenant_id deve falhar com NOT NULL (23502)',
+    (e: unknown) => sqlState(e) === '23514',
+    'users (papel de tenant) sem tenant_id deve falhar com o CHECK (23514)',
   );
   await assert.rejects(
     db.execute(

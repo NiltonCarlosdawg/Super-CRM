@@ -2,9 +2,13 @@
 // hash argon2id + registo de auditoria. A palavra-passe é LIDA por stdin —
 // nunca argv, nunca env (docs/03: segredos não passam por logs/processos).
 //
-// Uso:
+// Uso (Onda 1, Task 2 — spec multitenant §4.3):
 //   echo -n 'senha-forte-123' | npx tsx scripts/create-user.ts \
-//     --email a@b.c --name "Nome" --role admin
+//     --email a@b.c --name "Nome" --role admin [--tenant <uuid>]
+//   echo -n 'senha-forte-123' | npx tsx scripts/create-user.ts \
+//     --email a@b.c --name "Nome" --role platform_admin
+// Papéis de tenant: --tenant opcional (default = tenant MilVendas).
+// platform_admin não aceita --tenant (não pertence a nenhum tenant).
 
 import { Pool } from 'pg';
 import { createAuditAdapter } from '../src/adapters/db/audit-adapter.js';
@@ -39,6 +43,9 @@ function errorCode(e: unknown): unknown {
   return (e as { code?: unknown }).code;
 }
 
+/** Formato de uuid aceite para --tenant (validação na fronteira, docs/02 §5). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function isUniqueViolation(e: unknown): boolean {
   return errorCode(e) === '23505' || errorCode((e as { cause?: unknown }).cause) === '23505';
 }
@@ -49,16 +56,28 @@ async function main(): Promise<number> {
   const email = arg('--email');
   const name = arg('--name');
   const role = arg('--role');
+  const tenant = arg('--tenant');
   if (email === undefined || name === undefined || role === undefined) {
     console.error(
-      'uso: create-user.ts --email a@b.c --name "Nome" --role agent|editor|admin (palavra-passe via stdin)',
+      'uso: create-user.ts --email a@b.c --name "Nome" --role agent|editor|admin [--tenant <uuid>] | --role platform_admin (palavra-passe via stdin)',
     );
     return 1;
   }
-  if (role !== 'agent' && role !== 'editor' && role !== 'admin') {
-    console.error('--role inválido: use agent|editor|admin');
+  if (role !== 'agent' && role !== 'editor' && role !== 'admin' && role !== 'platform_admin') {
+    console.error('--role inválido: use agent|editor|admin|platform_admin');
     return 1;
   }
+  // Onda 1, Task 2 (spec §4.3): platform_admin não pertence a nenhum tenant;
+  // os papéis de tenant usam --tenant opcional (default = tenant MilVendas).
+  if (role === 'platform_admin' && tenant !== undefined) {
+    console.error('--role platform_admin não aceita --tenant: a plataforma não tem tenant');
+    return 1;
+  }
+  if (tenant !== undefined && !UUID_RE.test(tenant)) {
+    console.error('--tenant inválido: use um uuid, ex.: --tenant 6ba7b810-9dad-11d1-80b4-00c04fd430c8');
+    return 1;
+  }
+  const tenantId = role === 'platform_admin' ? null : (tenant ?? MILVENDAS_TENANT_ID);
 
   const plain = (await readStdin()).replace(/\r?\n$/, '');
   if (plain.length === 0) {
@@ -82,8 +101,9 @@ async function main(): Promise<number> {
     const inserted = await db
       .insert(users)
       .values({
-        // Onda 1 (Task 1): tenant fixo até a Task 2 acrescentar --platform/--tenant.
-        tenantId: MILVENDAS_TENANT_ID,
+        // Onda 1 (Task 2): platform_admin ⇒ tenant_id NULL; os restantes
+        // papéis ⇒ --tenant opcional (default = tenant MilVendas).
+        tenantId,
         name,
         email,
         passwordHash,

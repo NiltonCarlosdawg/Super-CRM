@@ -2,7 +2,9 @@
 // legada (sem referências vivas; ruling registada no ledger da Fase 1).
 // Sessões server-side em PostgreSQL: a PK é o valor do cookie (randomUUID()).
 
-export type Role = 'agent' | 'editor' | 'admin';
+// Onda 1, Task 2: 'platform_admin' administra a plataforma (spec §4.3) — não
+// pertence a nenhum tenant (users.tenant_id NULL, garantido por CHECK).
+export type Role = 'agent' | 'editor' | 'admin' | 'platform_admin';
 
 export interface SessionRecord {
   sessionId: string;

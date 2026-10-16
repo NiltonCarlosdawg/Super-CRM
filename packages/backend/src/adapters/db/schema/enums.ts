@@ -5,8 +5,9 @@
 
 import { pgEnum } from 'drizzle-orm/pg-core';
 
-// docs/01 §6: role (admin, editor, agent)
-export const userRoleEnum = pgEnum('user_role', ['admin', 'editor', 'agent']);
+// docs/01 §6: role (admin, editor, agent) + Onda 1 Task 2: platform_admin
+// (spec multitenant §4.3 — administra a plataforma, sem tenant).
+export const userRoleEnum = pgEnum('user_role', ['admin', 'editor', 'agent', 'platform_admin']);
 
 // docs/01 §6 (stage do lead) + gate docs/schema-base.md §4 Q1: open = em curso,
 // won = fechada ganha, lost = fechada perdida. Consumido como `leadStatus` na

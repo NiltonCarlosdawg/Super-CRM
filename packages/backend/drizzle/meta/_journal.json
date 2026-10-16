@@ -36,6 +36,20 @@
       "when": 1792175272652,
       "tag": "0004_charming_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792183275305,
+      "tag": "0005_warm_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792183275306,
+      "tag": "0006_users_platform_tenant_check",
+      "breakpoints": true
     }
   ]
 }
