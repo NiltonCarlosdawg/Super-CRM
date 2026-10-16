@@ -57,6 +57,11 @@ export function messageStatusLabel(status: MessageStatus): string {
   return MESSAGE_STATUS_LABELS[status];
 }
 
+/** Estado activo/inactivo do utilizador (coluna `active` de UserSummary). */
+export function userStatusLabel(active: boolean): string {
+  return active ? "Activo" : "Inactivo";
+}
+
 /** Estado optimista do composer enquanto o POST está no ar. */
 export function composerSendingLabel(): string {
   return "A enviar…";

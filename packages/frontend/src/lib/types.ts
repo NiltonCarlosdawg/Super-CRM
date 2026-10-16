@@ -11,6 +11,16 @@ export interface SessionUser {
   role: Role;
 }
 
+// Resumo de utilizador devolvido por GET/POST/PATCH /v1/users (backend:
+// adapters/db/users.ts:11-17 — nunca inclui passwordHash).
+export interface UserSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  active: boolean;
+}
+
 /** Docs/04 §6 — estados guardados em whatsapp_accounts.status. */
 export type AccountStatus = "connecting" | "connected" | "disconnected" | "suspected_ban";
 
