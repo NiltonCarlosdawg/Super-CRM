@@ -7,6 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useSession, type SessionError } from "../lib/auth";
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
+import { Spinner } from "../components/ui/Spinner";
 
 /** Códigos do problem+json → copy PT-AO; resto cai no detail do backend. */
 const LOGIN_ERRORS: Record<string, string> = {
@@ -29,6 +30,16 @@ export default function LoginPage() {
   // Sessão completa: o /login já cumpriu o papel — segue para o painel.
   if (status === "authed") return <Navigate to="/" replace />;
 
+  // Boot ainda a decidir: sem flash do form de credenciais (o /me pode
+  // redirecionar para / ou para TOTP).
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Spinner label="A verificar sessão" />
+      </div>
+    );
+  }
+
   const submitCredentials = (event: FormEvent) => {
     event.preventDefault();
     void login(email, password);
@@ -44,7 +55,7 @@ export default function LoginPage() {
   const message = errorText(error);
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <p className="mb-3 text-xs uppercase tracking-[0.2em] text-accent">MilVendas · CRM</p>
         <h1 className="font-display text-4xl font-light leading-tight text-fg">
@@ -114,6 +125,6 @@ export default function LoginPage() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

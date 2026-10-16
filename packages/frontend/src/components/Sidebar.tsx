@@ -16,7 +16,10 @@ const linkClass = ({ isActive }: { isActive: boolean }): string =>
 export function Sidebar() {
   const { user } = useSession();
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-surface">
+    <aside
+      aria-label="Menu lateral"
+      className="flex w-60 shrink-0 flex-col border-r border-border bg-surface"
+    >
       <div className="border-b border-border px-5 py-4">
         <span className="font-display text-lg font-light text-fg">MilVendas CRM</span>
       </div>

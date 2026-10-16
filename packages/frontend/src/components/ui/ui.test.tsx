@@ -63,6 +63,20 @@ describe("Toast", () => {
     expect(screen.queryByText("Guardado")).toBeNull();
     expect(screen.getByText("Falhou o envio")).toBeInTheDocument();
   });
+
+  it("mensagem repetida não duplica (efeito duplo do StrictMode)", () => {
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ToastProvider>{children}</ToastProvider>
+    );
+    const { result } = renderHook(() => useToast(), { wrapper });
+
+    act(() => {
+      result.current.error("Sem ligação ao servidor");
+      result.current.error("Sem ligação ao servidor");
+    });
+
+    expect(screen.getAllByText("Sem ligação ao servidor")).toHaveLength(1);
+  });
 });
 
 describe("Card / Spinner / EmptyState", () => {

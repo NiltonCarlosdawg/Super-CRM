@@ -33,8 +33,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const push = useCallback(
     (message: string, tone: ToastItem["tone"]) => {
+      // Dedupe: o StrictMode do dev executa efeitos 2x — o mesmo erro não pode
+      // aparecer duas vezes (em produção era 1, aqui era 2).
       const id = ++nextToastId;
-      setItems((prev) => [...prev, { id, message, tone }]);
+      setItems((prev) =>
+        prev.some((toast) => toast.message === message && toast.tone === tone)
+          ? prev
+          : [...prev, { id, message, tone }],
+      );
       setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
     },
     [dismiss],

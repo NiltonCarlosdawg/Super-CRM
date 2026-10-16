@@ -548,7 +548,10 @@ export default function ConversationsPage() {
 
   return (
     <div className="flex h-[calc(100vh-7rem)]">
-      <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface">
+      <aside
+        aria-label="Fila de conversas"
+        className="flex w-80 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface"
+      >
         <div className="border-b border-border px-4 py-3">
           <h1 className="font-display text-lg font-light text-fg">Conversas</h1>
           <p className="mt-0.5 text-xs text-muted">Últimas mensagens primeiro</p>

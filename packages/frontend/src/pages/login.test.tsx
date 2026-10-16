@@ -100,6 +100,15 @@ describe("LoginPage", () => {
     expect(screen.queryByRole("heading", { name: "Painel MilVendas" })).toBeNull();
   });
 
+  it("loading do boot não mostra o form de credenciais (sem flash)", () => {
+    mockUseSession.mockReturnValue(session({ status: "loading" }));
+    render(<LoginPage />);
+
+    expect(screen.queryByLabelText("Email")).toBeNull();
+    expect(screen.queryByLabelText("Palavra-passe")).toBeNull();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
   it("estados de TOTP oferecem Usar outra conta (logout)", () => {
     for (const status of ["mfa_setup", "mfa_required"] as const) {
       const logout = vi.fn();
