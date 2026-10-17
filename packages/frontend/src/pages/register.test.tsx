@@ -80,6 +80,18 @@ describe("RegisterPage", () => {
     expect(screen.queryByLabelText("Nome da empresa")).toBeNull();
   });
 
+  it("mfa_required no boot mostra só o código (sem QR) com o aviso de admin", () => {
+    mockUseSession.mockReturnValue(session({ status: "mfa_required" }));
+    const { container } = renderRegister();
+
+    expect(screen.getByLabelText("Código de confirmação")).toBeInTheDocument();
+    expect(container.querySelector("svg")).toBeNull();
+    expect(screen.queryByLabelText("Nome da empresa")).toBeNull();
+    expect(
+      screen.getByText(/falta activar o TOTP na tua conta de administrador/),
+    ).toBeInTheDocument();
+  });
+
   it("409 email_already_exists aparece como erro inline", () => {
     mockUseSession.mockReturnValue(
       session({ error: { title: "email_already_exists", detail: "email já registado" } }),
