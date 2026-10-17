@@ -5,11 +5,21 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { createRegisterService } from '../../../application/auth/register.js';
+import { DomainError } from '../../../domain/error.js';
 import type { HttpDeps } from '../app.js';
 import { HttpError } from '../errors.js';
 import { authenticate } from '../guards.js';
 
 const loginSchema = z.object({ email: z.email(), password: z.string().min(1) });
+// Onda 1, Task 6 (spec §5.1): o corpo do registo NÃO tem `role` — campos extra
+// são cortados pelo zod e o serviço fixa 'admin' (platform_admin não é registável).
+const registerSchema = z.object({
+  tenantName: z.string().min(1),
+  name: z.string().min(1),
+  email: z.email(),
+  password: z.string().min(1),
+});
 const passwordSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(1),
@@ -75,6 +85,45 @@ export async function authRoutes(app: FastifyInstance, deps: HttpDeps): Promise<
       return reply.send({ user: result.user, expiresAt: expires.toISOString() });
     },
   );
+
+  // Registo público (Onda 1, Task 6; spec §5.1): cria tenant + admin numa
+  // transacção e auto-loga — a resposta é a mesma do login (mfa setup + cookies).
+  // CSRF como o login: o guard global SÓ corre quando existe cookie de sessão
+  // (guards.ts csrfGuard) e este pedido nasce sem sessão — nenhuma isenção
+  // explícita é necessária. Rate limit: a MESMA config do login (nenhum campo
+  // de config novo, spec §5.1). Só monta com BD presente (padrão `db?`).
+  if (deps.db !== undefined) {
+    const register = createRegisterService({
+      db: deps.db,
+      hasher: deps.hasher,
+      audit: deps.audit,
+      login: deps.login,
+      now: deps.now,
+    });
+    app.post(
+      '/v1/auth/register',
+      {
+        config: {
+          rateLimit: { max: deps.cfg.auth.loginRateMax, timeWindow: deps.cfg.auth.loginRateWindowMs },
+        },
+      },
+      async (request, reply) => {
+        const body = registerSchema.parse(request.body);
+        const result = await register.register({
+          tenantName: body.tenantName,
+          name: body.name,
+          email: body.email,
+          password: body.password,
+          ip: request.ip,
+        });
+        if (result.status === 'email_exists') throw new DomainError('email_already_exists');
+        const expires = new Date(result.expiresAt);
+        setSessionCookie(deps, reply, result.sessionId, expires);
+        setCsrfCookie(deps, reply, randomUUID(), expires);
+        return reply.send({ mfa: 'setup', otpauthUrl: result.otpauthUrl, expiresAt: expires.toISOString() });
+      },
+    );
+  }
 
   // Logout: 204, revoga a sessão se existir e apaga os cookies.
   app.post('/v1/auth/logout', async (request, reply) => {
