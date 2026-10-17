@@ -17,11 +17,13 @@ import type { AuthUserRepo, MfaPort, SessionStore } from '../../ports/auth.js';
 import type { PasswordHasher } from '../../ports/security.js';
 import type { TenancyPort } from '../../ports/tenancy.js';
 import type { DbClient } from '../db/index.js';
+import type { TenantsRepository } from '../db/tenants.js';
 import type { UsersRepository } from '../db/users.js';
 import { toProblem } from './errors.js';
 import { authenticate, csrfGuard } from './guards.js';
 import { authRoutes } from './routes/auth.js';
 import { conversationsRoutes } from './routes/conversations.js';
+import { platformRoutes } from './routes/platform.js';
 import { usersRoutes } from './routes/users.js';
 import { webhookRoutes } from './routes/webhook.js';
 import { whatsappAccountsRoutes } from './routes/whatsapp-accounts.js';
@@ -45,6 +47,8 @@ export interface HttpDeps {
   db?: DbClient;
   users: AuthUserRepo; // guard de auth (papel/tenant por pedido) + /v1/auth/me
   usersRepo: UsersRepository; // API de utilizadores (Task 10)
+  /** Onda 1, Task 7: superfície /v1/platform/* — lista, ciclo de vida e drill. */
+  tenantsRepo: TenantsRepository;
   audit: Audit;
   hasher: PasswordHasher;
   sessions: SessionStore;
@@ -167,6 +171,8 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
       if (deps.conversations !== undefined && deps.messageSender !== undefined) {
         await conversationsRoutes(instance, deps);
       }
+      // Task 7: superfície de plataforma (spec §5.3) — requirePlatform em todas.
+      await platformRoutes(instance, deps);
     },
     { prefix: '' },
   );

@@ -9,7 +9,7 @@ import { DomainError } from '../../../domain/error.js';
 import { assertPasswordPolicy } from '../../../domain/password.js';
 import type { TenantScope } from '../../../ports/tenancy.js';
 import type { HttpDeps } from '../app.js';
-import { authenticate, requireRole } from '../guards.js';
+import { authenticate, requireRole, requireTenant } from '../guards.js';
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -33,13 +33,28 @@ export async function usersRoutes(app: FastifyInstance, deps: HttpDeps): Promise
   const repo = deps.usersRepo;
   const audit = deps.audit;
   const hasher = deps.hasher;
-  const adminOnly = [authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy }), requireRole('admin')];
-
   // Onda 1 (Task 4): rota de tenant SEMPRE opera no tenant da sessão —
-  // `requireRole('admin')` exclui platform_admin (sem tenant) destas rotas.
-  const scope = (request: { auth?: { tenantId: string | null } }): TenantScope => ({
-    tenantId: request.auth!.tenantId!,
-  });
+  // `requireRole('admin')` exclui platform_admin (sem tenant) destas rotas e
+  // `requireTenant` (Task 7, ruling R2/R15) recusa a plataforma ANTES de o
+  // scope ser construído (a matriz T8 exige 403, nunca uma query sem âmbito).
+  const adminOnly = [
+    authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy }),
+    requireRole('admin'),
+    requireTenant(),
+  ];
+
+  // Onda 1 (Task 4): rota de tenant SEMPRE opera no tenant da sessão.
+  // Hardening (review da Task 4, levado na Task 7): `tenantId` null rebenta
+  // AQUI, alto — nunca uma query silenciosa sem âmbito. `requireTenant` torna
+  // este caminho inalcançável; o throw é a rede para qualquer rota futura que
+  // copie o helper sem o guard.
+  const scope = (request: { auth?: { tenantId: string | null } }): TenantScope => {
+    const tenantId = request.auth?.tenantId ?? null;
+    if (tenantId === null) {
+      throw new Error('scope de tenant ausente: rota de tenant alcançada sem requireTenant?');
+    }
+    return { tenantId };
+  };
 
   app.post('/v1/users', { preHandler: adminOnly }, async (request, reply) => {
     const body = createSchema.parse(request.body);

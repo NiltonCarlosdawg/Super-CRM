@@ -10,7 +10,7 @@ import { DomainError } from '../../../domain/error.js';
 import type { TenantScope } from '../../../ports/tenancy.js';
 import type { HttpDeps } from '../app.js';
 import { HttpError } from '../errors.js';
-import { authenticate } from '../guards.js';
+import { authenticate, requireTenant } from '../guards.js';
 
 const idSchema = z.object({ id: z.uuid() });
 
@@ -31,14 +31,26 @@ export async function conversationsRoutes(app: FastifyInstance, deps: HttpDeps):
   const repo = deps.conversations;
   const sender = deps.messageSender;
   if (repo === undefined || sender === undefined) return;
-  const anyRole = [authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy })];
+  // Onda 1 (Task 4): qualquer papel autenticado lê/envia; `requireTenant`
+  // (Task 7, ruling R2/R15) recusa sessões de plataforma — esta é a rota
+  // anyRole onde uma sessão platform antigamente seguia para a query com
+  // scope nulo (fail-safe 404/vazio; agora 403 explícito).
+  const anyRole = [
+    authenticate({ sessions: deps.sessions, users: deps.users, tenancy: deps.tenancy }),
+    requireTenant(),
+  ];
 
-  // Onda 1 (Task 4): o scope vem do utilizador autenticado. Com uma sessão de
-  // platform_admin (tenantId null) as queries devolvem vazio/null → 404 — a
-  // separação definitiva das rotas de plataforma é `requirePlatform` (Task 7).
-  const scope = (request: { auth?: { tenantId: string | null } }): TenantScope => ({
-    tenantId: request.auth!.tenantId!,
-  });
+  // Onda 1 (Task 4): o scope vem do utilizador autenticado.
+  // Hardening (review da Task 4, levado na Task 7): `tenantId` null rebenta
+  // AQUI, alto — nunca uma query silenciosa sem âmbito (`requireTenant`
+  // torna este caminho inalcançável; o throw é a rede para o futuro).
+  const scope = (request: { auth?: { tenantId: string | null } }): TenantScope => {
+    const tenantId = request.auth?.tenantId ?? null;
+    if (tenantId === null) {
+      throw new Error('scope de tenant ausente: rota de tenant alcançada sem requireTenant?');
+    }
+    return { tenantId };
+  };
 
   app.get('/v1/conversations', { preHandler: anyRole }, async (request, reply) => {
     const q = listQuery.parse(request.query);

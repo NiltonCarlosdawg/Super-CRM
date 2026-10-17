@@ -15,6 +15,7 @@ import { createOutbox } from '../../src/adapters/db/outbox.js';
 import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createTenancyPort } from '../../src/adapters/db/tenancy.js';
+import { createTenantsRepository } from '../../src/adapters/db/tenants.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
 import { attachRealtime, type RealtimeHandle } from '../../src/adapters/realtime/socket.js';
 import { createLoginService } from '../../src/application/auth/login.js';
@@ -173,6 +174,7 @@ export async function buildTestApp(
     db,
     users: usersRepo,
     usersRepo: createUsersRepository({ db }),
+    tenantsRepo: createTenantsRepository({ db }), // Onda 1, Task 7: /v1/platform/*
     audit,
     hasher,
     sessions,

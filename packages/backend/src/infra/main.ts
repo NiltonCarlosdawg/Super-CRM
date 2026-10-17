@@ -16,6 +16,7 @@ import { createConversationsRepository } from '../adapters/db/conversations.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
 import { createTenancyPort } from '../adapters/db/tenancy.js';
+import { createTenantsRepository } from '../adapters/db/tenants.js';
 import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
 import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
@@ -121,6 +122,7 @@ async function main(): Promise<void> {
     db,
     users,
     usersRepo: createUsersRepository({ db }),
+    tenantsRepo: createTenantsRepository({ db }), // Onda 1, Task 7: /v1/platform/*
     audit,
     hasher,
     sessions,

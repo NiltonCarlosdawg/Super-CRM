@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { preHandlerHookHandler } from 'fastify';
 import { HttpError } from '../../src/adapters/http/errors.js';
-import { authenticate, requireRole, type AuthContext } from '../../src/adapters/http/guards.js';
+import { authenticate, requirePlatform, requireRole, requireTenant, type AuthContext } from '../../src/adapters/http/guards.js';
 import type { AuthUserRepo, SessionRecord, SessionStore } from '../../src/ports/auth.js';
 import type { TenancyPort } from '../../src/ports/tenancy.js';
 
@@ -164,4 +164,58 @@ test('papel vem da linha users por pedido, não da sessão (utilizador despromov
     assert.equal(err.code, 'forbidden');
     return true;
   });
+});
+
+// ─── Onda 1, Task 7 (rulings R2/R15 + spec §5.3) ─────────────────────────────
+
+const authCtx = (over: Partial<AuthContext> = {}): AuthContext => ({
+  sessionId: 's-1',
+  userId: 'u-1',
+  role: 'admin',
+  tenantId: TENANT_A,
+  isPlatform: false,
+  mfaPending: false,
+  ip: '127.0.0.1',
+  ...over,
+});
+
+const reqAuth = (ctx: AuthContext): FakeRequest => ({ ...fakeRequest('s-1'), auth: ctx });
+
+test('requirePlatform: só plataforma — tenant → 403 forbidden; sem sessão → 401', async () => {
+  await assert.rejects(invoke(requirePlatform())(reqAuth(authCtx())), (err: unknown) => {
+    assert.ok(err instanceof HttpError);
+    assert.equal(err.status, 403);
+    assert.equal(err.code, 'forbidden');
+    return true;
+  });
+  await assert.rejects(invoke(requirePlatform())(fakeRequest('s-1')), (err: unknown) => {
+    assert.ok(err instanceof HttpError);
+    assert.equal(err.status, 401);
+    assert.equal(err.code, 'unauthenticated');
+    return true;
+  });
+  // plataforma autenticada passa (incluindo mfaPending — a recusa disso é do
+  // authenticate, que fica fora do MFA_ALLOWLIST)
+  await invoke(requirePlatform())(reqAuth(authCtx({ role: 'platform_admin', tenantId: null, isPlatform: true })));
+  await invoke(requirePlatform())(reqAuth(authCtx({ role: 'platform_admin', tenantId: null, isPlatform: true, mfaPending: true })));
+});
+
+test('requireTenant: plataforma em rota de tenant → 403 forbidden; sessão de tenant passa (R2/R15)', async () => {
+  await assert.rejects(
+    invoke(requireTenant())(reqAuth(authCtx({ role: 'platform_admin', tenantId: null, isPlatform: true }))),
+    (err: unknown) => {
+      assert.ok(err instanceof HttpError);
+      assert.equal(err.status, 403);
+      assert.equal(err.code, 'forbidden');
+      return true;
+    },
+  );
+  await assert.rejects(invoke(requireTenant())(fakeRequest('s-1')), (err: unknown) => {
+    assert.ok(err instanceof HttpError);
+    assert.equal(err.status, 401);
+    return true;
+  });
+  // qualquer papel de tenant passa (agent mesmo em rota admin-only: o papel decide depois)
+  await invoke(requireTenant())(reqAuth(authCtx()));
+  await invoke(requireTenant())(reqAuth(authCtx({ role: 'admin' })));
 });

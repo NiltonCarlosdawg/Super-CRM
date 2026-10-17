@@ -86,6 +86,38 @@ export function requireRole(role: Role): preHandlerHookHandler {
 }
 
 /**
+ * Onda 1, Task 7 (ruling R2/R15): preHandler de TODA rota de tenant — uma
+ * sessão de plataforma (tenantId null) é recusada aqui em vez de construir um
+ * scope silencioso sem âmbito (o `tenantId!` dos helpers de rota seria um
+ * type-lie; o hardening desses helpers faz throw, mas este guard é o contrato).
+ */
+export function requireTenant(): preHandlerHookHandler {
+  return async (request) => {
+    const auth = request.auth;
+    if (auth === undefined) throw new HttpError(401, 'unauthenticated');
+    if (auth.isPlatform) {
+      throw new HttpError(403, 'forbidden', 'rota de tenant não aceita sessão de plataforma');
+    }
+  };
+}
+
+/**
+ * Onda 1, Task 7 (spec multitenant §5.3): preHandler de TODA rota
+ * `/v1/platform/*`. As rotas de plataforma ficam FORA do MFA_ALLOWLIST — uma
+ * sessão mfaPending é recusada pelo `authenticate` (403 mfa_required) ANTES
+ * deste guard correr.
+ */
+export function requirePlatform(): preHandlerHookHandler {
+  return async (request) => {
+    const auth = request.auth;
+    if (auth === undefined) throw new HttpError(401, 'unauthenticated');
+    if (!auth.isPlatform) {
+      throw new HttpError(403, 'forbidden', "rota de plataforma: é necessário o papel 'platform_admin'");
+    }
+  };
+}
+
+/**
  * CSRF por cookie (docs/03): mutações autenticadas por cookie exigem o header
  * 'x-csrf-token' igual ao cookie 'csrf' (comparação em tempo constante).
  * Sem cookie de sessão não há nada a proteger — o authenticate responde 401.
