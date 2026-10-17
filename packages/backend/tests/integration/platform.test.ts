@@ -1,6 +1,7 @@
 // Onda 1, Task 7 (spec multitenant §5.3): superfície /v1/platform/* — lista de
 // tenants com contagens, ciclo de vida (suspend/activate) e drill read-only de
-// suporte auditado (`platform.view_tenant` no PRIMEIRO acesso a cada tenant).
+// suporte auditado À CADA acesso (`platform.view_tenant`, ruling R22 — a única
+// via cross-tenant nunca fica sem audit).
 // Guardas: `requirePlatform` em TODAS as rotas de plataforma (sessão mfaPending
 // fica fora do MFA_ALLOWLIST → 403 mfa_required) e `requireTenant` em TODAS as
 // rotas de tenant (ruling R2/R15 — plataforma numa rota de tenant → 403, nunca
@@ -205,7 +206,7 @@ test('suspend → tenants.status suspended + audit tenant.suspend; activate rep�
   }
 });
 
-test('drill read-only devolve users/contas/conversas do tenant pedido (+ 1º acesso auditado)', async () => {
+test('drill read-only devolve users/contas/conversas do tenant pedido (+ audit por acesso)', async () => {
   const app = await buildTestApp();
   try {
     const p = await loginPlatform(app);
@@ -267,34 +268,42 @@ test('drill read-only devolve users/contas/conversas do tenant pedido (+ 1º ace
     assert.equal(thread.json().conversation.id, conv.id);
     assert.equal(thread.json().lastMessage.body, 'olá da drill');
 
-    // PRIMEIRO acesso ao tenant auditado UMA única vez (spec §5.3)
-    const views = await app.db
-      .select()
-      .from(base.auditLog)
-      .where(eq(base.auditLog.action, 'platform.view_tenant'));
-    assert.equal(views.length, 1, 'platform.view_tenant só no primeiro acesso ao tenant');
-    assert.deepEqual(
-      { tenantId: views[0]?.tenantId, actorId: views[0]?.actorId, entityId: views[0]?.entityId },
-      { tenantId: T, actorId: p.userId, entityId: T },
-      'audit ligado ao tenant PERFURADO e ao platform_admin',
-    );
+    // CADA acesso ao drill audita `platform.view_tenant` (ruling R22: a única
+    // via cross-tenant nunca fica sem audit depois do primeiro acesso)
+    const viewCount = async (): Promise<number> => {
+      const rows = await app.db
+        .select()
+        .from(base.auditLog)
+        .where(eq(base.auditLog.action, 'platform.view_tenant'));
+      for (const v of rows) {
+        assert.deepEqual(
+          { tenantId: v.tenantId, actorId: v.actorId, entityId: v.entityId },
+          { tenantId: T, actorId: p.userId, entityId: T },
+          'cada audit ligado ao tenant PERFURADO e ao platform_admin',
+        );
+      }
+      return rows.length;
+    };
+    assert.equal(await viewCount(), 4, 'UM audit por cada um dos 4 acessos ao drill');
+
+    // repetir o MESMO endpoint audita de novo (não é só o primeiro acesso)
+    const usersAgain = await get(app, `/v1/platform/tenants/${T}/users`, p.session);
+    assert.equal(usersAgain.statusCode, 200);
+    assert.equal(await viewCount(), 5, '2º acesso ao mesmo endpoint do drill audita outra vez');
 
     // tenant inexistente → 404 e NENHUM audit (sem 500 pela FK do audit_log)
     const missing = await get(app, `/v1/platform/tenants/${randomUUID()}/users`, p.session);
     assert.equal(missing.statusCode, 404);
-    const viewsAfter = await app.db
-      .select()
-      .from(base.auditLog)
-      .where(eq(base.auditLog.action, 'platform.view_tenant'));
-    assert.equal(viewsAfter.length, 1, '404 não audita nem conta como acesso');
+    assert.equal(await viewCount(), 5, 'tenant inexistente não audita nem conta como acesso');
 
-    // conversa inexistente no tenant → 404
+    // conversa inexistente no tenant → 404; o ACESSO de suporte foi auditado
     const noConv = await get(
       app,
       `/v1/platform/tenants/${T}/conversations/${randomUUID()}`,
       p.session,
     );
     assert.equal(noConv.statusCode, 404);
+    assert.equal(await viewCount(), 6, 'acesso de suporte auditado mesmo com 404 interno');
 
     // read-only: o drill NÃO tem rotas de escrita (POST → 404, sem forjar nada)
     const write = await app.inject({
@@ -305,6 +314,7 @@ test('drill read-only devolve users/contas/conversas do tenant pedido (+ 1º ace
       payload: { name: 'Forjado', email: 'forjado@test.local', role: 'agent', password: TEST_PASSWORD },
     });
     assert.equal(write.statusCode, 404, 'nenhuma rota de escrita no drill');
+    assert.equal(await viewCount(), 6, 'rota inexistente não audita');
     const forged = await app.db
       .select()
       .from(base.users)
@@ -450,20 +460,24 @@ test('sessão platform em qualquer rota de tenant → 403 (requireTenant, R2/R15
   try {
     const p = await loginPlatform(app);
 
-    // superfície de tenant inteira: 403 forbidden — incluindo as rotas anyRole
-    // (antes desta task respondiam 200 vazio/null com scope nulo — fail-safe 404)
+    // superfície de tenant inteira: 403 forbidden — matriz EXAUSTIVA das 11
+    // rotas de tenant existentes (3 users + 4 accounts + 4 conversations;
+    // `GET /v1/users/:id` NÃO existe — users só tem list/create/patch). A rota
+    // anyRole respondia 200 vazio/null com scope nulo antes desta task.
     const tenantReqs: Array<{ method: 'GET' | 'PATCH' | 'POST'; url: string; payload?: unknown }> = [
       { method: 'GET', url: '/v1/users' },
+      { method: 'POST', url: '/v1/users', payload: {} },
+      { method: 'PATCH', url: `/v1/users/${app.users.agent.id}`, payload: { active: false } },
       { method: 'GET', url: '/v1/whatsapp-accounts' },
       { method: 'GET', url: '/v1/whatsapp-accounts/' + randomUUID() },
+      { method: 'POST', url: '/v1/whatsapp-accounts', payload: { label: 'X', purpose: 'support' } },
+      { method: 'POST', url: `/v1/whatsapp-accounts/${randomUUID()}/logout` },
       { method: 'GET', url: '/v1/conversations' },
       { method: 'GET', url: `/v1/conversations/${randomUUID()}` },
       { method: 'GET', url: `/v1/conversations/${randomUUID()}/messages` },
       { method: 'POST', url: `/v1/conversations/${randomUUID()}/messages`, payload: { text: 'oi' } },
-      { method: 'POST', url: '/v1/users', payload: {} },
-      { method: 'PATCH', url: `/v1/users/${app.users.agent.id}`, payload: { active: false } },
-      { method: 'POST', url: '/v1/whatsapp-accounts', payload: { label: 'X', purpose: 'support' } },
     ];
+    assert.equal(tenantReqs.length, 11, 'matriz cobre as 11 rotas de tenant (T8 constrói sobre isto)');
     for (const req of tenantReqs) {
       const res = await app.inject({
         method: req.method,

@@ -1,13 +1,13 @@
 // Repositório de tenants (Onda 1, Task 7; spec multitenant §5.3): a
-// superfície de dados da plataforma — lista com contagens (users/contas),
-// ciclo de vida (suspend/activate sobre `tenants.status`) e a pergunta do
-// PRIMEIRO acesso do drill auditado (`platform.view_tenant`).
+// superfície de dados da plataforma — lista com contagens (users/contas) e
+// ciclo de vida (suspend/activate sobre `tenants.status`).
+// (O audit do drill `platform.view_tenant` vive no port Audit, chamado pela
+// rota À CADA acesso — ruling R22; nenhum estado de "já visto" existe.)
 // A suspensão vive SÓ em `tenants.status` — `users` não é tocado (o CHECK
 // role ⇔ tenant_id fica intacto; spec §4.3).
 
-import { and, count, eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import type { DbClient } from './index.js';
-import { auditLog } from './schema/audit.schema.js';
 import { tenants } from './schema/tenants.schema.js';
 import { users } from './schema/users.schema.js';
 import { whatsappAccounts } from './schema/whatsapp-accounts.schema.js';
@@ -35,9 +35,6 @@ export interface TenantsRepository {
   get(id: string): Promise<TenantSummary | null>;
   /** suspend/activate: false se o tenant não existe (nenhuma escrita). */
   setStatus(id: string, status: TenantStatus): Promise<boolean>;
-  /** Task 7: o drill audita `platform.view_tenant` só no 1º acesso ao tenant —
-   *  true = já houve pelo menos um acesso (o audit não se repete). */
-  hasPlatformViewAudit(tenantId: string): Promise<boolean>;
 }
 
 export function createTenantsRepository(deps: { db: DbClient }): TenantsRepository {
@@ -95,15 +92,6 @@ export function createTenantsRepository(deps: { db: DbClient }): TenantsReposito
         .where(eq(tenants.id, id))
         .returning({ id: tenants.id });
       return updated.length > 0;
-    },
-
-    async hasPlatformViewAudit(tenantId) {
-      const rows = await deps.db
-        .select({ id: auditLog.id })
-        .from(auditLog)
-        .where(and(eq(auditLog.tenantId, tenantId), eq(auditLog.action, 'platform.view_tenant')))
-        .limit(1);
-      return rows.length > 0;
     },
   };
 }

@@ -5,8 +5,9 @@
 // `requireTenant`, ruling R2/R15).
 //
 // O drill é a ÚNICA via cross-tenant sanctionada: o scope vem do path
-// `:tenantId` (nunca do corpo — spec §4.5) e cada PRIMEIRO acesso a um tenant
-// é auditado (`platform.view_tenant`, spec §5.3). Escrita dentro de tenant por
+// `:tenantId` (nunca do corpo — spec §4.5) e CADA acesso a um tenant é
+// auditado (`platform.view_tenant`, ruling R22 — a via mais privilegiada
+// nunca fica sem audit). Escrita dentro de tenant por
 // plataforma = 403 em v1 (impersonation é futuro; as únicas mutações aqui são
 // o ciclo de vida do TENANT, auditadas com o tenant afetado, spec §5.4).
 
@@ -57,22 +58,21 @@ export async function platformRoutes(app: FastifyInstance, deps: HttpDeps): Prom
     });
   };
 
-  /** Drill: scope do path (única via cross-tenant) + auditoria do 1º acesso.
+  /** Drill: scope do path (única via cross-tenant) + audit de CADA acesso
+   *  (`platform.view_tenant`, ruling R22 — ver Preocupações do review).
    *  Tenant inexistente → 404 ANTES de qualquer audit/read (nunca 500 pela FK). */
   const drillScope = async (request: FastifyRequest, tenantId: string): Promise<TenantScope> => {
     const tenant = await repo.get(tenantId);
     if (tenant === null) throw new DomainError('not_found');
-    if (!(await repo.hasPlatformViewAudit(tenantId))) {
-      await deps.audit.record({
-        tenantId, // tenant PERFURADO (drill auditado, spec §5.3)
-        actorId: request.auth!.userId,
-        action: 'platform.view_tenant',
-        entity: 'tenant',
-        entityId: tenantId,
-        at: deps.now(),
-        ip: request.ip,
-      });
-    }
+    await deps.audit.record({
+      tenantId, // tenant PERFURADO (drill auditado por acesso, spec §5.3/§6)
+      actorId: request.auth!.userId,
+      action: 'platform.view_tenant',
+      entity: 'tenant',
+      entityId: tenantId,
+      at: deps.now(),
+      ip: request.ip,
+    });
     return { tenantId };
   };
 
