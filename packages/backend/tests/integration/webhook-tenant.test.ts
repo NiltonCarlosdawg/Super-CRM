@@ -406,6 +406,17 @@ test('SQL do orquestrador não escreve nem lê linhas de outro tenant (busca por
     await seedKnowledge(tenantB, 'B');
     const convA = await seedTenantData(app, base.MILVENDAS_TENANT_ID, { session: 'sess-t5-4a', phone: PHONE_A });
     const convB = await seedTenantData(app, tenantB, { session: 'sess-t5-4b', phone: PHONE_B });
+    // Lead de B ligado à conversa de B — fixture do fold-in T8 do saveState
+    // (sem lead ligado não há linha onde o answers poderia escrever).
+    const [leadB] = await app.db
+      .insert(base.leads)
+      .values({ tenantId: tenantB, contactId: convB.contactId, stage: 'open', qualification: { empresa: 'B' } })
+      .returning({ id: base.leads.id });
+    assert.ok(leadB !== undefined, 'fixture lead de B');
+    await app.db
+      .update(base.conversations)
+      .set({ leadId: leadB.id })
+      .where(eq(base.conversations.id, convB.conversationId));
 
     const factory = createOrchestratorPorts({
       db: app.db,
@@ -429,6 +440,20 @@ test('SQL do orquestrador não escreve nem lê linhas de outro tenant (busca por
       .from(base.conversations)
       .where(eq(base.conversations.id, convB.conversationId));
     assert.equal(convBRow?.aiMode, 'ai_active', 'saveState cross-tenant não escreve (continua o fixture)');
+
+    // Fold-in T8 (matriz §8.2): `saveState({ answers })` cross-tenant também é
+    // no-op — o UPDATE do lead exige o tenant nos DOIS níveis (lead próprio e
+    // conversa da subquery): nunca escrever na qualificação do lead alheio.
+    await portsA.saveState(convB.conversationId, { answers: { empresa: 'Forjado' } });
+    const [leadBRow] = await app.db
+      .select({ qualification: base.leads.qualification })
+      .from(base.leads)
+      .where(eq(base.leads.id, leadB.id));
+    assert.deepEqual(
+      leadBRow?.qualification,
+      { empresa: 'B' },
+      'saveState({answers}) cross-tenant não escreve no lead de B',
+    );
     assert.equal(await portsA.findOpenHandoff(convB.conversationId), null, 'handoffs do outro tenant são invisíveis');
 
     // Claim: o evento do tenant B não é reivindicável pelos ports do tenant A.
