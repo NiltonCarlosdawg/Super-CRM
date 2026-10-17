@@ -10,6 +10,7 @@ import { auditLog } from '../../src/adapters/db/schema/audit.schema.js';
 import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createMfaService } from '../../src/application/auth/mfa.js';
+import { DomainError } from '../../src/domain/error.js';
 import { createArgon2Hasher } from '../../src/infra/security/argon2.js';
 import type { AuthConfig } from '../../src/infra/config-app.js';
 import { createTotp, decryptSecret } from '../../src/infra/security/totp.js';
@@ -81,4 +82,52 @@ test('mfa: segredo cifrado em BD; verify correto ativa, errado não; audit', asy
   const audits = await db.select().from(auditLog).where(eq(auditLog.action, 'auth.totp_enabled'));
   assert.equal(audits.length, 1);
   assert.equal(audits[0]?.actorId, userId);
+});
+
+// Task 12 (ruling R29): depois de ACTIVO, um novo startSetup recusa (409 via
+// fronteira) e o segredo em BD fica INTACTO — nunca rotação silenciosa.
+test('mfa: startSetup com totp activo recusa e não rotaciona o segredo', async () => {
+  const db = await migratedDb();
+  const hasher = createArgon2Hasher();
+  const email = 'activa@test.local';
+  const inserted = await db
+    .insert(users)
+    .values({
+      tenantId: MILVENDAS_TENANT_ID,
+      name: 'Activa', email,
+      passwordHash: await hasher.hash('senha-muito-forte-123'),
+      role: 'admin', active: true,
+    })
+    .returning({ id: users.id });
+  const userId = inserted[0]?.id;
+  assert.ok(userId, 'utilizador criado');
+
+  const now = () => new Date('2026-10-17T10:00:00.000Z');
+  const totp = createTotp();
+  const sessions = createSessionStore({ db });
+  const usersRepo = createAuthUserRepo({ db, hasher });
+  const mfa = createMfaService({ users: usersRepo, sessions, totp, cfg, audit: createAuditAdapter({ db }), now });
+
+  // ciclo completo: setup + verify → TOTP activo
+  const { otpauthUrl } = await mfa.startSetup({ userId, email, now: now() });
+  const secret = new URL(otpauthUrl).searchParams.get('secret');
+  assert.ok(secret, 'segredo do 1º setup');
+  const { sessionId } = await sessions.create({
+    userId, role: 'admin', mfaPending: true, now: now(), ttlHours: cfg.sessionTtlHours, ip: '10.0.0.2',
+  });
+  assert.equal(
+    await mfa.verifyAndFinish({ sessionId, userId, code: totp.generate(secret, now()), now: now() }),
+    true,
+  );
+
+  // TOTP activo: startSetup novo → DomainError totp_already_enabled (409 na fronteira)
+  await assert.rejects(
+    () => mfa.startSetup({ userId, email, now: now() }),
+    (e: unknown) => e instanceof DomainError && e.code === 'totp_already_enabled',
+  );
+
+  // o segredo em BD é o do 1º setup — intocado
+  const [row] = await db.select().from(users).where(eq(users.id, userId));
+  assert.equal(decryptSecret(row!.totpSecret!, cfg.authSecret), secret);
+  assert.ok(row?.totpEnabledAt, 'totp continua activo');
 });

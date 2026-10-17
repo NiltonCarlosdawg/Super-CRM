@@ -41,6 +41,9 @@ const DOMAIN: Record<string, [number, string]> = {
   user_not_found: [404, 'utilizador não encontrado'],
   email_already_exists: [409, 'email já registado'],
   last_admin: [409, 'não é possível remover o último administrador ativo'],
+  // Task 12 (ruling R29): setup TOTP repetido de um utilizador já activo —
+  // o segredo activo nunca é rodado sem verify (lockout).
+  totp_already_enabled: [409, 'TOTP já ativado nesta conta'],
   // Task 21: paginação e envio de mensagens
   invalid_cursor: [400, 'cursor de paginação inválido'],
   message_empty: [400, 'mensagem vazia ou só espaços'],

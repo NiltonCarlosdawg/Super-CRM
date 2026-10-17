@@ -2,7 +2,12 @@
 // `startSetup` gera e persiste o segredo CIFRADO (AES-256-GCM sob AUTH_SECRET);
 // `verifyAndFinish` decifra, valida o código e só então ativa TOTP e limpa
 // `mfaPending`. Registo de auditoria `auth.totp_enabled`.
+// Task 12 (ruling R29): `startSetup` RECUSA com `totp_already_enabled` quando
+// `totpEnabledAt` já está marcado — rodar o segredo activo antes de qualquer
+// verify daria lockout no login seguinte (o authenticator fica com o código
+// velho; a BD, com o novo).
 
+import { DomainError } from '../../domain/error.js';
 import type { Audit } from '../../ports/audit.js';
 import type { MfaPort, SessionStore, UserTotpRepo } from '../../ports/auth.js';
 import type { Totp } from '../../ports/security.js';
@@ -19,6 +24,12 @@ export function createMfaService(deps: {
 }): MfaPort {
   return {
     async startSetup({ userId, email, now }) {
+      const state = await deps.users.getTotpState(userId);
+      // Guarda R29: TOTP activo nunca é rotacionado por aqui (o caminho de
+      // desactivação não existe ainda — 409 honesto, sem tocar na BD).
+      if (state !== null && state.totpEnabledAt !== null) {
+        throw new DomainError('totp_already_enabled');
+      }
       const secret = deps.totp.generateSecret();
       await deps.users.setTotpSecret(userId, encryptSecret(secret, deps.cfg.authSecret), now);
       return {
