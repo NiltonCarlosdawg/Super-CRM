@@ -1,17 +1,26 @@
 import { NavLink } from "react-router-dom";
 import { useSession } from "../lib/auth";
 
-const NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  label: string;
+  end?: boolean;
+  /** Onda 1, Task 11: /accounts é admin-only no cliente (RequireAdmin). */
+  adminOnly?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", end: true },
-  { to: "/accounts", label: "Contas" },
+  { to: "/accounts", label: "Contas", adminOnly: true },
   { to: "/conversations", label: "Conversas" },
   { to: "/campaigns", label: "Campanhas" },
+  { to: "/settings", label: "Definições" },
 ];
 
 // Onda 1 (Task 10): plataforma não pertence a nenhum tenant — vê SÓ a sua
 // página (spec multitenant §6); os papéis de tenant mantêm o menu actual,
 // sem qualquer link de plataforma.
-const PLATFORM_NAV_ITEMS = [{ to: "/platform", label: "Plataforma", end: false }];
+const PLATFORM_NAV_ITEMS: NavItem[] = [{ to: "/platform", label: "Plataforma", end: false }];
 
 const linkClass = ({ isActive }: { isActive: boolean }): string =>
   `block px-3 py-2 text-sm transition-colors ${
@@ -21,7 +30,10 @@ const linkClass = ({ isActive }: { isActive: boolean }): string =>
 export function Sidebar() {
   const { user } = useSession();
   const isPlatform = user?.scope === "platform";
-  const items = isPlatform ? PLATFORM_NAV_ITEMS : NAV_ITEMS;
+  const isAdmin = user?.role === "admin";
+  const items = (isPlatform ? PLATFORM_NAV_ITEMS : NAV_ITEMS).filter(
+    (item) => item.adminOnly !== true || isAdmin,
+  );
   return (
     <aside
       aria-label="Menu lateral"
@@ -36,7 +48,7 @@ export function Sidebar() {
             {item.label}
           </NavLink>
         ))}
-        {user?.role === "admin" && (
+        {isAdmin && (
           <NavLink to="/users" className={linkClass}>
             Utilizadores
           </NavLink>

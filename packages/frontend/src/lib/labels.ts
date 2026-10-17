@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import type { HandoffPriority } from "./socket";
 import type { SessionError } from "./auth";
+import { ApiError } from "./api";
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
@@ -103,6 +104,57 @@ const HANDOFF_PRIORITY_LABELS: Record<HandoffPriority, string> = {
 
 export function handoffPriorityLabel(priority: HandoffPriority): string {
   return HANDOFF_PRIORITY_LABELS[priority];
+}
+
+// --- Definições e reposição de password (Onda 1, Task 11) ---
+
+/** Modal de confirmação de POST /v1/auth/password: mantém a sessão actual,
+ * revoga as outras (backend login.ts:112 — `revokeAllForUser(id, sessionId)`). */
+export const OWN_PASSWORD_SESSIONS_WARNING =
+  "As outras sessões desta conta serão terminadas — a sessão actual mantém-se.";
+
+/** Modal de repo (PATCH /v1/users/:id {password}): revoga TODAS as sessões do alvo. */
+export const RESET_PASSWORD_SESSIONS_WARNING =
+  "As sessões activas desta conta serão terminadas.";
+
+/** Nota honesta: não existe rota para desactivar TOTP (backend sem endpoint). */
+export const TOTP_DISABLE_NOTE =
+  "Desactivar o TOTP não está disponível — contacte o suporte.";
+
+export const PASSWORD_CHANGED_MESSAGE = "Palavra-passe alterada";
+export const PASSWORD_RESET_MESSAGE = "Palavra-passe reposta";
+export const TOTP_ENABLED_MESSAGE = "TOTP activado";
+
+/** Toast honesto de RequireAdmin(notice) em /accounts (admin-only no cliente). */
+export const ACCOUNTS_FORBIDDEN_NOTICE =
+  "Acesso restrito: só administradores podem abrir as Contas.";
+
+/** Códigos do problem+json de POST /v1/auth/password → copy PT-AO. */
+const PASSWORD_CHANGE_ERRORS: Record<string, string> = {
+  invalid_credentials: "A palavra-passe actual está incorrecta",
+  weak_password: "A palavra-passe é demasiado fraca — usa pelo menos 12 caracteres",
+  network: "Sem ligação ao servidor",
+};
+
+/** Códigos do problem+json de POST /v1/auth/totp/* → copy PT-AO. */
+const TOTP_ERRORS: Record<string, string> = {
+  invalid_code: "Código inválido — tenta de novo",
+  network: "Sem ligação ao servidor",
+};
+
+function problemText(error: unknown, map: Record<string, string>, fallback: string): string {
+  if (error instanceof ApiError) return map[error.title] ?? error.detail ?? fallback;
+  return "Erro inesperado";
+}
+
+/** Erro da mudança da password própria (a política e a sessão são do servidor). */
+export function passwordChangeErrorText(error: unknown): string {
+  return problemText(error, PASSWORD_CHANGE_ERRORS, "Erro ao mudar a palavra-passe");
+}
+
+/** Erro do setup/verify de TOTP (o código inválido vem do servidor — 400). */
+export function totpErrorText(error: unknown): string {
+  return problemText(error, TOTP_ERRORS, "Erro ao configurar o TOTP");
 }
 
 // --- Plataforma (Onda 1, Task 10) ---

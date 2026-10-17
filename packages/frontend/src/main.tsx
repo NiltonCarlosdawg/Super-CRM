@@ -21,6 +21,9 @@ import ConversationsPage from "./pages/conversations";
 import CampaignsPage from "./pages/campaigns";
 import UsersPage from "./pages/users";
 import PlatformPage from "./pages/platform";
+import SettingsPage from "./pages/settings";
+
+import { ACCOUNTS_FORBIDDEN_NOTICE } from "./lib/labels";
 
 import "./globals.css";
 
@@ -34,10 +37,21 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/register" element={<RegisterPage />} />
             <Route element={<RequireAuth><AppShell /></RequireAuth>}>
               <Route path="/" element={<DashboardPage />} />
-              <Route path="/accounts" element={<AccountsPage />} />
+              {/* Onda 1, Task 11: /accounts é admin-only no cliente —
+                  não-admin por URL directo é redirecionado com toast honesto. */}
+              <Route
+                path="/accounts"
+                element={
+                  <RequireAdmin notice={ACCOUNTS_FORBIDDEN_NOTICE}>
+                    <AccountsPage />
+                  </RequireAdmin>
+                }
+              />
               <Route path="/conversations" element={<ConversationsPage />} />
               <Route path="/conversations/:id" element={<ConversationsPage />} />
               <Route path="/campaigns" element={<CampaignsPage />} />
+              {/* Definições: qualquer sessão completa muda a sua própria password. */}
+              <Route path="/settings" element={<SettingsPage />} />
               <Route
                 path="/users"
                 element={<RequireAdmin><UsersPage /></RequireAdmin>}

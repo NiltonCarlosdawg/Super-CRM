@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ToastProvider } from "./ui/Toast";
 import { useSession } from "../lib/auth";
 import { RequireAdmin, RequireAuth } from "./guards";
 
@@ -112,5 +113,37 @@ describe("RequireAdmin", () => {
       </RequireAdmin>,
     );
     expect(screen.getByText("users-page")).toBeInTheDocument();
+  });
+
+  // Onda 1, Task 11: /accounts é admin-only no cliente; quem chega por URL
+  // directo é redirecionado com um toast honesto (aviso = notice).
+  it("com notice, não-admin é redirecionado para / e vê o toast honesto", () => {
+    mockUseSession.mockReturnValue(
+      session({ user: { id: "u1", name: "A", email: "a@b.c", role: "agent", scope: "tenant" } }),
+    );
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={["/accounts"]}>
+          <Routes>
+            <Route path="/login" element={<div>login-page</div>} />
+            <Route path="/" element={<div>home-page</div>} />
+            <Route
+              path="/accounts"
+              element={
+                <RequireAdmin notice="Acesso restrito: só administradores podem abrir as Contas.">
+                  <div>accounts-page</div>
+                </RequireAdmin>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    );
+
+    expect(screen.getByText("home-page")).toBeInTheDocument();
+    expect(screen.queryByText("accounts-page")).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Acesso restrito: só administradores podem abrir as Contas.",
+    );
   });
 });

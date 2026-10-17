@@ -2,12 +2,21 @@
 // (a política de password é do servidor — 12–100 caracteres, password.ts — e a
 // dica vive no campo), acções desactivadas na linha do próprio (o backend
 // recusa cannot_modify_self, users.ts:75-77) e 409 last_admin/email já
-// registado em toast. Só admin chega aqui (RequireAdmin na rota, main.tsx:39).
+// registado em toast. Repo de password (Onda 1, Task 11): modal → PATCH
+// /v1/users/:id {password}, admin só e nunca na linha do próprio — o backend
+// revoga todas as sessões do alvo (routes/users.ts:124). Só admin chega aqui
+// (RequireAdmin na rota, main.tsx).
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSession } from "../lib/auth";
 import { api, ApiError } from "../lib/api";
-import { roleLabel, userStatusLabel } from "../lib/labels";
+import {
+  PASSWORD_HINT,
+  PASSWORD_RESET_MESSAGE,
+  RESET_PASSWORD_SESSIONS_WARNING,
+  roleLabel,
+  userStatusLabel,
+} from "../lib/labels";
 import type { Role, UserSummary } from "../lib/types";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -33,6 +42,13 @@ export default function UsersPage() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("agent");
   const [password, setPassword] = useState("");
+  // Repo de password (Task 11): modal por utilizador — admin só (a rota é
+  // RequireAdmin e o controlo esconde-se sem papel admin) e NUNCA na linha
+  // do próprio (ruling T11; o backend recusa cannot_modify_self).
+  const [resetTarget, setResetTarget] = useState<UserSummary | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
 
   const load = useCallback(() => {
     return api
@@ -83,6 +99,42 @@ export default function UsersPage() {
       show("Utilizador criado");
     } catch (error) {
       toastError(errorText(error));
+    }
+  };
+
+  const openReset = (user: UserSummary) => {
+    setResetTarget(user);
+    setResetPassword("");
+    setResetError(null);
+  };
+
+  const closeReset = () => {
+    if (resetSubmitting) return;
+    setResetTarget(null);
+    setResetPassword("");
+    setResetError(null);
+  };
+
+  // PATCH /v1/users/:id {password} (routes/users.ts:89-140): valida a política,
+  // revoga TODAS as sessões do alvo e audita user.password_reset. A password
+  // nunca é exibida nem fica no DOM — o modal fecha e o campo é limpo.
+  const submitReset = async (event: FormEvent) => {
+    event.preventDefault();
+    if (resetTarget === null || resetSubmitting) return;
+    setResetSubmitting(true);
+    setResetError(null);
+    try {
+      await api.patch<{ user: UserSummary }>(`/v1/users/${resetTarget.id}`, {
+        password: resetPassword,
+      });
+      setResetTarget(null);
+      setResetPassword("");
+      show(PASSWORD_RESET_MESSAGE);
+    } catch (error) {
+      // o modal fica aberto com o detalhe do servidor
+      setResetError(errorText(error));
+    } finally {
+      setResetSubmitting(false);
     }
   };
 
@@ -154,7 +206,7 @@ export default function UsersPage() {
                       </select>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="flex items-center gap-2">
+                      <span className="flex flex-wrap items-center gap-2">
                         <Badge tone={user.active ? "success" : "neutral"}>
                           {userStatusLabel(user.active)}
                         </Badge>
@@ -166,6 +218,17 @@ export default function UsersPage() {
                             onClick={() => patch(user.id, { active: !user.active })}
                           >
                             {user.active ? "Desactivar" : "Activar"}
+                          </Button>
+                        )}
+                        {/* Repo de password: admin só e fora da linha do próprio. */}
+                        {!isSelf && sessionUser?.role === "admin" && (
+                          <Button
+                            variant="outline"
+                            className="px-2 py-1 text-xs"
+                            aria-label={`Repor palavra-passe de ${user.name}`}
+                            onClick={() => openReset(user)}
+                          >
+                            Repor
                           </Button>
                         )}
                       </span>
@@ -227,6 +290,39 @@ export default function UsersPage() {
             </Button>
             <Button type="submit" variant="solid">
               Criar
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={resetTarget !== null} title="Repor palavra-passe" onClose={closeReset}>
+        <form onSubmit={(event) => void submitReset(event)} className="flex flex-col gap-4">
+          <p className="text-sm text-muted">
+            Vai repor a palavra-passe de {resetTarget?.name}. {RESET_PASSWORD_SESSIONS_WARNING}
+          </p>
+          <Field
+            label="Nova palavra-passe"
+            type="password"
+            required
+            autoComplete="new-password"
+            value={resetPassword}
+            onChange={(event) => setResetPassword(event.target.value)}
+            aria-describedby="reset-password-hint"
+          />
+          <p id="reset-password-hint" className="text-xs text-muted">
+            {PASSWORD_HINT}
+          </p>
+          {resetError !== null && (
+            <p role="alert" className="text-sm text-danger">
+              {resetError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={resetSubmitting} onClick={closeReset}>
+              Cancelar
+            </Button>
+            <Button type="submit" variant="solid" disabled={resetSubmitting}>
+              Repor
             </Button>
           </div>
         </form>

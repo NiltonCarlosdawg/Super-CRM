@@ -3,11 +3,11 @@
 
 import { useState, type FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
-import { QRCodeSVG } from "qrcode.react";
 import { useSession, type SessionError } from "../lib/auth";
 import { Button } from "../components/ui/Button";
 import { Field } from "../components/ui/Field";
 import { Spinner } from "../components/ui/Spinner";
+import { TotpSetup } from "../components/TotpSetup";
 
 /** Códigos do problem+json → copy PT-AO; resto cai no detail do backend. */
 const LOGIN_ERRORS: Record<string, string> = {
@@ -25,7 +25,6 @@ export default function LoginPage() {
   const { status, otpauthUrl, error, login, verifyTotp, logout } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
 
   // Sessão completa: o /login já cumpriu o papel — segue para o painel.
   if (status === "authed") return <Navigate to="/" replace />;
@@ -43,12 +42,6 @@ export default function LoginPage() {
   const submitCredentials = (event: FormEvent) => {
     event.preventDefault();
     void login(email, password);
-  };
-
-  const submitCode = (event: FormEvent) => {
-    event.preventDefault();
-    if (!/^\d{6}$/.test(code)) return;
-    void verifyTotp(code);
   };
 
   const showingCode = status === "mfa_setup" || status === "mfa_required";
@@ -85,29 +78,11 @@ export default function LoginPage() {
               </Button>
             </form>
           ) : (
-            <form onSubmit={submitCode} className="flex flex-col gap-4">
-              {otpauthUrl !== null && (
-                <div className="flex flex-col items-center gap-3">
-                  <QRCodeSVG value={otpauthUrl} size={176} bgColor="#ffffff" fgColor="#0a0a0c" />
-                  <p className="text-center text-xs text-muted">
-                    Activa o TOTP: escaneia o código com a tua app de autenticação (Google
-                    Authenticator, Authy…)
-                  </p>
-                </div>
-              )}
-              <Field
-                label="Código de confirmação"
-                inputMode="numeric"
-                maxLength={6}
-                pattern="\d{6}"
-                required
-                autoComplete="one-time-code"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-              />
-              <Button type="submit" variant="solid">
-                Confirmar
-              </Button>
+            // Fluxo de TOTP (Task 11: componente extraído — o mesmo em /settings).
+            <TotpSetup
+              otpauthUrl={otpauthUrl}
+              onSubmit={(code) => void verifyTotp(code)}
+            >
               {/* Sessão pendente (setup interrompido) — logout está no MFA allowlist. */}
               <button
                 type="button"
@@ -116,7 +91,7 @@ export default function LoginPage() {
               >
                 Usar outra conta
               </button>
-            </form>
+            </TotpSetup>
           )}
           {message !== null && (
             <p role="alert" className="mt-4 text-sm text-danger">

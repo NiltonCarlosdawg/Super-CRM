@@ -83,7 +83,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export function useToast(): ToastApi {
-  const ctx = useContext(ToastContext);
+  const ctx = useOptionalToast();
   if (ctx === null) throw new Error("useToast fora do ToastProvider");
   return ctx;
+}
+
+/** Como useToast, mas devolve null sem provider (guardas em testes sem Toaster). */
+export function useOptionalToast(): ToastApi | null {
+  return useContext(ToastContext);
 }

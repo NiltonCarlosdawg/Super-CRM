@@ -166,6 +166,73 @@ describe("UsersPage", () => {
     expect(alert).toHaveTextContent("não é possível remover o último administrador ativo");
   });
 
+  // Reposição de password (Onda 1, Task 11): PATCH /v1/users/:id {password}
+  // (routes/users.ts:89-140 — revoga TODAS as sessões do alvo e audita
+  // user.password_reset); admin só, e a linha do próprio continua sem acções
+  // (ruling T11 — cannot_modify_self do backend).
+
+  it("repo de password: visível só em admin e nunca na linha do próprio", async () => {
+    renderPage();
+    await screen.findByText("Editor Um");
+
+    expect(
+      screen.getByRole("button", { name: `Repor palavra-passe de ${OTHER.name}` }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: `Repor palavra-passe de ${ME.name}` })).toBeNull();
+  });
+
+  it("sem papel admin o controlo de repo não aparece", async () => {
+    mockUseSession.mockReturnValue({
+      ...session(),
+      user: { id: "u-9", name: "Agente", email: "agente@milvendas.local", role: "agent", scope: "tenant" },
+    });
+    renderPage();
+    await screen.findByText("Editor Um");
+
+    expect(screen.queryByRole("button", { name: /Repor palavra-passe/ })).toBeNull();
+  });
+
+  it("repo: modal com aviso de sessões → PATCH {password} → toast e campo limpo", async () => {
+    mockPatch.mockResolvedValue({ user: OTHER });
+    renderPage();
+    await screen.findByText("Editor Um");
+
+    fireEvent.click(screen.getByRole("button", { name: `Repor palavra-passe de ${OTHER.name}` }));
+    // aviso de revogação ANTES do envio (o backend revoga todas as sessões)
+    expect(screen.getByRole("dialog")).toHaveTextContent(/sessões/);
+
+    fireEvent.change(screen.getByLabelText("Nova palavra-passe"), {
+      target: { value: "senha-reposta-1234" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Repor" }));
+
+    await waitFor(() => {
+      expect(mockPatch).toHaveBeenCalledWith("/v1/users/u-2", { password: "senha-reposta-1234" });
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent("Palavra-passe reposta");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // a password nunca fica no DOM: reabrir o modal mostra o campo vazio
+    fireEvent.click(screen.getByRole("button", { name: `Repor palavra-passe de ${OTHER.name}` }));
+    expect(screen.getByLabelText("Nova palavra-passe")).toHaveValue("");
+  });
+
+  it("erro no repo mostra toast com o detail e mantém o modal aberto", async () => {
+    mockPatch.mockRejectedValue(new ApiError(400, "weak_password", "mínimo de 12 caracteres"));
+    renderPage();
+    await screen.findByText("Editor Um");
+
+    fireEvent.click(screen.getByRole("button", { name: `Repor palavra-passe de ${OTHER.name}` }));
+    fireEvent.change(screen.getByLabelText("Nova palavra-passe"), {
+      target: { value: "senha-reposta-1234" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Repor" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("mínimo de 12 caracteres");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   it("email já registado (409) na criação mostra toast e mantém o modal aberto", async () => {
     mockPost.mockRejectedValue(new ApiError(409, "email_already_exists", "email já registado"));
     renderPage();
