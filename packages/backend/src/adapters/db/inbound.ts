@@ -83,7 +83,9 @@ export async function findOrCreateContact(
       updatedAt: input.at,
     })
     .onConflictDoUpdate({
-      target: contacts.phoneE164,
+      // Fixo R17 (Task 5): o target é o composto (tenant_id, phone_e164) — o
+      // upsert é escopado: B recebe a SUA linha, nunca a de A.
+      target: [contacts.tenantId, contacts.phoneE164],
       set: { updatedAt: input.at },
     })
     .returning({ id: contacts.id });

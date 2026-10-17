@@ -40,6 +40,9 @@ const realCfg = {
 };
 const PHONE_A = '+2449235550001';
 const PHONE_B = '+2449235550002';
+/** O MESMO número a escrever às duas empresas (fixo R17: uma pessoa real pode
+ *  contactar dois clientes da MilVendas — o contacto é por tenant). */
+const SHARED_PHONE = '+2449235550099';
 
 /** Tenant B criado por insert directo (os fixtures do helper só têm o MilVendas). */
 async function createTenantB(db: DbClient): Promise<string> {
@@ -459,6 +462,80 @@ test('SQL do orquestrador não escreve nem lê linhas de outro tenant (busca por
       .from(k.handoffs)
       .where(eq(k.handoffs.id, handoffId));
     assert.equal(handoffRow?.tenantId, base.MILVENDAS_TENANT_ID, 'createHandoff escreve no tenant resolvido');
+  } finally {
+    await app.close();
+  }
+});
+
+// Fixo do review (ruling R17): o mesmo número a escrever a duas empresas não
+// pode devolver o contacto de um tenant ao job do outro. Com o unique GLOBAL em
+// contacts.phone_e164 o upsert de B reenviava o id do contacto de A → conversa
+// de B apontava ao contacto de A (contaminação cross-tenant, alcançável em
+// produção quando uma pessoa contacta dois clientes da MilVendas).
+test('mesmo E.164 a escrever a duas contas de tenants distintos → contactos distintos e conversa B liga ao contacto B', async () => {
+  const jobs = createFakeJobs();
+  const app = await buildTestApp({ waProvider: createWaAkgAdapter(realCfg), jobs });
+  try {
+    const tenantB = await createTenantB(app.db);
+    // Só as contas: os contactos são criados pelo pipeline (findOrCreateContact).
+    await app.accounts.create(
+      { tenantId: base.MILVENDAS_TENANT_ID },
+      { label: 'T5-6a', purpose: 'support', providerSessionId: 'sess-t5-6a', now: new Date() },
+    );
+    await app.accounts.create(
+      { tenantId: tenantB },
+      { label: 'T5-6b', purpose: 'support', providerSessionId: 'sess-t5-6b', now: new Date() },
+    );
+    const handler = makePipeline(app);
+
+    const runWebhook = async (payload: ReturnType<typeof receivedPayload>): Promise<void> => {
+      const raw = Buffer.from(JSON.stringify(payload));
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/webhooks/wa-akg',
+        headers: signWebhook(raw, SECRET),
+        payload: raw,
+      });
+      assert.equal(res.statusCode, 202);
+      const job = jobs.enqueued('inbound.process').at(-1);
+      assert.ok(job, 'webhook enfileira inbound.process');
+      await handler(job.payload, ctx);
+    };
+
+    // O MESMO cliente escreve primeiro à conta A e depois à conta B.
+    await runWebhook(
+      receivedPayload({ sessionId: 'sess-t5-6a', phone: SHARED_PHONE, wamid: 'wamid.T5-6a', text: 'olá empresa A' }),
+    );
+    await runWebhook(
+      receivedPayload({ sessionId: 'sess-t5-6b', phone: SHARED_PHONE, wamid: 'wamid.T5-6b', text: 'olá empresa B' }),
+    );
+
+    // Dois contactos distintos, um por tenant (unique composto (tenant_id, phone_e164)).
+    const contacts = await app.db
+      .select({ id: base.contacts.id, tenantId: base.contacts.tenantId })
+      .from(base.contacts)
+      .where(eq(base.contacts.phoneE164, SHARED_PHONE))
+      .orderBy(base.contacts.tenantId);
+    assert.equal(contacts.length, 2, 'UM contacto por tenant para o mesmo E.164');
+    assert.deepEqual(
+      contacts.map((c) => c.tenantId).sort(),
+      [base.MILVENDAS_TENANT_ID, tenantB].sort(),
+      'cada tenant tem a sua própria linha de contacto',
+    );
+
+    // A conversa de B liga ao SEU contacto (nunca ao de A).
+    const convs = await app.db
+      .select({ tenantId: base.conversations.tenantId, contactId: base.conversations.contactId })
+      .from(base.conversations)
+      .orderBy(base.conversations.tenantId);
+    assert.equal(convs.length, 2, 'uma conversa por tenant');
+    const convA = convs.find((c) => c.tenantId === base.MILVENDAS_TENANT_ID);
+    const convB = convs.find((c) => c.tenantId === tenantB);
+    const contactA = contacts.find((c) => c.tenantId === base.MILVENDAS_TENANT_ID);
+    const contactB = contacts.find((c) => c.tenantId === tenantB);
+    assert.equal(convA?.contactId, contactA?.id, 'conversa de A liga ao contacto de A');
+    assert.equal(convB?.contactId, contactB?.id, 'conversa de B liga ao contacto de B (não ao de A)');
+    assert.notEqual(convB?.contactId, contactA?.id, 'a conversa de B NUNCA aponta ao contacto de A');
   } finally {
     await app.close();
   }
