@@ -129,6 +129,54 @@ describe("session state machine", () => {
     expect(result.current.otpauthUrl).toBeNull();
   });
 
+  it("register cria a conta e vai a mfa_setup com o otpauthUrl", async () => {
+    handler = (url) => {
+      if (url === "/v1/auth/me") return json({ title: "unauthenticated" }, 401);
+      if (url === "/v1/auth/register")
+        return json({ mfa: "setup", otpauthUrl: "otpauth://totp/R", expiresAt: "2026-10-16T00:00:00.000Z" });
+      return json({}, 404);
+    };
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe("anon"));
+
+    const input = {
+      tenantName: "ACME",
+      name: "Ana",
+      email: "ana@acme.ao",
+      password: "uma-palavra-passe-comprida",
+    };
+    await result.current.register(input);
+
+    await waitFor(() => expect(result.current.status).toBe("mfa_setup"));
+    expect(result.current.otpauthUrl).toBe("otpauth://totp/R");
+    expect(result.current.user).toBeNull();
+    const regCall = call("/v1/auth/register", "POST");
+    expect(JSON.parse(String(regCall.init.body))).toEqual(input);
+  });
+
+  it("register 409 email_already_exists fica anon com erro", async () => {
+    handler = (url) => {
+      if (url === "/v1/auth/me") return json({ title: "unauthenticated" }, 401);
+      if (url === "/v1/auth/register")
+        return json({ title: "email_already_exists", detail: "email já registado" }, 409);
+      return json({}, 404);
+    };
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe("anon"));
+
+    await result.current.register({
+      tenantName: "ACME",
+      name: "Ana",
+      email: "ana@acme.ao",
+      password: "uma-palavra-passe-comprida",
+    });
+
+    expect(result.current.status).toBe("anon");
+    await waitFor(() =>
+      expect(result.current.error).toMatchObject({ title: "email_already_exists", detail: "email já registado" }),
+    );
+  });
+
   it("verifyTotp faz verify e volta pelo /me", async () => {
     let meCalls = 0;
     handler = (url) => {

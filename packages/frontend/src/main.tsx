@@ -14,6 +14,7 @@ import { RequireAdmin, RequireAuth } from "./components/guards";
 import { ToastProvider } from "./components/ui/Toast";
 
 import LoginPage from "./pages/login";
+import RegisterPage from "./pages/register";
 import DashboardPage from "./pages/dashboard";
 import AccountsPage from "./pages/accounts";
 import ConversationsPage from "./pages/conversations";
@@ -29,6 +30,7 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route element={<RequireAuth><AppShell /></RequireAuth>}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/accounts" element={<AccountsPage />} />

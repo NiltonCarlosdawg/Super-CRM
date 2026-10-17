@@ -11,6 +11,15 @@ export interface SessionUser {
   role: Role;
 }
 
+// POST /v1/auth/register (Onda 1, Task 6, spec §5.1): sem `role` no corpo — o
+// servidor fixa 'admin' (o registo cria a primeira conta da empresa).
+export interface RegisterInput {
+  tenantName: string;
+  name: string;
+  email: string;
+  password: string;
+}
+
 // Resumo de utilizador devolvido por GET/POST/PATCH /v1/users (backend:
 // adapters/db/users.ts:11-17 — nunca inclui passwordHash).
 export interface UserSummary {

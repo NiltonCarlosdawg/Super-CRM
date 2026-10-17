@@ -2,7 +2,7 @@
 // A máquina de estados é do useSession (Task 2); aqui só se apresenta.
 
 import { useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useSession, type SessionError } from "../lib/auth";
 import { Button } from "../components/ui/Button";
@@ -124,6 +124,12 @@ export default function LoginPage() {
             </p>
           )}
         </div>
+        {/* Registo público (Onda 1, Task 9) — página /register. */}
+        <p className="mt-4 text-center text-sm text-muted">
+          <Link to="/register" className="underline hover:text-fg">
+            Ainda não tens conta? Cria a tua empresa
+          </Link>
+        </p>
       </div>
     </main>
   );

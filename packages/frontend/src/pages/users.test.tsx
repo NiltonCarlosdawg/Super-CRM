@@ -51,6 +51,7 @@ function session() {
     otpauthUrl: null,
     error: null,
     login: vi.fn(),
+    register: vi.fn(),
     verifyTotp: vi.fn(),
     logout: vi.fn(),
   };

@@ -19,6 +19,7 @@ function session(overrides: Partial<ReturnType<typeof useSession>> = {}) {
     otpauthUrl: null,
     error: null,
     login: vi.fn(),
+    register: vi.fn(),
     verifyTotp: vi.fn(),
     logout: vi.fn(),
     ...overrides,
@@ -29,11 +30,21 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+// O login ganhou o Link para /register (Task 9) — Link exige Router, por isso
+// as renderizações passam por aqui. Asserções unchanged.
+function renderLogin() {
+  return render(
+    <MemoryRouter initialEntries={["/login"]}>
+      <LoginPage />
+    </MemoryRouter>,
+  );
+}
+
 describe("LoginPage", () => {
   it("anon mostra email/palavra-passe e submete login", () => {
     const login = vi.fn();
     mockUseSession.mockReturnValue(session({ login }));
-    render(<LoginPage />);
+    renderLogin();
 
     expect(screen.getByRole("heading", { name: "Painel MilVendas" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "a@b.c" } });
@@ -47,7 +58,7 @@ describe("LoginPage", () => {
     mockUseSession.mockReturnValue(
       session({ status: "mfa_setup", otpauthUrl: "otpauth://totp/MilVendas:a@b.c" }),
     );
-    const { container } = render(<LoginPage />);
+    const { container } = renderLogin();
 
     expect(container.querySelector("svg")).not.toBeNull();
     expect(screen.getByLabelText("Código de confirmação")).toBeInTheDocument();
@@ -56,7 +67,7 @@ describe("LoginPage", () => {
 
   it("mfa_required só mostra o código", () => {
     mockUseSession.mockReturnValue(session({ status: "mfa_required" }));
-    const { container } = render(<LoginPage />);
+    const { container } = renderLogin();
 
     expect(screen.getByLabelText("Código de confirmação")).toBeInTheDocument();
     expect(container.querySelector("svg")).toBeNull();
@@ -66,7 +77,7 @@ describe("LoginPage", () => {
   it("submit do código chama verifyTotp('123456')", () => {
     const verifyTotp = vi.fn();
     mockUseSession.mockReturnValue(session({ status: "mfa_required", verifyTotp }));
-    render(<LoginPage />);
+    renderLogin();
 
     fireEvent.change(screen.getByLabelText("Código de confirmação"), {
       target: { value: "123456" },
@@ -80,7 +91,7 @@ describe("LoginPage", () => {
     mockUseSession.mockReturnValue(
       session({ error: { title: "invalid_credentials", detail: "credenciais inválidas" } }),
     );
-    render(<LoginPage />);
+    renderLogin();
 
     expect(screen.getByRole("alert")).toHaveTextContent("Email ou palavra-passe incorrectos");
   });
@@ -102,7 +113,7 @@ describe("LoginPage", () => {
 
   it("loading do boot não mostra o form de credenciais (sem flash)", () => {
     mockUseSession.mockReturnValue(session({ status: "loading" }));
-    render(<LoginPage />);
+    renderLogin();
 
     expect(screen.queryByLabelText("Email")).toBeNull();
     expect(screen.queryByLabelText("Palavra-passe")).toBeNull();
@@ -113,7 +124,7 @@ describe("LoginPage", () => {
     for (const status of ["mfa_setup", "mfa_required"] as const) {
       const logout = vi.fn();
       mockUseSession.mockReturnValue(session({ status, logout }));
-      render(<LoginPage />);
+      renderLogin();
 
       fireEvent.click(screen.getByRole("button", { name: "Usar outra conta" }));
       expect(logout).toHaveBeenCalledTimes(1);

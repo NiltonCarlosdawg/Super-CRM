@@ -19,6 +19,7 @@ function session(overrides: Partial<ReturnType<typeof useSession>> = {}) {
     otpauthUrl: null,
     error: null,
     login: vi.fn(),
+    register: vi.fn(),
     verifyTotp: vi.fn(),
     logout: vi.fn(),
     ...overrides,

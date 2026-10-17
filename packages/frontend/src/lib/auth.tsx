@@ -15,7 +15,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError } from "./api";
-import type { Role, SessionUser } from "./types";
+import type { RegisterInput, Role, SessionUser } from "./types";
 
 export type SessionStatus = "loading" | "anon" | "mfa_setup" | "mfa_required" | "authed";
 
@@ -30,6 +30,7 @@ interface SessionValue {
   otpauthUrl: string | null;
   error: SessionError | null;
   login(email: string, password: string): Promise<void>;
+  register(input: RegisterInput): Promise<void>;
   verifyTotp(code: string): Promise<void>;
   logout(): Promise<void>;
 }
@@ -93,31 +94,56 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = useCallback(async (email: string, password: string): Promise<void> => {
-    setError(null);
-    try {
-      const result = await api.post<LoginResponse>("/v1/auth/login", { email, password });
-      if ("mfa" in result) {
-        setUser(null);
-        if (result.mfa === "setup") {
-          setOtpauthUrl(result.otpauthUrl);
-          statusRef.current = "mfa_setup";
-          setStatus("mfa_setup");
-        } else {
-          setOtpauthUrl(null);
-          statusRef.current = "mfa_required";
-          setStatus("mfa_required");
-        }
-        return;
+  // Login e registo devolvem o MESMO contrato (auth.ts): ou dá o utilizador,
+  // ou desvia para MFA (setup na criação da conta, required no login de quem
+  // já activou o TOTP) — por isso a transição é partilhada.
+  const applyAuthResponse = useCallback((result: LoginResponse): void => {
+    if ("mfa" in result) {
+      setUser(null);
+      if (result.mfa === "setup") {
+        setOtpauthUrl(result.otpauthUrl);
+        statusRef.current = "mfa_setup";
+        setStatus("mfa_setup");
+      } else {
+        setOtpauthUrl(null);
+        statusRef.current = "mfa_required";
+        setStatus("mfa_required");
       }
-      setOtpauthUrl(null);
-      statusRef.current = "authed";
-      setUser(result.user);
-      setStatus("authed");
-    } catch (err) {
-      setError(toSessionError(err));
+      return;
     }
+    setOtpauthUrl(null);
+    statusRef.current = "authed";
+    setUser(result.user);
+    setStatus("authed");
   }, []);
+
+  const login = useCallback(
+    async (email: string, password: string): Promise<void> => {
+      setError(null);
+      try {
+        const result = await api.post<LoginResponse>("/v1/auth/login", { email, password });
+        applyAuthResponse(result);
+      } catch (err) {
+        setError(toSessionError(err));
+      }
+    },
+    [applyAuthResponse],
+  );
+
+  // Registo público (Onda 1, Task 9): cria empresa + admin e auto-loga com
+  // sessão pendente de TOTP — mesmas transições do login.
+  const register = useCallback(
+    async (input: RegisterInput): Promise<void> => {
+      setError(null);
+      try {
+        const result = await api.post<LoginResponse>("/v1/auth/register", input);
+        applyAuthResponse(result);
+      } catch (err) {
+        setError(toSessionError(err));
+      }
+    },
+    [applyAuthResponse],
+  );
 
   const verifyTotp = useCallback(
     async (code: string): Promise<void> => {
@@ -150,8 +176,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SessionValue>(
-    () => ({ status, user, otpauthUrl, error, login, verifyTotp, logout }),
-    [status, user, otpauthUrl, error, login, verifyTotp, logout],
+    () => ({ status, user, otpauthUrl, error, login, register, verifyTotp, logout }),
+    [status, user, otpauthUrl, error, login, register, verifyTotp, logout],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
