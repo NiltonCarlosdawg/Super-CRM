@@ -24,6 +24,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { eq } from 'drizzle-orm';
+import type { AnyPgColumn, AnyPgTable } from 'drizzle-orm/pg-core';
+import type { InjectOptions } from 'fastify';
 import { createSessionStore } from '../../src/adapters/db/auth.js';
 import type { DbClient } from '../../src/adapters/db/index.js';
 import * as base from '../../src/adapters/db/schema/index.js';
@@ -64,13 +66,20 @@ type Method = 'GET' | 'POST' | 'PATCH';
 interface RouteSpec {
   method: Method;
   url: string;
-  payload?: unknown;
+  /** Tipo EXACTO do `payload` de `inject` (fastify) — `unknown` derruba o
+   *  overload de `inject` e torna todas as respostas `void` sob strict tsc. */
+  payload?: InjectOptions['payload'];
   idempotencyKey?: string;
 }
 
+/** Tabela com coluna `tenant_id`: as tabelas concretas do drizzle são subtipos
+ *  de `AnyPgTable`/`AnyPgColumn` (typecheck strict do ficheiro — R26: o
+ *  tsconfig do projecto continua a incluir só `src/`). */
+type TenantTable = AnyPgTable & { tenantId: AnyPgColumn };
+
 /** Contagem de linhas de negócio por tenant (espelho directo A/B). */
 async function rowCounts(db: DbClient, tenantId: string) {
-  const count = async (table: { tenantId: string }): Promise<number> =>
+  const count = async (table: TenantTable): Promise<number> =>
     (await db.select({ id: table.tenantId }).from(table).where(eq(table.tenantId, tenantId))).length;
   return {
     accounts: await count(base.whatsappAccounts),
