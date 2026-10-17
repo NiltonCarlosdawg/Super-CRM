@@ -365,8 +365,10 @@ Dois tenants A/B com users (admin/agent), contas, conversas, mensagens, contacto
 **Files:**
 - Create: `docs/adr/0007-multitenancy.md` (template existente: contexto, opções R5 com trade-offs, decisão, consequências)
 - Modify: `docs/01-contexto-e-plano.md` (D1 revertido + nota das ondas), `docs/03-seguranca.md` §3 (+ `platform_admin`), `packages/backend` README/módulo, `packages/frontend/src/README.md`, `AGENTS.md` (comandos/estrutura se aplicável)
-- Nenhum código de produto novo (só `fix:` se a validação final revelar fugas)
+- Fix (R29, gate pré-merge): `src/application/auth/mfa.ts` (`startSetup` recusa quando `totpEnabledAt !== null` → 409 DomainError + teste) — rotação silenciosa de segredo activo = lockout
+- Nenhum outro código de produto novo (só `fix:` se a validação final revelar fugas)
 
+- [ ] **Step 0: Fix R29** — guarda do `startSetup` (TDD: teste RED → guarda → GREEN); `git commit -m "fix: refuse totp setup when already enabled"`; backend gates.
 - [ ] **Step 1: Docs** — ADR + actualizações; `git commit -m "docs: record multitenancy decision and revert D1"`.
 - [ ] **Step 2: Migração de zero + upgrade, prova final** — BD vazia nova (contentor): `db:migrate` do zero → PASS; BD de validação: estado final com todos os dados em "MilVendas" + platform admin criado via CLI; output colado no relatório.
 - [ ] **Step 3: Gates totais** — backend: `lint && typecheck && test && test:integration`; frontend: `lint && typecheck && test && build`. Capturar exit codes.
