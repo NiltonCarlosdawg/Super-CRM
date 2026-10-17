@@ -184,7 +184,14 @@ describe("PlatformPage", () => {
     expect(within(betaRow).getByText("Activo")).toBeInTheDocument();
   });
 
-  it("falha do servidor no suspend mostra toast de erro e repõe o estado", async () => {
+  it("falha do servidor no suspend mostra toast de erro e re-fetcha a verdade do servidor", async () => {
+    // 1.ª chamada: lista normal; 2.ª (o re-fetch do erro): ACME já suspenso noutro
+    // sítio — a linha tem de passar a "Suspenso", só assim se prova o re-fetch.
+    let listCalls = 0;
+    mockGet.mockImplementation(() => {
+      listCalls += 1;
+      return Promise.resolve(listCalls === 1 ? [ACME, BETA] : [{ ...ACME, status: "suspended" }]);
+    });
     mockPost.mockRejectedValue(new ApiError(404, "not_found", "tenant não encontrado"));
     renderPage();
     await screen.findByText("ACME Lda");
@@ -195,6 +202,53 @@ describe("PlatformPage", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("tenant não encontrado");
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    const acmeRow = screen.getByText("ACME Lda").closest("tr")!;
+    expect(within(acmeRow).getByText("Suspenso")).toBeInTheDocument();
+  });
+
+  it("confirmar duas vezes com o POST em voo só faz um POST e desactiva o botão", async () => {
+    let resolvePost: (() => void) | undefined;
+    mockPost.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePost = () => resolve(undefined);
+        }),
+    );
+    renderPage();
+    await screen.findByText("ACME Lda");
+
+    fireEvent.click(screen.getByRole("button", { name: "Suspender ACME Lda" }));
+    const dialog = await screen.findByRole("dialog", { name: "Suspender ACME Lda" });
+    const confirm = within(dialog).getByRole("button", { name: "Suspender" });
+    fireEvent.click(confirm);
+    fireEvent.click(confirm); // segundo clique: o POST ainda está em voo
+
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost).toHaveBeenCalledWith("/v1/platform/tenants/t-1/suspend");
+    expect(confirm).toBeDisabled();
+
+    resolvePost!();
+    expect(await screen.findByText("Empresa suspensa")).toBeInTheDocument();
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    const acmeRow = screen.getByText("ACME Lda").closest("tr")!;
+    expect(within(acmeRow).getByText("Suspenso")).toBeInTheDocument();
+  });
+
+  it("falha no GET da lista mostra erro com Tentar de novo (sem spinner infinito)", async () => {
+    mockGet
+      .mockRejectedValueOnce(new ApiError(500, "internal", "erro no servidor"))
+      .mockResolvedValueOnce([ACME]);
+    renderPage();
+
+    expect(
+      await screen.findByText("Não foi possível carregar as empresas"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "A carregar empresas" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("ACME Lda")).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledTimes(2);
   });
 
   it("drill lista users, contas e conversas do tenant", async () => {
@@ -245,6 +299,83 @@ describe("PlatformPage", () => {
     expect(await screen.findByText("Bom dia, preciso de ajuda")).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith("/v1/platform/tenants/t-1/conversations/c-9");
     expect(screen.queryByLabelText("Mensagem")).toBeNull(); // read-only: sem composer
+  });
+
+  it("drill: falha no GET de users mostra erro com Tentar de novo (sem spinner infinito)", async () => {
+    let usersCalls = 0;
+    mockGet.mockImplementation((path: string) => {
+      if (path === "/v1/platform/tenants") return Promise.resolve([ACME]);
+      if (path === "/v1/platform/tenants/t-1/users") {
+        usersCalls += 1;
+        return usersCalls === 1
+          ? Promise.reject(new ApiError(500, "internal", "falhou"))
+          : Promise.resolve({ users: [DRILL_USER] });
+      }
+      if (path === "/v1/platform/tenants/t-1/accounts") return Promise.resolve({ accounts: [] });
+      if (path === "/v1/platform/tenants/t-1/conversations")
+        return Promise.resolve({ conversations: [], nextCursor: null });
+      return Promise.reject(new Error(`path inesperado: ${path}`));
+    });
+    renderPage();
+    await screen.findByText("ACME Lda");
+    fireEvent.click(screen.getByRole("button", { name: "Ver detalhes de ACME Lda" }));
+
+    expect(await screen.findByText("Não foi possível carregar os utilizadores")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "A carregar utilizadores" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("Agente Um")).toBeInTheDocument();
+  });
+
+  it("drill: falha no GET de contas mostra erro com Tentar de novo (sem spinner infinito)", async () => {
+    let accountsCalls = 0;
+    mockGet.mockImplementation((path: string) => {
+      if (path === "/v1/platform/tenants") return Promise.resolve([ACME]);
+      if (path === "/v1/platform/tenants/t-1/users") return Promise.resolve({ users: [] });
+      if (path === "/v1/platform/tenants/t-1/accounts") {
+        accountsCalls += 1;
+        return accountsCalls === 1
+          ? Promise.reject(new ApiError(500, "internal", "falhou"))
+          : Promise.resolve({ accounts: [DRILL_ACCOUNT] });
+      }
+      if (path === "/v1/platform/tenants/t-1/conversations")
+        return Promise.resolve({ conversations: [], nextCursor: null });
+      return Promise.reject(new Error(`path inesperado: ${path}`));
+    });
+    renderPage();
+    await screen.findByText("ACME Lda");
+    fireEvent.click(screen.getByRole("button", { name: "Ver detalhes de ACME Lda" }));
+
+    expect(await screen.findByText("Não foi possível carregar as contas")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "A carregar contas" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("Suporte ACME")).toBeInTheDocument();
+  });
+
+  it("drill: falha no GET de conversas mostra erro com Tentar de novo (sem spinner infinito)", async () => {
+    let convCalls = 0;
+    mockGet.mockImplementation((path: string) => {
+      if (path === "/v1/platform/tenants") return Promise.resolve([ACME]);
+      if (path === "/v1/platform/tenants/t-1/users") return Promise.resolve({ users: [] });
+      if (path === "/v1/platform/tenants/t-1/accounts") return Promise.resolve({ accounts: [] });
+      if (path === "/v1/platform/tenants/t-1/conversations") {
+        convCalls += 1;
+        return convCalls === 1
+          ? Promise.reject(new ApiError(500, "internal", "falhou"))
+          : Promise.resolve({ conversations: [DRILL_CONVERSATION], nextCursor: null });
+      }
+      return Promise.reject(new Error(`path inesperado: ${path}`));
+    });
+    renderPage();
+    await screen.findByText("ACME Lda");
+    fireEvent.click(screen.getByRole("button", { name: "Ver detalhes de ACME Lda" }));
+
+    expect(await screen.findByText("Não foi possível carregar as conversas")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "A carregar conversas" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(await screen.findByText("+244923000999")).toBeInTheDocument();
   });
 });
 

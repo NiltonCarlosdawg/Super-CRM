@@ -53,19 +53,41 @@ function formatDate(iso: string): string {
 function DrillUsers({ tenantId }: { tenantId: string }) {
   const { error: toastError } = useToast();
   const [users, setUsers] = useState<UserSummary[] | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .get<{ users: UserSummary[] }>(`/v1/platform/tenants/${tenantId}/users`)
-      .then((result) => setUsers(result.users))
-      .catch((error: unknown) => toastError(errorText(error)));
+      .then((result) => {
+        setFailed(false);
+        setUsers(result.users);
+      })
+      .catch((error: unknown) => {
+        setFailed(true);
+        toastError(errorText(error));
+      });
   }, [tenantId, toastError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <section aria-label="Utilizadores do tenant" className="flex flex-col gap-3">
       <h2 className="font-display text-lg text-fg">Utilizadores</h2>
       {users === null ? (
-        <Spinner label="A carregar utilizadores" />
+        failed ? (
+          <EmptyState
+            title="Não foi possível carregar os utilizadores"
+            description="Verifica a ligação e tenta de novo."
+          >
+            <Button variant="outline" onClick={load}>
+              Tentar de novo
+            </Button>
+          </EmptyState>
+        ) : (
+          <Spinner label="A carregar utilizadores" />
+        )
       ) : users.length === 0 ? (
         <EmptyState title="Sem utilizadores" />
       ) : (
@@ -113,19 +135,41 @@ function DrillUsers({ tenantId }: { tenantId: string }) {
 function DrillAccounts({ tenantId }: { tenantId: string }) {
   const { error: toastError } = useToast();
   const [accounts, setAccounts] = useState<AccountRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .get<{ accounts: AccountRow[] }>(`/v1/platform/tenants/${tenantId}/accounts`)
-      .then((result) => setAccounts(result.accounts))
-      .catch((error: unknown) => toastError(errorText(error)));
+      .then((result) => {
+        setFailed(false);
+        setAccounts(result.accounts);
+      })
+      .catch((error: unknown) => {
+        setFailed(true);
+        toastError(errorText(error));
+      });
   }, [tenantId, toastError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <section aria-label="Contas WhatsApp do tenant" className="flex flex-col gap-3">
       <h2 className="font-display text-lg text-fg">Contas WhatsApp</h2>
       {accounts === null ? (
-        <Spinner label="A carregar contas" />
+        failed ? (
+          <EmptyState
+            title="Não foi possível carregar as contas"
+            description="Verifica a ligação e tenta de novo."
+          >
+            <Button variant="outline" onClick={load}>
+              Tentar de novo
+            </Button>
+          </EmptyState>
+        ) : (
+          <Spinner label="A carregar contas" />
+        )
       ) : accounts.length === 0 ? (
         <EmptyState title="Sem contas" />
       ) : (
@@ -243,13 +287,24 @@ function Drill({
   const { error: toastError } = useToast();
   const [conversations, setConversations] = useState<ConversationView[] | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .get<ConversationsList>(`/v1/platform/tenants/${tenant.id}/conversations`)
-      .then((result) => setConversations(result.conversations))
-      .catch((error: unknown) => toastError(errorText(error)));
+      .then((result) => {
+        setFailed(false);
+        setConversations(result.conversations);
+      })
+      .catch((error: unknown) => {
+        setFailed(true);
+        toastError(errorText(error));
+      });
   }, [tenant.id, toastError]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -276,7 +331,18 @@ function Drill({
           <section aria-label="Conversas do tenant" className="flex flex-col gap-3">
             <h2 className="font-display text-lg text-fg">Conversas</h2>
             {conversations === null ? (
-              <Spinner label="A carregar conversas" />
+              failed ? (
+                <EmptyState
+                  title="Não foi possível carregar as conversas"
+                  description="Verifica a ligação e tenta de novo."
+                >
+                  <Button variant="outline" onClick={load}>
+                    Tentar de novo
+                  </Button>
+                </EmptyState>
+              ) : (
+                <Spinner label="A carregar conversas" />
+              )
             ) : conversations.length === 0 ? (
               <EmptyState title="Sem conversas" />
             ) : (
@@ -322,12 +388,18 @@ export default function PlatformPage() {
   const [tenants, setTenants] = useState<TenantListItem[] | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [drill, setDrill] = useState<TenantListItem | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(() => {
     return api
       .get<TenantListItem[]>("/v1/platform/tenants")
-      .then((result) => setTenants(result))
+      .then((result) => {
+        setFailed(false);
+        setTenants(result);
+      })
       .catch((error: unknown) => {
+        setFailed(true);
         toastError(errorText(error));
       });
   }, [toastError]);
@@ -337,8 +409,9 @@ export default function PlatformPage() {
   }, [load]);
 
   const confirmAction = () => {
-    if (pending === null) return;
+    if (pending === null || submitting) return; // 2.º clique durante o POST: ignora
     const { tenant, action } = pending;
+    setSubmitting(true);
     api
       .post(`/v1/platform/tenants/${tenant.id}/${action}`)
       .then(() => {
@@ -357,7 +430,10 @@ export default function PlatformPage() {
         toastError(errorText(error));
         void load(); // ex.: 404 — repor o estado real do servidor
       })
-      .finally(() => setPending(null));
+      .finally(() => {
+        setSubmitting(false);
+        setPending(null);
+      });
   };
 
   if (drill !== null) {
@@ -374,7 +450,18 @@ export default function PlatformPage() {
       </div>
 
       {tenants === null ? (
-        <Spinner label="A carregar empresas" />
+        failed ? (
+          <EmptyState
+            title="Não foi possível carregar as empresas"
+            description="Verifica a ligação e tenta de novo."
+          >
+            <Button variant="outline" onClick={() => void load()}>
+              Tentar de novo
+            </Button>
+          </EmptyState>
+        ) : (
+          <Spinner label="A carregar empresas" />
+        )
       ) : tenants.length === 0 ? (
         <EmptyState
           title="Sem empresas"
@@ -476,8 +563,14 @@ export default function PlatformPage() {
             <Button variant="ghost" onClick={() => setPending(null)}>
               Cancelar
             </Button>
-            <Button variant="solid" onClick={confirmAction}>
-              {pending?.action === "suspend" ? "Suspender" : "Activar"}
+            <Button variant="solid" disabled={submitting} onClick={confirmAction}>
+              {submitting ? (
+                <Spinner label="A concluir" />
+              ) : pending?.action === "suspend" ? (
+                "Suspender"
+              ) : (
+                "Activar"
+              )}
             </Button>
           </div>
         </div>

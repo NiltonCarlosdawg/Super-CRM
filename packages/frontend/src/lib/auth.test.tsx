@@ -115,6 +115,26 @@ describe("session state machine", () => {
     expect(JSON.parse(String(loginCall.init.body))).toEqual({ email: "a@b.c", password: "pw" });
   });
 
+  it("login de platform_admin deriva scope platform (scopeFromRole)", async () => {
+    handler = (url) => {
+      if (url === "/v1/auth/me") return json({ title: "unauthenticated" }, 401);
+      if (url === "/v1/auth/login")
+        return json({
+          user: { id: "p1", name: "Plataforma", email: "platform@x.ao", role: "platform_admin" },
+          expiresAt: "2026-10-16T00:00:00.000Z",
+        });
+      return json({}, 404);
+    };
+    const { result } = setup();
+    await waitFor(() => expect(result.current.status).toBe("anon"));
+
+    await result.current.login("platform@x.ao", "pw");
+
+    await waitFor(() => expect(result.current.status).toBe("authed"));
+    // o login não traz scope — a plataforma deriva-o do papel platform_admin
+    expect(result.current.user?.scope).toBe("platform");
+  });
+
   it("mfa setup com otpauthUrl", async () => {
     handler = (url) => {
       if (url === "/v1/auth/me") return json({ title: "unauthenticated" }, 401);
