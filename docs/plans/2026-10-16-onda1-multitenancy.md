@@ -196,6 +196,7 @@ test('handshake realtime de tenant suspenso → rejeitado');
 **Files:**
 - Modify: `src/application/ingest-webhook.ts`, `inbound-process.ts`, `handle-inbound.ts`, `message-status.ts`, `outbox-worker.ts`, `src/adapters/db/inbound.ts`, `src/adapters/db/orchestrator-ports.ts` (SQL cru), `src/adapters/db/outbox.ts`
 - Modify: schema `outbox.schema.ts` (unique `(tenant_id, idempotency_key)`) + migração pequena (drop do unique antigo → composto)
+- Modify: schema `contacts.schema.ts` (unique global `phone_e164` → composto `(tenant_id, phone_e164)`; descoberto no review da Task 5 — mesmo número em dois tenants fazia o upsert devolver o contacto do outro tenant) + `findOrCreateContact` com conflict target composto
 - Test: `tests/integration/webhook-tenant.test.ts` (novo)
 
 **Interfaces:**
@@ -209,6 +210,7 @@ test('mensagem inbound da conta A cria conversa/mensagem/outbox no tenant A e pr
 test('idempotency-key repetida em tenants diferentes → dois envios (unique composto)');
 test('idempotency-key repetida no mesmo tenant → dedupe/409 como hoje');
 test('SQL do orquestrador não escreve nem lê linhas de outro tenant (busca por line_id devolve só as do tenant)');
+test('mesmo telefone nos dois tenants → duas linhas de contacts distintas (unique composto, R17)');
 ```
 
 - [ ] **Step 2: Correr e ver falhar** — `npm run test:integration -- webhook-tenant` → FAIL.
