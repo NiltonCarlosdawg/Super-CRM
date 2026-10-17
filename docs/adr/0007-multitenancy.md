@@ -57,8 +57,9 @@ produto). Regras concretas implementadas na Onda 1:
   alvo de FK de todos os dados existentes (backfill).
 - `tenant_id NOT NULL` em 23 tabelas de negócio; excepções justificadas na spec
   §4.2: `audit_log` e `inbound_events` anuláveis (ação de plataforma/sistema e
-  evento gravado antes de resolver a conta); `sessions` e `business_lines` sem
-  coluna (infra de auth e dicionário global de slugs).
+  evento gravado antes de resolver a conta); `sessions`, `business_lines` e a
+  própria `tenants` sem coluna (infra de auth, dicionário global de slugs, o
+  próprio escopo); `users` anulável via CHECK (platform_admin).
 - `users` ganha o enum `platform_admin` com CHECK `role = 'platform_admin' ⇔
   tenant_id IS NULL`; unicidade de email mantém-se global (v1: uma pessoa, uma
   conta). O problema das migrações de enum (ADD VALUE + uso na mesma transacção)
