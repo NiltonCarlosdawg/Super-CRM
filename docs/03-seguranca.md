@@ -31,6 +31,7 @@ Aplica-se a todo o código, testes, docs e prompts. Em caso de dúvida, escolhe 
   - `agent`: ver e responder conversas, aceitar handoffs.
   - `editor`: gerir conhecimento (catálogo, documentos, regras, gatilhos).
   - `admin`: contas WhatsApp, utilizadores, campanhas, configuração.
+  - `platform_admin` (Onda 1 multitenancy): administra a **plataforma** (equipa MilVendas) — não pertence a nenhum tenant (`users.tenant_id` NULL, garantido por CHECK). Superfície `/v1/platform/*`: ciclo de vida dos tenants (suspender/activar) e leitura de suporte por tenant **auditada por acesso** (`platform.view_tenant`). Escrita dentro de um tenant = 403 em v1. Rotas de tenant recusam sessões de plataforma (`requireTenant`). Ver `docs/adr/0007-multitenancy.md`.
 - Autorização verificada **em cada pedido**, no servidor. Nunca confiar em campos enviados pelo cliente (ex.: `role`, `ownerId`).
 - Princípio do menor privilégio também entre serviços (ver secção 5).
 - Ações sensíveis ficam no `audit_log` (quem, o quê, quando, de onde): login, mudança de papéis, ligar/desligar conta WhatsApp, criar/iniciar campanha, publicar conhecimento, devolver conversa à IA, exportar ou apagar dados.

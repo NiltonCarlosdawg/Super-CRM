@@ -9,7 +9,7 @@ CRM **interno** da MilVendas Lda para gerir conversas de WhatsApp com leads e cl
 - IA integrada que ajuda em tudo, responde automaticamente, qualifica e faz follow-ups nos leads;
 - a IA conduz conversas completas até o lead decidir comprar. Nesse momento, ou em qualquer situação que exija intervenção humana, **notifica o painel e um humano assume a conversa**.
 
-É para uso interno. Não é um produto multi-tenant para vender a terceiros, por isso não há isolamento por organização (pode vir no futuro).
+É para uso interno da MilVendas. **Em 2026-10-16 o dono do produto reverteu a decisão de não-multi-tenant** (D1): a instalação única passa a servir **vários clientes**, cada um isolado — modelo de isolamento e alternativas em `docs/adr/0007-multitenancy.md`. As ondas de implementação desta mudança (spec `docs/superpowers/specs/2026-10-16-multitenant-design.md`) viveram em `docs/plans/` e `.superpowers/sdd/` com ledger próprio.
 
 ## 2. Linhas de negócio
 
@@ -26,7 +26,7 @@ Em `custom` e `cctv` quase nunca se fecha só no chat. O objetivo da IA aí é *
 
 | # | Decisão | Detalhe |
 |---|---|---|
-| D1 | CRM interno da MilVendas | Sem multi-tenant por agora |
+| D1 | CRM interno da MilVendas — **revertido em 2026-10-16** | Agora **multi-tenant**: a instalação única serve vários clientes, isolados por `tenant_id` (ADR 0007; onda multitenancy) |
 | D2 | **Base própria no centro; serviços externos como serviços separados** | O WA-AKG é o primeiro. Virão outros serviços/APIs que o dono do produto apresentará |
 | D3 | WA-AKG como serviço separado, acedido só por API e webhooks | Nunca fork-and-embed. O CRM tem a sua própria base de dados |
 | D4 | Modelo de dados do CRM neutro e próprio | Nenhum serviço externo dita o schema |

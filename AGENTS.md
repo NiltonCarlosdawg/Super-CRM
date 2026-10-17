@@ -13,6 +13,8 @@ Construir o backend de um CRM interno para a MilVendas (software, soluções per
 
 O WhatsApp é servido por um serviço separado, o **WA-AKG** (fork de `mrifqidaffaaditya/WA-AKG`, usa Baileys). Tu implementas o nosso backend **e** a integração com o WA-AKG, dentro dos limites de `docs/04-integracao-wa-akg.md`.
 
+O CRM é **multi-tenant** desde a Onda 1 (2026-10-16, revertendo D1): cada cliente é um **tenant** isolado por `tenant_id` (schema único), a equipa MilVendas gere os tenants como `platform_admin` em `/v1/platform/*`. Toda a query de negócio exige escopo de tenant; ver `docs/adr/0007-multitenancy.md` e a spec em `docs/superpowers/specs/2026-10-16-multitenant-design.md`.
+
 ## Leitura obrigatória, por esta ordem
 
 1. `docs/01-contexto-e-plano.md`: contexto, decisões, arquitetura, fases, gates.
@@ -90,4 +92,10 @@ test:integration:  npm run test:integration   # precisa Docker; contentores sobe
 db:generate:       npm run db:generate
 db:migrate:        npm run db:migrate          # só com DATABASE_URL de desenvolvimento; aplicação é Fase 1
 eval:              npm run eval                # avalia o classificador contra tests/eval/handoff-scenarios.ts
+
+# frontend (em packages/frontend; porta 3000, proxy /v1 → backend :3001)
+frontend-lint:        npm run lint
+frontend-typecheck:   npm run typecheck
+frontend-test:        npm test
+frontend-build:       npm run build
 ```

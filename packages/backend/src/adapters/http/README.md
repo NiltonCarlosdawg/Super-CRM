@@ -16,7 +16,7 @@
 | POST | `/v1/auth/logout` | público | `204`, revoga a sessão e apaga cookies |
 | GET | `/v1/auth/me` | qualquer sessão | papel completo; garante cookie `csrf` se ausente |
 | POST | `/v1/auth/password` | qualquer sessão | `{currentPassword, newPassword}` → `204` |
-| POST | `/v1/auth/totp/setup` | sessão com MFA pendente (allowlist) | idempotente; devolve `otpauthUrl` |
+| POST | `/v1/auth/totp/setup` | sessão com MFA pendente (allowlist) | devolve `otpauthUrl`; TOTP já activo → `409 totp_already_enabled` (ruling R29: nunca rodar o segredo activo) |
 | POST | `/v1/auth/totp/verify` | sessão com MFA pendente (allowlist) | `{code}` de 6 dígitos → activa/complete MFA; rate limit 10/min |
 | GET | `/v1/openapi.json` | qualquer sessão | spec OpenAPI 3.1 (`app.swagger()`); sem sessão → `401` |
 | GET | `/v1/conversations` | qualquer sessão | lista (cursor, filtros de conta/estado) |

@@ -1,8 +1,8 @@
 # CRM WhatsApp — MilVendas
 
-CRM **interno** da MilVendas para gerir conversas de WhatsApp com leads e clientes: várias contas num só lugar, campanhas com limites, e uma IA que responde, qualifica leads, faz follow-ups e **passa a um humano** quando deve.
+CRM **multi-tenant** da MilVendas para gerir conversas de WhatsApp com leads e clientes: várias contas num só lugar, campanhas com limites, e uma IA que responde, qualifica leads, faz follow-ups e **passa a um humano** quando deve. Cada cliente (empresa) é um **tenant** isolado; a equipa MilVendas gere os tenants como `platform_admin` (`docs/adr/0007-multitenancy.md`).
 
-> **Estado:** planeamento concluído. A Fase 0 (fundações e auditoria do WA-AKG) ainda não começou. Este repositório contém a documentação do plano e código de referência já testado.
+> **Estado:** Fase 1 em curso. Núcleo entregue (auth+MFA/TOTP, registo público de tenants, outbox+fila, webhooks, contas WhatsApp, conversas, plataforma `/v1/platform/*`, painel frontend em `packages/frontend`). O **gate de primeiro envio real** de WhatsApp (número de teste) está pendente de aprovação humana. Fases 2–5 por fazer.
 
 ## Como funciona
 
@@ -91,8 +91,8 @@ Os testes cobrem a lógica de decisão com um fornecedor de IA **simulado**. Nã
 
 | Fase | Conteúdo | Estado |
 |---|---|---|
-| 0 | Fundações e auditoria do WA-AKG | ☐ |
-| 1 | Núcleo e WhatsApp (autenticação, adaptador, outbox, webhooks, contas) | ☐ |
+| 0 | Fundações e auditoria do WA-AKG | ✅ |
+| 1 | Núcleo e WhatsApp (autenticação, adaptador, outbox, webhooks, contas) + onda multitenancy | em curso — gate de primeiro envio real pendente |
 | 2 | Conhecimento (CRUD, publicação, embeddings, lacunas, chat de teste) | ☐ |
 | 3 | IA e handoff (`AIProvider` real, avaliação, modo sugestão) | ☐ |
 | 4 | Campanhas (consentimento, opt-out, limites, pausa automática) | ☐ |

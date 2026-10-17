@@ -32,14 +32,23 @@ src/
   main.tsx            # rotas + providers (Session, Toast, Socket no AppShell)
   lib/                # api.ts (cliente único), auth.tsx, socket.tsx, labels.ts, time.ts, types.ts
   components/
-    ui/               # primitivas: Button, Field, Badge, Modal, Spinner, Toast, EmptyState, Card
+    ui/               # primitivas: Button, Field, Badge, Modal, Spinner, Toast, EmptyState, Card, TotpSetup
     AppShell, Sidebar, TopBar, guards
-  pages/              # login, dashboard, accounts, conversations (+ thread/composer), users, campaigns
+  pages/              # login, register, dashboard, accounts, conversations (+ thread/composer),
+                      # users, campaigns (placeholder), settings, platform
 ```
 
 Notas:
 
 - **Sessão** por cookie httpOnly (arranque: `GET /v1/auth/me` → `anon`/`mfa_required`/`authed`).
+  O `/me` devolve `scope: 'tenant' | 'platform'`: um `platform_admin` vê apenas
+  `/platform` na sidebar; as rotas `/v1/platform/*` nunca são chamadas com
+  sessão de tenant (o servidor recusa, o cliente também).
+- **Registo público** (`/register`, Onda 1 multitenancy): cria tenant + admin e
+  segue o mesmo fluxo TOTP do login (`mfa:'setup'` → `otpauthUrl` → verify).
+- **Definições** (`/settings`, Onda 1): mudança da password própria e ativação
+  de TOTP (`POST /v1/auth/totp/setup` → `verify`; o backend recusa com 409 se o
+  TOTP já estiver ativo — sem desativação em v1, nota honesta no UI).
 - **Tempo real**: eventos `account.status`, `message.created`, `message.status`,
   `handoff.created`, `handoff.updated` (Socket.IO autenticado por cookie).
 - **Vocabulário PT-AO** vive em `lib/labels.ts` — acrescentar rótulos novos aí, com teste.
