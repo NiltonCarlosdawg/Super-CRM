@@ -68,7 +68,13 @@ export async function conversationsRoutes(app: FastifyInstance, deps: HttpDeps):
   app.get('/v1/conversations/:id/messages', { preHandler: anyRole }, async (request, reply) => {
     const { id } = idSchema.parse(request.params);
     const q = messagesQuery.parse(request.query);
-    const page = await repo.listMessages(scope(request), { conversationId: id, cursor: q.cursor, limit: q.limit });
+    const s = scope(request);
+    // Onda 1, Task 8 (matriz §8.2): o fio alheio/inexistente → 404, como o
+    // GET/:id e o POST — nunca 200 com página vazia (deferred da T4: só o
+    // listMessages sob scope alheio devolvia vazio sem dizer se existe).
+    const found = await repo.get(s, id);
+    if (found === null) throw new DomainError('not_found');
+    const page = await repo.listMessages(s, { conversationId: id, cursor: q.cursor, limit: q.limit });
     return reply.send({ messages: page.items, nextCursor: page.nextCursor });
   });
 

@@ -8,6 +8,7 @@
 // Fixtures sintéticas — as 20 conversas reais nunca são tocadas (AGENTS.md §13).
 
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { eq } from 'drizzle-orm';
 import * as base from '../../src/adapters/db/schema/index.js';
@@ -219,6 +220,65 @@ test('RBAC: sem sessão → 401; qualquer papel lê; editor também envia', asyn
     });
     assert.equal(send.statusCode, 201);
     assert.equal(send.json().replayed, false);
+  } finally {
+    await app.close();
+  }
+});
+
+// Onda 1, Task 8 (matriz §8.2; fix autorizado fecha a assimetria da T4): o fio
+// de OUTRO tenant responde 404 como todos os restantes pedidos por id — nunca
+// 200 com página vazia (só o listMessages sob scope alheio devolvia vazio).
+test('fio alheio: GET /v1/conversations/:id/messages de outro tenant → 404 (nunca página vazia)', async () => {
+  const app = await buildTestApp();
+  try {
+    const { cid } = await mkConversation(app); // lado próprio → 200 (controle positivo)
+
+    // conversa de um OUTRO tenant por inserts directos (mesma forma dos fixtures)
+    const [tenantB] = await app.db
+      .insert(base.tenants)
+      .values({ id: randomUUID(), name: 'Empresa B (T8)' })
+      .returning({ id: base.tenants.id });
+    assert.ok(tenantB !== undefined, 'fixture tenant B');
+    const { id: accB } = await app.accounts.create(
+      { tenantId: tenantB.id },
+      { label: 'T8-B', purpose: 'support', providerSessionId: 'sess-t8-b', now: new Date() },
+    );
+    const [contactB] = await app.db
+      .insert(base.contacts)
+      .values({ tenantId: tenantB.id, phoneE164: '+244923777333' })
+      .returning({ id: base.contacts.id });
+    const [convB] = await app.db
+      .insert(base.conversations)
+      .values({ tenantId: tenantB.id, accountId: accB, contactId: contactB!.id })
+      .returning({ id: base.conversations.id });
+    assert.ok(contactB !== undefined && convB !== undefined, 'fixture conversa de B');
+    await app.db.insert(base.messages).values({
+      tenantId: tenantB.id,
+      conversationId: convB.id,
+      accountId: accB,
+      direction: 'inbound',
+      sender: 'customer',
+      body: 'segredo de B',
+      status: 'sent',
+    });
+    const auth = { cookies: { session: app.sessions.agent } };
+
+    const own = await app.inject({ method: 'GET', url: `/v1/conversations/${cid}/messages`, ...auth });
+    assert.equal(own.statusCode, 200, 'o fio do próprio tenant continua legível (mesmo vazio)');
+
+    const foreign = await app.inject({
+      method: 'GET',
+      url: `/v1/conversations/${convB.id}/messages`,
+      ...auth,
+    });
+    assert.equal(foreign.statusCode, 404, 'fio alheio → 404, nunca 200 com página vazia');
+
+    const missing = await app.inject({
+      method: 'GET',
+      url: `/v1/conversations/${randomUUID()}/messages`,
+      ...auth,
+    });
+    assert.equal(missing.statusCode, 404, 'fio inexistente → 404 (existência verificada sob o scope)');
   } finally {
     await app.close();
   }
