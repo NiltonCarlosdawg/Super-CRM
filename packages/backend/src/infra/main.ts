@@ -158,6 +158,8 @@ async function main(): Promise<void> {
   // `createUnavailableAiProvider` rejeita sempre → o orquestrador cai no
   // failSafe (ai_active: mensagem fixa + passa a humano; ai_suggest: rascunho
   // por aprovar, D13) — e o job 'inbound.process' que despacha por tipo.
+  // Onda 1 (Task 5, ruling R1): o job resolve o tenant pela conta do webhook e
+  // cria os ports do orquestrador DESSE tenant (`forTenant`).
   const orchestratorPorts = createOrchestratorPorts({
     db,
     notifySink: socketNotify,
@@ -165,8 +167,8 @@ async function main(): Promise<void> {
     now,
   });
   const unavailableAiProvider = createUnavailableAiProvider();
-  const orchestrate = (msg: InboundMessage): Promise<Outcome> =>
-    handleInbound(orchestratorPorts, unavailableAiProvider, msg);
+  const orchestrate = (msg: InboundMessage, tenantId: string): Promise<Outcome> =>
+    handleInbound(orchestratorPorts.forTenant(tenantId), unavailableAiProvider, msg);
   await jobs.register(
     'inbound.process',
     createInboundProcessHandler({
@@ -177,7 +179,7 @@ async function main(): Promise<void> {
         handleInboundEvent(
           {
             db,
-            ports: orchestratorPorts,
+            releaseClaim: orchestratorPorts.releaseClaim,
             orchestrate,
             outbox,
             notifySink: socketNotify,

@@ -12,7 +12,6 @@ import {
   messages,
   whatsappAccounts,
 } from './schema/index.js';
-import { MILVENDAS_TENANT_ID } from './schema/tenants.schema.js';
 
 export type InboundEventRow = {
   payload: unknown;
@@ -45,29 +44,40 @@ export async function markInboundEventProcessed(
   await db.update(inboundEvents).set({ processedAt: at }).where(eq(inboundEvents.id, eventId));
 }
 
-/** Conta do WA-AKG que serve esta sessão; desconhecida ⇒ evento sem dono. */
+/** Conta do WA-AKG que serve esta sessão; desconhecida ⇒ evento sem dono.
+ *  Onda 1 (Task 5, ruling R1): SEM tenant scope — esta função É a resolução de
+ *  tenant do webhook/job; o `tenantId` devolvido é propagado a todo o resto. */
 export async function findAccountBySession(
   db: DbClient,
   sessionId: string,
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; tenantId: string } | null> {
   const [row] = await db
-    .select({ id: whatsappAccounts.id })
+    .select({ id: whatsappAccounts.id, tenantId: whatsappAccounts.tenantId })
     .from(whatsappAccounts)
     .where(eq(whatsappAccounts.providerSessionId, sessionId))
     .limit(1);
   return row ?? null;
 }
 
+/** Onda 1 (Task 5): o evento passa a pertencer ao tenant da conta resolvida
+ *  (spec §4.2 — `inbound_events.tenant_id` anulável preenchido no job). */
+export async function markInboundTenant(
+  db: DbClient,
+  eventId: string,
+  tenantId: string,
+): Promise<void> {
+  await db.update(inboundEvents).set({ tenantId }).where(eq(inboundEvents.id, eventId));
+}
+
 /** Upsert por E.164 — NÃO toca em consentimento/opt-out (docs/04 §7). */
 export async function findOrCreateContact(
   db: DbClient,
-  input: { phoneE164: string; at: Date },
+  input: { tenantId: string; phoneE164: string; at: Date },
 ): Promise<{ id: string }> {
   const [row] = await db
     .insert(contacts)
     .values({
-      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
-      tenantId: MILVENDAS_TENANT_ID,
+      tenantId: input.tenantId, // Onda 1 (Task 5): tenant da conta resolvida
       phoneE164: input.phoneE164,
       createdAt: input.at,
       updatedAt: input.at,
@@ -85,13 +95,12 @@ export async function findOrCreateContact(
  *  (um humano pode já ter mudado o modo; docs/04 §6). */
 export async function findOrCreateConversation(
   db: DbClient,
-  input: { accountId: string; contactId: string; at: Date },
+  input: { tenantId: string; accountId: string; contactId: string; at: Date },
 ): Promise<{ id: string }> {
   const [row] = await db
     .insert(conversations)
     .values({
-      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
-      tenantId: MILVENDAS_TENANT_ID,
+      tenantId: input.tenantId, // Onda 1 (Task 5): tenant da conta resolvida
       accountId: input.accountId,
       contactId: input.contactId,
       lastMessageAt: input.at,
@@ -110,20 +119,19 @@ export async function findOrCreateConversation(
 /** Lead em falta na conversa → INSERT (stage 'open', qualification '{}') + link. */
 export async function ensureLeadForConversation(
   db: DbClient,
-  input: { contactId: string; conversationId: string; at: Date },
+  input: { tenantId: string; contactId: string; conversationId: string; at: Date },
 ): Promise<void> {
   const [conv] = await db
     .select({ leadId: conversations.leadId })
     .from(conversations)
-    .where(eq(conversations.id, input.conversationId))
+    .where(and(eq(conversations.id, input.conversationId), eq(conversations.tenantId, input.tenantId)))
     .limit(1);
   if (conv === undefined) throw new Error(`conversa ${input.conversationId} inexistente`);
   if (conv.leadId !== null) return; // já ligado (retry ou conversa pré-existente)
   const [lead] = await db
     .insert(leads)
     .values({
-      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
-      tenantId: MILVENDAS_TENANT_ID,
+      tenantId: input.tenantId, // Onda 1 (Task 5): tenant da conta resolvida
       contactId: input.contactId,
       lineId: null,
       stage: 'open',
@@ -136,13 +144,14 @@ export async function ensureLeadForConversation(
   await db
     .update(conversations)
     .set({ leadId: lead.id, updatedAt: input.at })
-    .where(eq(conversations.id, input.conversationId));
+    .where(and(eq(conversations.id, input.conversationId), eq(conversations.tenantId, input.tenantId)));
 }
 
 /** Mensagem idempotente: UNIQUE (conta, provider_message_id) DO NOTHING + SELECT. */
 export async function storeInboundMessage(
   db: DbClient,
   input: {
+    tenantId: string;
     accountId: string;
     conversationId: string;
     providerMessageId: string;
@@ -155,8 +164,7 @@ export async function storeInboundMessage(
   const inserted = await db
     .insert(messages)
     .values({
-      // Onda 1 (Task 1): tenant fixo até a resolução de conta trazê-lo (Task 5).
-      tenantId: MILVENDAS_TENANT_ID,
+      tenantId: input.tenantId, // Onda 1 (Task 5): tenant da conta resolvida
       conversationId: input.conversationId,
       accountId: input.accountId,
       direction: 'inbound',
@@ -176,7 +184,11 @@ export async function storeInboundMessage(
     .select({ id: messages.id, createdAt: messages.createdAt })
     .from(messages)
     .where(
-      and(eq(messages.accountId, input.accountId), eq(messages.providerMessageId, input.providerMessageId)),
+      and(
+        eq(messages.tenantId, input.tenantId),
+        eq(messages.accountId, input.accountId),
+        eq(messages.providerMessageId, input.providerMessageId),
+      ),
     )
     .limit(1);
   if (existing === undefined) throw new Error('conflito de mensagem sem linha visível');

@@ -2,7 +2,7 @@
 // (estado 'queued') + linha na outbox → fila envia com limites (docs/04 §7).
 // Nunca se chama send() fora da outbox + fila.
 
-import { index, integer, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { outboxStatusEnum } from './enums.js';
 import { messages } from './messages.schema.js';
 import { tenants } from './tenants.schema.js';
@@ -34,7 +34,10 @@ export const outboxMessages = pgTable(
     accountId: uuid('account_id')
       .notNull()
       .references(() => whatsappAccounts.id),
-    idempotencyKey: text('idempotency_key').notNull().unique(), // re-envio com a mesma chave não duplica
+    // Onda 1 (Task 5, spec §6): a chave do chamador é única POR TENANT —
+    // `(tenant_id, idempotency_key)` no índice composto (abaixo). Chaves de
+    // provider continuam globais por natureza (são únicas por construção).
+    idempotencyKey: text('idempotency_key').notNull(),
     // 1 = resposta de conversa, 2 = campanha (docs/04 §7: resposta primeiro).
     priority: integer('priority').notNull().default(1),
     scheduledAt: ts('scheduled_at').notNull().defaultNow(), // claim só lê scheduled_at <= now
@@ -45,6 +48,9 @@ export const outboxMessages = pgTable(
     updatedAt: updatedAt(), // o sweep de linhas 'sending' velhas usa updated_at
   },
   (t) => [
+    // Idempotência de envio POR TENANT (Task 5, spec §6): a mesma chave em
+    // tenants diferentes são DOIS envios; a mesma chave no mesmo tenant dedupe.
+    uniqueIndex('outbox_messages_tenant_idempotency_uq').on(t.tenantId, t.idempotencyKey),
     // Claim do worker: status = queued, ordenado por priority, scheduled_at
     // (FOR UPDATE SKIP LOCKED na query, docs/02 §6).
     index('outbox_messages_claim_idx').on(t.status, t.priority, t.scheduledAt),

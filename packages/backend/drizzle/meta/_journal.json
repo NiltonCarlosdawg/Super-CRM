@@ -50,6 +50,13 @@
       "when": 1792183275306,
       "tag": "0006_users_platform_tenant_check",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792215838334,
+      "tag": "0007_early_silhouette",
+      "breakpoints": true
     }
   ]
 }

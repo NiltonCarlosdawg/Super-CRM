@@ -1,6 +1,7 @@
 // Enqueue transacional da outbox (Task 17; docs/01 §6, docs/04 §7): a mensagem
-// E a linha da outbox nascem numa SÓ transação. Chave repetida ⇒ ROLLBACK (a
-// mensagem órfã desaparece) + SELECT da existente, sem 2.º evento. O notify
+// E a linha da outbox nascem numa SÓ transação. Chave repetida NO TENANT ⇒
+// ROLLBACK (a mensagem órfã desaparece) + SELECT da existente, sem 2.º evento
+// (unique composto (tenant_id, idempotency_key) — Task 5). O notify
 // `{type:'message', phase:'created'}` sai SÓ depois do commit — o painel nunca
 // vê um evento de algo que pode ter sido revertido.
 
@@ -13,10 +14,12 @@ import type { Outbox } from '../../ports/outbox.js';
 import type { DbClient } from './index.js';
 import { contacts, conversations, messages, outboxMessages, whatsappAccounts } from './schema/index.js';
 
-/** Sinal interno: a transação fez rollback por chave já existente. */
+/** Sinal interno: a transação fez rollback por chave já existente NO TENANT
+ *  (unique composto (tenant_id, idempotency_key) — Task 5). Carrega o tenant
+ *  para o lookup pós-rollback devolver a linha VENCEDORA do mesmo tenant. */
 class DuplicateEnqueue extends Error {
-  constructor() {
-    super('idempotency_key já existe');
+  constructor(readonly tenantId: string) {
+    super('idempotency_key já existe no tenant');
     this.name = 'DuplicateEnqueue';
   }
 }
@@ -84,18 +87,26 @@ export function createOutbox(deps: {
               createdAt: at,
               updatedAt: at,
             })
-            .onConflictDoNothing({ target: outboxMessages.idempotencyKey })
+            // Onda 1 (Task 5, spec §6): a chave é única POR TENANT — a mesma
+            // chave noutro tenant é outro envio, não um duplicado.
+            .onConflictDoNothing({ target: [outboxMessages.tenantId, outboxMessages.idempotencyKey] })
             .returning({ id: outboxMessages.id });
-          if (row === undefined) throw new DuplicateEnqueue(); // ⇒ ROLLBACK da mensagem
+          if (row === undefined) throw new DuplicateEnqueue(conv.tenantId); // ⇒ ROLLBACK da mensagem
           return { outboxId: row.id, createdAt: m.createdAt };
         })
         .catch(async (e: unknown) => {
           if (!(e instanceof DuplicateEnqueue)) throw e;
-          // Pós-ROLLBACK: a linha vencedora está commitada e é visível.
+          // Pós-ROLLBACK: a linha vencedora está commitada e é visível —
+          // SÓ dentro do mesmo tenant (unique composto, Task 5).
           const [existing] = await db
             .select({ id: outboxMessages.id })
             .from(outboxMessages)
-            .where(eq(outboxMessages.idempotencyKey, input.idempotencyKey))
+            .where(
+              and(
+                eq(outboxMessages.tenantId, e.tenantId),
+                eq(outboxMessages.idempotencyKey, input.idempotencyKey),
+              ),
+            )
             .limit(1);
           if (existing === undefined) throw e; // conflito sem linha visível → erro real
           return { duplicate: true as const, outboxId: existing.id };

@@ -97,8 +97,11 @@ async function createInboundHarness(): Promise<InboundHarness> {
     logs: () => logEntries.slice(),
     deps: {
       db,
-      ports,
-      orchestrate: (m) => handleInbound(ports, createUnavailableAiProvider(), m),
+      // Onda 1 (Task 5): os ports são do tenant RESOLVIDO pela conta do webhook
+      // (ruling R1) — o seam recebe-o como 2.º parâmetro.
+      releaseClaim: ports.releaseClaim,
+      orchestrate: (m, tenantId) =>
+        handleInbound(ports.forTenant(tenantId), createUnavailableAiProvider(), m),
       outbox,
       notifySink,
       cfg: { claimTtlMs: 60_000 },
@@ -241,12 +244,12 @@ test('erro no processamento liberta o claim e o retry seguinte completa', async 
   let first = true;
   const failing: HandleInboundDeps = {
     ...h.deps,
-    orchestrate: async (m) => {
+    orchestrate: async (m, tenantId) => {
       if (first) {
         first = false;
         throw new Error('db blip');
       }
-      return h.deps.orchestrate(m);
+      return h.deps.orchestrate(m, tenantId);
     },
   };
   await assert.rejects(() => handleInboundEvent(failing, ev.id), /db blip/);

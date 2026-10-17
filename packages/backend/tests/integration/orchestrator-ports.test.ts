@@ -16,13 +16,15 @@ const T0 = Date.parse('2026-10-07T10:00:00.000Z');
 const noNotify = async (): Promise<void> => {};
 
 function portsFor(db: DbClient, extra?: { turnsLimit?: number; retrieve?: unknown }) {
+  // Onda 1 (Task 5): os ports são de UM tenant (`forTenant`); os fixtures são
+  // do tenant MilVendas.
   return createOrchestratorPorts({
     db,
     notifySink: noNotify,
     claimTtlMs: 60_000,
     now: () => new Date(T0),
     ...extra,
-  });
+  }).forTenant(base.MILVENDAS_TENANT_ID);
 }
 
 /** Linha + conta + contacto + lead + conversa com 2 mensagens (ai → cliente). */
@@ -59,17 +61,20 @@ async function seedConversation(db: DbClient) {
 test('claimMessage: true, false, stale re-claim após claimTtlMs e releaseClaim', async () => {
   const db = await migratedDb();
   let t = T0;
-  const ports = createOrchestratorPorts({ db, notifySink: noNotify, claimTtlMs: 60_000, now: () => new Date(t) });
+  const factory = createOrchestratorPorts({ db, notifySink: noNotify, claimTtlMs: 60_000, now: () => new Date(t) });
+  const ports = factory.forTenant(base.MILVENDAS_TENANT_ID);
+  // Onda 1 (Task 5): o evento pertence ao tenant (marcado no job quando a
+  // conta resolve) — o claim é por (id, tenant_id).
   const ev = (await db
     .insert(base.inboundEvents)
-    .values({ providerEventId: 'evt-claim-1', payload: { synth: true } })
+    .values({ tenantId: base.MILVENDAS_TENANT_ID, providerEventId: 'evt-claim-1', payload: { synth: true } })
     .returning())[0]!;
 
   assert.equal(await ports.claimMessage(ev.id), true);
   assert.equal(await ports.claimMessage(ev.id), false, 'outro worker não entra');
   t += 60_001; // claim expirou (crash a meio)
   assert.equal(await ports.claimMessage(ev.id), true, 're-claim após TTL');
-  await ports.releaseClaim(ev.id); // caminho de erro da Task 19
+  await factory.releaseClaim(ev.id, base.MILVENDAS_TENANT_ID); // caminho de erro da Task 19
   assert.equal(await ports.claimMessage(ev.id), true, 'releaseClaim liberta');
 
   // relógio controlado: o claim ficou gravado com deps.now()
@@ -108,7 +113,7 @@ test('estado: saveState grava ai_mode, miss_streak e qualification no lead; load
   // turnsLimit corta os mais antigos, mantendo o atual
   const p1 = createOrchestratorPorts({
     db, notifySink: noNotify, claimTtlMs: 60_000, now: () => new Date(T0), turnsLimit: 1,
-  });
+  }).forTenant(base.MILVENDAS_TENANT_ID);
   const s1 = await p1.loadState(conversation.id);
   assert.equal(s1.turns.length, 1);
   assert.equal(s1.turns[0]?.from, 'customer');
@@ -185,7 +190,7 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
   const pRet = createOrchestratorPorts({
     db, notifySink: noNotify, claimTtlMs: 60_000, now: () => new Date(T0),
     retrieve: async () => injected,
-  });
+  }).forTenant(base.MILVENDAS_TENANT_ID);
   assert.deepEqual(await pRet.retrieve('olá', 'software'), injected);
 
   // lookupCatalog: só publicado e dentro da validade; line null → []
@@ -231,7 +236,7 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
   const seen: unknown[] = [];
   const pNotify = createOrchestratorPorts({
     db, notifySink: async (e) => { seen.push(e); }, claimTtlMs: 60_000, now: () => new Date(T0),
-  });
+  }).forTenant(base.MILVENDAS_TENANT_ID);
   const payload = {
     type: 'handoff', handoffId, conversationId: conversation.id, priority: 'urgent',
     reason: 'pedido de humano', x: 'extra',

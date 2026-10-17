@@ -5,7 +5,10 @@
 //  2. revalidação na fronteira do job (o payload de jsonb perde tipos); tipo ≠
 //     message.received → skipped; `from` não-normalizável → processed + skipped
 //     (evento venenoso não entra em retry infinito, docs/02 §3);
-//  3. conta pela sessão do WA-AKG; desconhecida → processed + skipped;
+//  3. conta pela sessão do WA-AKG (sem scope: É a resolução de tenant, R1);
+//     desconhecida → processed + skipped; conhecida → `inbound_events.tenant_id`
+//     marcado e o tenant propagado a contacto/conversa/lead/mensagem/outbox
+//     orquestrador (Task 5);
 //  4. guarda idempotente: contacto (upsert) → conversa (UNIQUE conta+contacto)
 //     → lead em falta → mensagem (UNIQUE conta+provider_message_id) + notify;
 //  5. seam de efeitos (opt-out/markReplied, Fase 4) — erro propaga, nunca
@@ -23,11 +26,11 @@ import {
   findOrCreateConversation,
   getInboundEventRow,
   markInboundEventProcessed,
+  markInboundTenant,
   storeInboundMessage,
 } from '../adapters/db/inbound.js';
 import type { DbClient } from '../adapters/db/index.js';
 import { normalizePhoneE164 } from '../domain/phone.js';
-import type { Ports } from '../ports/ai-provider.js';
 import type { NotifyEvent } from '../ports/notify.js';
 import type { Outbox } from '../ports/outbox.js';
 import { parseProviderEvent, type ProviderEvent } from '../ports/provider-events.js';
@@ -43,9 +46,12 @@ export class RetryableConflictError extends Error {
 
 export interface HandleInboundDeps {
   db: DbClient;
-  ports: Ports & { releaseClaim(eventId: string): Promise<void> };
-  /** Fase 1: (m) => handleInbound(ports, aiProvider, m). Seam de testes. */
-  orchestrate: (msg: InboundMessage) => Promise<Outcome>;
+  /** Caminho de erro: liberta o claim DO evento deste tenant (Task 5) para o
+   *  retry não esperar o TTL. Claim de outro worker nunca é libertado aqui. */
+  releaseClaim(eventId: string, tenantId: string): Promise<void>;
+  /** Fase 1: (m, tenantId) => handleInbound(ports.forTenant(tenantId), …).
+   *  O tenant vem da conta resolvida do webhook (ruling R1). Seam de testes. */
+  orchestrate: (msg: InboundMessage, tenantId: string) => Promise<Outcome>;
   outbox: Outbox;
   notifySink: (e: NotifyEvent) => Promise<void>;
   cfg: { claimTtlMs: number };
@@ -80,6 +86,9 @@ export async function handleInboundEvent(
   eventId: string,
 ): Promise<{ outcome: 'skipped' | 'processed' | Outcome['status'] }> {
   const at = deps.now();
+  /** Onda 1 (Task 5): tenant da conta resolvida — nulo até a resolução (R1);
+   *  o claim só existe DEPOIS dela (dentro do orquestrador). */
+  let tenantId: string | null = null;
 
   // 1. Reentrega → no-op; claim fresco de outro worker → reprocessável.
   const row = await getInboundEventRow(deps.db, eventId);
@@ -112,7 +121,8 @@ export async function handleInboundEvent(
       return { outcome: 'skipped' };
     }
 
-    // 3. Conta que serve a sessão do WA-AKG.
+    // 3. Conta que serve a sessão do WA-AKG — a resolução É do tenant (R1):
+    //    a conta resolvida é a autoridade do `tenant_id` do resto do pipeline.
     const account = await findAccountBySession(deps.db, event.sessionId);
     if (account === null) {
       await markInboundEventProcessed(deps.db, eventId, at);
@@ -122,21 +132,30 @@ export async function handleInboundEvent(
       );
       return { outcome: 'skipped' };
     }
+    tenantId = account.tenantId;
+    await markInboundTenant(deps.db, eventId, account.tenantId);
 
-    // 4. Guardar (idempotente) + notify.message.created.
+    // 4. Guardar (idempotente) + notify.message.created — tudo sob o tenant resolvido.
     const text = event.message.text ?? null;
-    const contact = await findOrCreateContact(deps.db, { phoneE164: phone, at });
+    const contact = await findOrCreateContact(deps.db, {
+      tenantId: account.tenantId,
+      phoneE164: phone,
+      at,
+    });
     const conversation = await findOrCreateConversation(deps.db, {
+      tenantId: account.tenantId,
       accountId: account.id,
       contactId: contact.id,
       at,
     });
     await ensureLeadForConversation(deps.db, {
+      tenantId: account.tenantId,
       contactId: contact.id,
       conversationId: conversation.id,
       at,
     });
     const stored = await storeInboundMessage(deps.db, {
+      tenantId: account.tenantId,
       accountId: account.id,
       conversationId: conversation.id,
       providerMessageId: event.providerMessageId,
@@ -164,13 +183,17 @@ export async function handleInboundEvent(
       receivedAt: event.timestamp,
     });
 
-    // 6. Orquestrador: `msg.id` é o id do evento (o claim é em inbound_events).
-    const outcome = await deps.orchestrate({
-      id: eventId,
-      conversationId: conversation.id,
-      text: text ?? '',
-      isTest: false,
-    });
+    // 6. Orquestrador: `msg.id` é o id do evento (o claim é em inbound_events);
+    //    o tenant resolvido vai no seam — os ports do orquestrador são dele.
+    const outcome = await deps.orchestrate(
+      {
+        id: eventId,
+        conversationId: conversation.id,
+        text: text ?? '',
+        isTest: false,
+      },
+      account.tenantId,
+    );
 
     // 7. duplicate ⇒ outro worker tem o claim (corrida) → reprocessável.
     if (outcome.status === 'duplicate') {
@@ -200,9 +223,10 @@ export async function handleInboundEvent(
     return { outcome: 'processed' };
   } catch (error) {
     // 10. Best effort: libertar o NOSSO claim para o retry não esperar o TTL.
-    // Claim de outro worker (RetryableConflictError) NUNCA é libertado aqui.
-    if (!(error instanceof RetryableConflictError)) {
-      await deps.ports.releaseClaim(eventId).catch(() => undefined);
+    // Claim de outro worker (RetryableConflictError) NUNCA é libertado aqui;
+    // sem tenant resolvido ainda não há claim (o claim é do orquestrador).
+    if (!(error instanceof RetryableConflictError) && tenantId !== null) {
+      await deps.releaseClaim(eventId, tenantId).catch(() => undefined);
     }
     throw error;
   }

@@ -130,13 +130,15 @@ function makePipeline(app: TestApp, provider: MessagingProvider) {
     random: Math.random,
     replyDelay: { min: 1000, max: 5000 },
   });
-  const orchestrate = (msg: InboundMessage) =>
-    handleInbound(ports, createUnavailableAiProvider(), msg);
+  // Onda 1 (Task 5, ruling R1): o tenant vem do seam — o job resolve-o pela
+  // conta do webhook e cria os ports do orquestrador DESSE tenant.
+  const orchestrate = (msg: InboundMessage, tenantId: string) =>
+    handleInbound(ports.forTenant(tenantId), createUnavailableAiProvider(), msg);
   const runHandleInbound = (eventId: string) =>
     handleInboundEvent(
       {
         db: app.db,
-        ports,
+        releaseClaim: ports.releaseClaim,
         orchestrate,
         outbox,
         notifySink,

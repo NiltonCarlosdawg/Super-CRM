@@ -2,7 +2,8 @@
 // inválido ⇒ throw, sem processar; o retry é determinístico e morre na
 // dead-letter) e despacho pelo tipo do evento normalizado:
 //  - message.received → handleInboundEvent (Task 19: claim + orquestrador);
-//  - message.status   → advanceMessageStatus (docs/04 §8);
+//  - message.status   → avança o estado (docs/04 §8); a conta resolvida marca
+//                       `inbound_events.tenant_id` (Task 5, ruling R1);
 //  - session.status   → ciclo de vida da conta (docs/04 §6);
 //  - session.qr       → QR para o painel.
 // Todos os tipos marcam processed_at no fim (message.received é o handler de
@@ -10,7 +11,12 @@
 // releaseClaim do handle-inbound garante que o retry não é engolido).
 
 import { z } from 'zod';
-import { findAccountBySession, getInboundEventRow, markInboundEventProcessed } from '../adapters/db/inbound.js';
+import {
+  findAccountBySession,
+  getInboundEventRow,
+  markInboundEventProcessed,
+  markInboundTenant,
+} from '../adapters/db/inbound.js';
 import type { DbClient } from '../adapters/db/index.js';
 import type { AccountLifecycle } from '../ports/accounts.js';
 import type { JobContext } from '../ports/job-queue.js';
@@ -65,6 +71,8 @@ export function createInboundProcessHandler(
         return;
 
       case 'message.status': {
+        // Resolução de tenant (ruling R1): a conta da sessão traz o `tenant_id`
+        // que passa a pertencer ao evento antes de tocar na mensagem.
         const account = await findAccountBySession(deps.db, event.sessionId);
         if (account === null) {
           deps.logger.warn(
@@ -74,6 +82,7 @@ export function createInboundProcessHandler(
           await markInboundEventProcessed(deps.db, eventId, deps.now());
           return;
         }
+        await markInboundTenant(deps.db, eventId, account.tenantId);
         await deps.advanceStatus({
           accountId: account.id,
           providerMessageId: event.providerMessageId,

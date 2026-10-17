@@ -11,6 +11,12 @@ import { businessLines, handoffTriggers } from './knowledge.schema.js';
 type LineSlug = 'software' | 'custom' | 'telecom' | 'cctv';
 
 // tenantId fica de fora: atribuído no insert (tenant fixo, Onda 1 Task 1).
+// Onda 1 Task 5 (ruling R9): MANTER o hardcode AQUI é deliberado e justificado —
+// este é um seed ONE-OFF de conteúdo editorial, cujo único alvo é o tenant
+// MilVendas (linhas/gatilhos do catálogo inicial). Não é um job de fundo nem
+// fluxo de dados de clientes; correr-se-á uma vez por ambiente. Seeds de outros
+// tenants criariam os seus gatilhos com tenant explícito, nunca reutilizando
+// este módulo.
 type TriggerSeed = Omit<typeof handoffTriggers.$inferInsert, 'id' | 'lineId' | 'tenantId'> & {
   lineSlug: LineSlug | null; // null = global
 };

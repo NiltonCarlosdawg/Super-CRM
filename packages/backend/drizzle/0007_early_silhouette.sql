@@ -1,0 +1,2 @@
+ALTER TABLE "outbox_messages" DROP CONSTRAINT "outbox_messages_idempotency_key_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "outbox_messages_tenant_idempotency_uq" ON "outbox_messages" USING btree ("tenant_id","idempotency_key");
