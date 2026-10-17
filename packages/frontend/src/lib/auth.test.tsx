@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider, useSession } from "./auth";
 
 const user = { id: "u1", name: "A", email: "a@b.c", role: "admin" as const };
+// /me devolve scope (Task 3); o login NÃO traz scope no user (login.ts:87).
+const me = { ...user, scope: "tenant" as const };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -52,11 +54,27 @@ function call(url: string, method = "GET") {
 
 describe("session state machine", () => {
   it("me 200 autentica no arranque", async () => {
-    handler = (url) => (url === "/v1/auth/me" ? json(user) : json({}, 404));
+    handler = (url) => (url === "/v1/auth/me" ? json(me) : json({}, 404));
     const { result } = setup();
 
     await waitFor(() => expect(result.current.status).toBe("authed"));
-    expect(result.current.user).toEqual(user);
+    expect(result.current.user).toEqual(me);
+  });
+
+  it("me 200 de platform_admin autentica com scope platform", async () => {
+    const platformMe = {
+      id: "p1",
+      name: "Plataforma",
+      email: "platform@milvendas.local",
+      role: "platform_admin" as const,
+      scope: "platform" as const,
+    };
+    handler = (url) => (url === "/v1/auth/me" ? json(platformMe) : json({}, 404));
+    const { result } = setup();
+
+    await waitFor(() => expect(result.current.status).toBe("authed"));
+    expect(result.current.user).toEqual(platformMe);
+    expect(result.current.user?.scope).toBe("platform");
   });
 
   it("me 401 fica anon", async () => {
@@ -91,7 +109,8 @@ describe("session state machine", () => {
     await result.current.login("a@b.c", "pw");
 
     await waitFor(() => expect(result.current.status).toBe("authed"));
-    expect(result.current.user).toEqual(user);
+    // login não traz scope — o cliente deriva-o do papel (scopeFromRole).
+    expect(result.current.user).toEqual(me);
     const loginCall = call("/v1/auth/login", "POST");
     expect(JSON.parse(String(loginCall.init.body))).toEqual({ email: "a@b.c", password: "pw" });
   });
@@ -182,7 +201,7 @@ describe("session state machine", () => {
     handler = (url) => {
       if (url === "/v1/auth/me") {
         meCalls += 1;
-        return meCalls === 1 ? json({ title: "unauthenticated" }, 401) : json(user);
+        return meCalls === 1 ? json({ title: "unauthenticated" }, 401) : json(me);
       }
       if (url === "/v1/auth/login") return json({ mfa: "required", expiresAt: "x" });
       if (url === "/v1/auth/totp/verify") return json({ ok: true });
@@ -196,7 +215,7 @@ describe("session state machine", () => {
     await result.current.verifyTotp("123456");
 
     await waitFor(() => expect(result.current.status).toBe("authed"));
-    expect(result.current.user).toEqual(user);
+    expect(result.current.user).toEqual(me);
     const verifyCall = call("/v1/auth/totp/verify", "POST");
     expect(JSON.parse(String(verifyCall.init.body))).toEqual({ code: "123456" });
     expect(meCalls).toBe(2); // boot (401) + pós-verify (200)
@@ -229,7 +248,7 @@ describe("session state machine", () => {
 
   it("logout volta a anon", async () => {
     handler = (url) => {
-      if (url === "/v1/auth/me") return json(user);
+      if (url === "/v1/auth/me") return json(me);
       if (url === "/v1/auth/logout") return new Response(null, { status: 204 });
       return json({}, 404);
     };

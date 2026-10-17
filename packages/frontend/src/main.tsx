@@ -10,7 +10,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { SessionProvider } from "./lib/auth";
 import { AppShell } from "./components/AppShell";
-import { RequireAdmin, RequireAuth } from "./components/guards";
+import { RequireAdmin, RequireAuth, RequirePlatform } from "./components/guards";
 import { ToastProvider } from "./components/ui/Toast";
 
 import LoginPage from "./pages/login";
@@ -20,6 +20,7 @@ import AccountsPage from "./pages/accounts";
 import ConversationsPage from "./pages/conversations";
 import CampaignsPage from "./pages/campaigns";
 import UsersPage from "./pages/users";
+import PlatformPage from "./pages/platform";
 
 import "./globals.css";
 
@@ -40,6 +41,10 @@ createRoot(document.getElementById("root")!).render(
               <Route
                 path="/users"
                 element={<RequireAdmin><UsersPage /></RequireAdmin>}
+              />
+              <Route
+                path="/platform"
+                element={<RequirePlatform><PlatformPage /></RequirePlatform>}
               />
             </Route>
           </Routes>

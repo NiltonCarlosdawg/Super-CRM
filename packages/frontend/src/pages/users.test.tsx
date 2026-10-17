@@ -47,7 +47,7 @@ const OTHER: UserSummary = {
 function session() {
   return {
     status: "authed" as const,
-    user: { id: ME.id, name: ME.name, email: ME.email, role: ME.role },
+    user: { id: ME.id, name: ME.name, email: ME.email, role: ME.role, scope: "tenant" as const },
     otpauthUrl: null,
     error: null,
     login: vi.fn(),

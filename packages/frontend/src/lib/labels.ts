@@ -1,7 +1,14 @@
 // Rótulos PT-AO partilhados por toda a UI (docs do desenho, Global
 // Constraints). Tarefas futuras acrescentam os seus vocabulários aqui.
 
-import type { AccountPurpose, AccountStatus, AiMode, MessageStatus, Role } from "./types";
+import type {
+  AccountPurpose,
+  AccountStatus,
+  AiMode,
+  MessageStatus,
+  Role,
+  TenantStatus,
+} from "./types";
 import type { HandoffPriority } from "./socket";
 import type { SessionError } from "./auth";
 
@@ -9,6 +16,7 @@ const ROLE_LABELS: Record<Role, string> = {
   admin: "Administrador",
   editor: "Editor",
   agent: "Agente",
+  platform_admin: "Plataforma",
 };
 
 export function roleLabel(role: Role): string {
@@ -95,4 +103,16 @@ const HANDOFF_PRIORITY_LABELS: Record<HandoffPriority, string> = {
 
 export function handoffPriorityLabel(priority: HandoffPriority): string {
   return HANDOFF_PRIORITY_LABELS[priority];
+}
+
+// --- Plataforma (Onda 1, Task 10) ---
+
+const TENANT_STATUS_LABELS: Record<TenantStatus, string> = {
+  active: "Activo",
+  suspended: "Suspenso",
+};
+
+/** Estado do tenant na lista de plataforma (coluna `status` de TenantListItem). */
+export function tenantStatusLabel(status: TenantStatus): string {
+  return TENANT_STATUS_LABELS[status];
 }

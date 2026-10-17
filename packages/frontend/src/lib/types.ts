@@ -2,13 +2,19 @@
 // (packages/backend/src/ports/* e adapters/http/routes/*). Datas vêm como
 // string ISO no JSON.
 
-export type Role = "admin" | "editor" | "agent";
+export type Role = "admin" | "editor" | "agent" | "platform_admin";
+
+// Onda 1 (Tasks 3/10): o /me devolve scope — a plataforma (platform_admin)
+// administra tenants; o backend distingue por `role === 'platform_admin'`
+// (guards.ts:60 do backend — a linha users é a autoridade por pedido).
+export type Scope = "tenant" | "platform";
 
 export interface SessionUser {
   id: string;
   name: string;
   email: string;
   role: Role;
+  scope: Scope;
 }
 
 // POST /v1/auth/register (Onda 1, Task 6, spec §5.1): sem `role` no corpo — o
@@ -101,4 +107,19 @@ export interface MessagesList {
 export interface SendMessageResponse {
   message: MessageView;
   replayed: boolean;
+}
+
+// --- Plataforma (Onda 1, Tasks 7/10) ---
+
+export type TenantStatus = "active" | "suspended";
+
+// GET /v1/platform/tenants devolve um ARRAY directo (routes/platform.ts:81-83,
+// ruling R23 — literal do brief, ao contrário das outras listagens envelopadas).
+export interface TenantListItem {
+  id: string;
+  name: string;
+  status: TenantStatus;
+  usersCount: number;
+  accountsCount: number;
+  createdAt: string;
 }

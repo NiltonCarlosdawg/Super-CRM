@@ -29,3 +29,11 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   if (user?.role !== "admin") return <Navigate to="/" replace />;
   return <>{children}</>;
 }
+
+/** Exige âmbito de plataforma (platform_admin) — a rota vive dentro do RequireAuth. */
+export function RequirePlatform({ children }: { children: ReactNode }) {
+  const { status, user } = useSession();
+  if (status === "loading") return <Loading />;
+  if (user?.scope !== "platform") return <Navigate to="/" replace />;
+  return <>{children}</>;
+}

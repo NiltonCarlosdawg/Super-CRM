@@ -8,6 +8,11 @@ const NAV_ITEMS = [
   { to: "/campaigns", label: "Campanhas" },
 ];
 
+// Onda 1 (Task 10): plataforma não pertence a nenhum tenant — vê SÓ a sua
+// página (spec multitenant §6); os papéis de tenant mantêm o menu actual,
+// sem qualquer link de plataforma.
+const PLATFORM_NAV_ITEMS = [{ to: "/platform", label: "Plataforma", end: false }];
+
 const linkClass = ({ isActive }: { isActive: boolean }): string =>
   `block px-3 py-2 text-sm transition-colors ${
     isActive ? "bg-accent-soft text-fg" : "text-muted hover:bg-accent-soft hover:text-fg"
@@ -15,6 +20,8 @@ const linkClass = ({ isActive }: { isActive: boolean }): string =>
 
 export function Sidebar() {
   const { user } = useSession();
+  const isPlatform = user?.scope === "platform";
+  const items = isPlatform ? PLATFORM_NAV_ITEMS : NAV_ITEMS;
   return (
     <aside
       aria-label="Menu lateral"
@@ -24,7 +31,7 @@ export function Sidebar() {
         <span className="font-display text-lg font-light text-fg">MilVendas CRM</span>
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} className={linkClass}>
             {item.label}
           </NavLink>

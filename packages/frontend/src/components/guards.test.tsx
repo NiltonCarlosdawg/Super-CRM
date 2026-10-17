@@ -15,7 +15,7 @@ const mockUseSession = vi.mocked(useSession);
 function session(overrides: Partial<ReturnType<typeof useSession>> = {}) {
   return {
     status: "authed" as const,
-    user: { id: "u1", name: "A", email: "a@b.c", role: "admin" as const },
+    user: { id: "u1", name: "A", email: "a@b.c", role: "admin" as const, scope: "tenant" as const },
     otpauthUrl: null,
     error: null,
     login: vi.fn(),
@@ -93,7 +93,7 @@ describe("RequireAuth", () => {
 describe("RequireAdmin", () => {
   it("redireciona para / se papel não é admin", () => {
     mockUseSession.mockReturnValue(
-      session({ user: { id: "u1", name: "A", email: "a@b.c", role: "agent" } }),
+      session({ user: { id: "u1", name: "A", email: "a@b.c", role: "agent", scope: "tenant" } }),
     );
     renderRoutes(
       <RequireAdmin>

@@ -15,7 +15,7 @@ import {
   type ReactNode,
 } from "react";
 import { api, ApiError } from "./api";
-import type { RegisterInput, Role, SessionUser } from "./types";
+import type { RegisterInput, Role, Scope, SessionUser } from "./types";
 
 export type SessionStatus = "loading" | "anon" | "mfa_setup" | "mfa_required" | "authed";
 
@@ -40,12 +40,23 @@ interface MeResponse {
   name: string;
   email: string;
   role: Role;
+  scope: Scope; // Onda 1, Task 3: routes/auth.ts:151 — 'platform' para platform_admin
 }
 
+// O login/registo NÃO traz scope no user (backend login.ts:87: id/name/email/
+// role) — o cliente deriva-o do papel com a MESMA regra do backend
+// (guards.ts:60: isPlatform = role === 'platform_admin').
+type LoginUser = Omit<SessionUser, "scope">;
+
 type LoginResponse =
-  | { user: SessionUser; expiresAt: string }
+  | { user: LoginUser; expiresAt: string }
   | { mfa: "setup"; otpauthUrl: string; expiresAt: string }
   | { mfa: "required"; expiresAt: string };
+
+/** Espelho da autoridade do backend (guards.ts:60 + routes/auth.ts:151). */
+export function scopeFromRole(role: Role): Scope {
+  return role === "platform_admin" ? "platform" : "tenant";
+}
 
 const SessionContext = createContext<SessionValue | null>(null);
 
@@ -76,7 +87,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     void api.get<MeResponse>("/v1/auth/me").then(
       (me) => {
         if (!alive) return;
-        applyBoot("authed", { id: me.id, name: me.name, email: me.email, role: me.role });
+        applyBoot("authed", {
+          id: me.id,
+          name: me.name,
+          email: me.email,
+          role: me.role,
+          scope: me.scope,
+        });
         setOtpauthUrl(null);
       },
       (err: unknown) => {
@@ -113,7 +130,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     setOtpauthUrl(null);
     statusRef.current = "authed";
-    setUser(result.user);
+    // scope derivado do papel (login não o traz — ver LoginUser acima).
+    setUser({ ...result.user, scope: scopeFromRole(result.user.role) });
     setStatus("authed");
   }, []);
 
@@ -153,7 +171,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const me = await api.get<MeResponse>("/v1/auth/me");
         setOtpauthUrl(null);
         statusRef.current = "authed";
-        setUser({ id: me.id, name: me.name, email: me.email, role: me.role });
+        setUser({
+          id: me.id,
+          name: me.name,
+          email: me.email,
+          role: me.role,
+          scope: me.scope,
+        });
         setStatus("authed");
       } catch (err) {
         setError(toSessionError(err));
