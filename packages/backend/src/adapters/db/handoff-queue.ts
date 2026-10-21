@@ -11,7 +11,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 
 import type { AiMode, LineSlug } from '../../ports/ai-provider.js';
 import type { TenantScope } from '../../ports/tenancy.js';
-import type { HandoffQueueRepository, HandoffRow } from '../../ports/handoff-queue.js';
+import type { HandoffQueueRepository, HandoffRow, SweepHandoff } from '../../ports/handoff-queue.js';
 import type { HandoffConversations } from '../../application/handoffs.js';
 import { handoffs } from '../../modules/knowledge/knowledge.schema.js';
 import type { DbClient } from './index.js';
@@ -77,16 +77,33 @@ export function createHandoffQueueRepository(db: DbClient): HandoffQueueReposito
       return rows.map(toRow);
     },
 
-    async markOpeningAlerted(scope: TenantScope, handoffId: string, now: Date) {
-      await db.execute(sql`
-        UPDATE handoffs SET opening_alerted_at = ${now}::timestamptz
-        WHERE id = ${handoffId}::uuid AND tenant_id = ${scope.tenantId}::uuid`);
+    /** Varredura de sistema (job global): pendentes de todos os tenants, cada linha com o seu dono. */
+    async listPendingForSweep(limit: number): Promise<SweepHandoff[]> {
+      const rows = await db
+        .select()
+        .from(handoffs)
+        .where(eq(handoffs.status, 'pending'))
+        .orderBy(asc(handoffs.priority), asc(handoffs.createdAt))
+        .limit(limit);
+      return rows.map((r) => ({ ...toRow(r), tenantId: r.tenantId }));
     },
 
+    /** CAS: só marca (e devolve true) se ainda não marcado — exatamente-um sob corrida. */
+    async markOpeningAlerted(scope: TenantScope, handoffId: string, now: Date) {
+      const res = await db.execute(sql`
+        UPDATE handoffs SET opening_alerted_at = ${now}::timestamptz
+        WHERE id = ${handoffId}::uuid AND tenant_id = ${scope.tenantId}::uuid AND opening_alerted_at IS NULL
+        RETURNING id`);
+      return res.rows.length > 0;
+    },
+
+    /** CAS: só marca (e devolve true) se ainda não marcado — exatamente-um sob corrida. */
     async markSlaAlerted(scope: TenantScope, handoffId: string, now: Date) {
-      await db.execute(sql`
+      const res = await db.execute(sql`
         UPDATE handoffs SET sla_alerted_at = ${now}::timestamptz
-        WHERE id = ${handoffId}::uuid AND tenant_id = ${scope.tenantId}::uuid`);
+        WHERE id = ${handoffId}::uuid AND tenant_id = ${scope.tenantId}::uuid AND sla_alerted_at IS NULL
+        RETURNING id`);
+      return res.rows.length > 0;
     },
   };
 }

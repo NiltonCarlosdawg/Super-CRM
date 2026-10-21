@@ -23,6 +23,14 @@ export interface HandoffRow {
   leadSnapshot: unknown;
 }
 
+/**
+ * Linha da varredura: um pendente + o seu tenant. O sweep (Fase 3, Task 15) é um
+ * job GLOBAL de sistema — consulta pendentes de todos os tenants e devolve o
+ * `tenantId` em cada linha, para as operações seguintes correrem sob scope
+ * (mesmo padrão de `claimOutboxBatch`: batch global que carrega o tenant).
+ */
+export type SweepHandoff = HandoffRow & { tenantId: string };
+
 export interface HandoffQueueRepository {
   /** Claim atómico: 'claimed' se venceu; 'taken' se já aceite; 'not_found' se não existe/alheio. */
   claim(
@@ -40,8 +48,18 @@ export interface HandoffQueueRepository {
   ): Promise<'resolved' | 'not_found'>;
   /** Fila pendente, da mais urgente para a mais antiga dentro de cada prioridade. */
   listPending(scope: TenantScope, limit: number): Promise<HandoffRow[]>;
-  /** Marca que o alerta de abertura já foi emitido (sweep idempotente). */
-  markOpeningAlerted(scope: TenantScope, handoffId: string, now: Date): Promise<void>;
-  /** Marca que o alerta de SLA já foi emitido (sweep idempotente). */
-  markSlaAlerted(scope: TenantScope, handoffId: string, now: Date): Promise<void>;
+  /**
+   * Varredura de sistema (job global): pendentes de TODOS os tenants, cada linha
+   * com o seu `tenantId` — sem escopo, porque o sweep é manutenção transversal
+   * (padrão outbox). As operações seguintes (mark, setAiMode) são por-linha scoped.
+   */
+  listPendingForSweep(limit: number): Promise<SweepHandoff[]>;
+  /**
+   * Marca o alerta de abertura com CAS idempotente (`WHERE opening_alerted_at IS
+   * NULL RETURNING id`): devolve `true` SÓ a quem venceu a corrida — garante
+   * exatamente-um alerta mesmo com dois ticks do job sobrepostos (docs/02 §6).
+   */
+  markOpeningAlerted(scope: TenantScope, handoffId: string, now: Date): Promise<boolean>;
+  /** Marca o alerta de SLA com CAS idempotente (ver `markOpeningAlerted`). */
+  markSlaAlerted(scope: TenantScope, handoffId: string, now: Date): Promise<boolean>;
 }
