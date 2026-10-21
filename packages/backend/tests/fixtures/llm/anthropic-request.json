@@ -1,0 +1,19 @@
+{
+  "model": "claude-3-5-sonnet-latest",
+  "max_tokens": 1024,
+  "system": "Responde em português de Angola.",
+  "messages": [
+    { "role": "user", "content": "Qual o prazo de entrega?" }
+  ],
+  "tools": [
+    {
+      "name": "submit_response",
+      "description": "Submete a resposta ao cliente.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "cidade": { "type": "string" } },
+        "required": ["cidade"]
+      }
+    }
+  ]
+}

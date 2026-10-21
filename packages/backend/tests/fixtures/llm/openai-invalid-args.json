@@ -1,0 +1,27 @@
+{
+  "id": "chatcmpl-bad456",
+  "object": "chat.completion",
+  "created": 1729440000,
+  "model": "gpt-4o-mini",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_bad456",
+            "type": "function",
+            "function": {
+              "name": "submit_response",
+              "arguments": "{\"cidade\": \"Luanda\", \"prazo_dias\": "
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "usage": { "prompt_tokens": 40, "completion_tokens": 18, "total_tokens": 58 }
+}

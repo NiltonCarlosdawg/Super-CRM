@@ -1,0 +1,22 @@
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    { "role": "system", "content": "Responde em português de Angola." },
+    { "role": "user", "content": "Qual o prazo de entrega?" }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "submit_response",
+        "description": "Submete a resposta ao cliente.",
+        "parameters": {
+          "type": "object",
+          "properties": { "cidade": { "type": "string" } },
+          "required": ["cidade"]
+        }
+      }
+    }
+  ],
+  "max_completion_tokens": 1024
+}
