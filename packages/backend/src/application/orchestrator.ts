@@ -132,7 +132,10 @@ export async function handleInbound(
 ): Promise<Outcome> {
   const c: OrchestratorConfig = { ...DEFAULT_CONFIG, ...cfg };
 
-  if (!(await p.claimMessage(msg.id))) return empty('duplicate');
+  // Chat de teste (docs/05): não é evento de webhook — não há o que dedupar (cada
+  // chat de teste é independente), por isso não se claima nem existe linha em
+  // `inbound_events`. Mensagens reais (`isTest` falso) claimam sempre (docs/01 §6).
+  if (!msg.isTest && !(await p.claimMessage(msg.id))) return empty('duplicate');
 
   const state: ConversationState = await p.loadState(msg.conversationId);
   if (state.aiMode === 'human_only') return empty('human_only');
