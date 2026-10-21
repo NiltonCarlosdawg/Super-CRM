@@ -185,15 +185,22 @@ export function createOrchestratorPorts(deps: OrchestratorPortsDeps): Orchestrat
 
         async rules(line: LineSlug | null): Promise<RuleDef[]> {
           const res = await db.execute(sql`
-            SELECT id, kind, title, instruction, params
+            SELECT id, kind, title, instruction, params, line_id
             FROM rules
             WHERE status = 'published'
               AND tenant_id = ${tenantId}
               AND (line_id IS NULL
                    OR line_id = (SELECT id FROM business_lines WHERE slug = ${line}))
             ORDER BY priority DESC, id`);
-          return (res.rows as Array<{ id: string; kind: string; title: string; instruction: string; params: Record<string, unknown> | null }>)
-            .map((r) => ({ id: r.id, kind: r.kind, title: r.title, instruction: r.instruction, params: r.params }));
+          return (res.rows as Array<{ id: string; kind: string; title: string; instruction: string; params: Record<string, unknown> | null; line_id: string | null }>)
+            .map((r) => ({
+              id: r.id,
+              kind: r.kind,
+              title: r.title,
+              instruction: r.instruction,
+              lineSlug: r.line_id === null ? null : line, // não-nulo pertence à linha pedida (WHERE)
+              params: r.params,
+            }));
         },
 
         async questions(line: LineSlug | null): Promise<QualificationQuestion[]> {

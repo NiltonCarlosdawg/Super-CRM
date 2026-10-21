@@ -41,6 +41,8 @@ export interface CatalogFact {
   currency: string;
   availability: 'available' | 'limited' | 'unavailable';
   version: number;
+  /** Preenchido pela ferramenta de catálogo quando um desconto foi aplicado a este preço. */
+  appliedDiscountPct?: number;
 }
 
 export interface RuleDef {
@@ -48,6 +50,8 @@ export interface RuleDef {
   kind: string;
   title: string;
   instruction: string;
+  /** Linha a que pertence; null = global. Usado para preferir regra de linha (ex.: desconto). */
+  lineSlug: LineSlug | null;
   params: Record<string, unknown> | null;
 }
 
