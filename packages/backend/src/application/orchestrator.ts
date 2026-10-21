@@ -43,8 +43,16 @@ export interface OrchestratorConfig {
   safetyNet: (turns: readonly Turn[]) => TriggerCode[];
   /** Mensagem fixa ao passar a um humano (não promete prazos). */
   handoffMessage: (primary: TriggerDef) => string;
+  /** Mensagem fixa fora de horário: informa que fica registado, sem prometer prazos (A6). */
+  outOfHoursHandoffMessage: (primary: TriggerDef) => string;
   errorHandoffMessage: string;
   noSourceMessage: string;
+  /** Relógio injetado (testes determinísticos). */
+  now: () => Date;
+  /** True dentro do horário de atendimento; a app injeta `isOpenAt` das definições. */
+  isOpen: (at: Date) => boolean;
+  /** Próxima abertura conhecida (para `opensAt` no evento), ou null. */
+  nextOpening: (at: Date) => Date | null;
 }
 
 export const DEFAULT_CONFIG: OrchestratorConfig = {
@@ -53,9 +61,14 @@ export const DEFAULT_CONFIG: OrchestratorConfig = {
   safetyNet: keywordSafetyNet,
   handoffMessage: () =>
     'Vou passar esta conversa a um colega da equipa, que continua consigo. Sou um assistente virtual.',
+  outOfHoursHandoffMessage: () =>
+    'Registei o teu pedido — a equipa responde no próximo dia útil. Entretanto posso ajudar com outras perguntas.',
   errorHandoffMessage:
     'Neste momento não consigo continuar a ajudá-lo. Vou passar a conversa a um colega da equipa.',
   noSourceMessage: 'Não tenho essa informação neste momento. Vou pedir à equipa que a confirme.',
+  now: () => new Date(),
+  isOpen: () => true,
+  nextOpening: () => null,
 };
 
 const RANK: Record<Priority, number> = { urgent: 3, high: 2, normal: 1 };
@@ -190,6 +203,8 @@ export async function handleInbound(
   if (active.length > 0 && canAct) {
     const primary = pickPrimary(active);
     const mustLock = active.some((t) => t.action !== 'flag_only');
+    const at = c.now();
+    const afterHours = !c.isOpen(at);
     const open = await p.findOpenHandoff(msg.conversationId);
     let notify = false;
 
@@ -230,17 +245,47 @@ export async function handleInbound(
     }
 
     if (notify && handoffId) {
-      await p.notify({
-        type: mustLock ? 'handoff' : 'flag',
-        handoffId,
-        conversationId: msg.conversationId,
-        priority: primary.priority,
-        reason: primary.description,
-      });
+      if (mustLock && afterHours) {
+        const next = c.nextOpening(at);
+        await p.notify({
+          type: 'handoff',
+          handoffId,
+          conversationId: msg.conversationId,
+          priority: primary.priority,
+          reason: primary.description,
+          outsideHours: true,
+          ...(next ? { opensAt: next.toISOString() } : {}),
+        });
+        // A6: urgente fora de horas merece atenção assim que a equipa abrir.
+        if (primary.priority === 'urgent') {
+          await p.notify({
+            type: 'alert',
+            handoffId,
+            conversationId: msg.conversationId,
+            priority: primary.priority,
+            reason: 'urgent_out_of_hours',
+            outsideHours: true,
+          });
+        }
+      } else {
+        await p.notify({
+          type: mustLock ? 'handoff' : 'flag',
+          handoffId,
+          conversationId: msg.conversationId,
+          priority: primary.priority,
+          reason: primary.description,
+        });
+      }
     }
     if (mustLock) {
-      lockedAi = true;
-      reply = c.handoffMessage(primary); // mensagem fixa: a IA não promete nada ao passar
+      if (afterHours) {
+        // A6: fora de horas a IA continua ativa; o humano só assume na abertura,
+        // por isso não se muda o ai_mode nem se fecha a IA.
+        reply = c.outOfHoursHandoffMessage(primary);
+      } else {
+        lockedAi = true;
+        reply = c.handoffMessage(primary); // mensagem fixa: a IA não promete nada ao passar
+      }
     }
   }
 

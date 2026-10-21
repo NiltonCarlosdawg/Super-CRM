@@ -188,10 +188,13 @@ export interface Ports {
 
   /** Notificação ao painel (ex.: Socket.IO). */
   notify(e: {
-    type: 'handoff' | 'flag';
+    type: 'handoff' | 'flag' | 'alert';
+    phase?: 'created' | 'updated';
     handoffId: string;
     conversationId: string;
     priority: Priority;
     reason: string;
+    outsideHours?: boolean;
+    opensAt?: string;
   }): Promise<void>;
 }
