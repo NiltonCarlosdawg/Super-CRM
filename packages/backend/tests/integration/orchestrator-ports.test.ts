@@ -212,6 +212,10 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
   await ports.bumpHandoffPriority(handoffId, 'urgent');
   assert.equal((await ports.findOpenHandoff(conversation.id))?.priority, 'urgent', 'high → urgent sobe');
 
+  // resolve → findOpenHandoff devolve null (só 'pending' conta como aberto)
+  await db.update(k.handoffs).set({ status: 'resolved' }).where(eq(k.handoffs.id, handoffId));
+  assert.equal(await ports.findOpenHandoff(conversation.id), null, 'resolvido deixa de estar aberto');
+
   // recordGap: variações de espaços/caixa agrupam (normalizeQuestion) → occurrences 2
   await ports.recordGap({ question: '  Quanto   CUSTA o software? ', conversationId: conversation.id, line: 'software' });
   await ports.recordGap({ question: 'quanto custa o software?', conversationId: conversation.id, line: 'software' });
