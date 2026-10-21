@@ -242,5 +242,7 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
     reason: 'pedido de humano', x: 'extra',
   } as Parameters<typeof pNotify.notify>[0];
   await pNotify.notify(payload);
-  assert.deepEqual(seen[0], payload, 'sink recebe o evento intacto (pass-through da Fase 3)');
+  // R31: o wrapper do tenant COSTURA o tenantId — o sink recebe o evento
+  // intacto (pass-through da Fase 3) + o tenant dono para as salas realtime.
+  assert.deepEqual(seen[0], { ...payload, tenantId: base.MILVENDAS_TENANT_ID });
 });

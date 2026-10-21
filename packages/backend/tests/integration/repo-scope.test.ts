@@ -219,8 +219,10 @@ test('handshake realtime com user despromovido não recebe papel antigo (papel v
     const gotMessage = collect(client, 'message.created');
     const gotAccount = collect(client, 'account.status'); // sala admin: NÃO deve chegar
     const notify = createSocketNotify(app.realtime.io);
-    await notify({ type: 'message', phase: 'created', messageId: 'm1', conversationId: 'c1' });
-    await notify({ type: 'account', accountId: 'a1', status: 'connected' });
+    await notify({
+      type: 'message', phase: 'created', tenantId: base.MILVENDAS_TENANT_ID, messageId: 'm1', conversationId: 'c1',
+    });
+    await notify({ type: 'account', tenantId: base.MILVENDAS_TENANT_ID, accountId: 'a1', status: 'connected' });
 
     assert.deepEqual(await gotMessage, { v: 1, messageId: 'm1', conversationId: 'c1' }, 'sala agent (papel actual)');
     assert.equal(await gotAccount, null, 'sem sala admin: o papel antigo da sessão não autoriza');

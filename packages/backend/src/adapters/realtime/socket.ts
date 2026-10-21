@@ -4,6 +4,11 @@
 // Onda 1 (Task 4, ruling R14): o papel vem da linha `users` POR LIGAÇÃO (nunca
 // do snapshot da sessão) e tenants suspensos são rejeitados no handshake
 // (spec multitenant §4.3) — a mesma autoridade do guard HTTP (Task 3).
+// Onda 1 (fix R31): salas por TENANT — `tenant:<tenantId>:<papel>`; nenhuma
+// sala é global, pelo que um evento de um tenant nunca chega aos sockets de
+// outro tenant. Sessões de plataforma (tenantId null, só platform_admin) não
+// entram em salas de tenant: eventos de tenant são de tenant; a plataforma
+// audita por HTTP (/v1/platform/*), que tem o seu próprio controlo de acesso.
 
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
@@ -40,6 +45,14 @@ const ROOMS: Record<NotifyEventName, readonly string[]> = {
   'account.status': ['admin'],
 };
 
+/**
+ * Nome de sala SEMPRE com o tenant embutido (fix R31): o sufixo é o papel
+ * (agent/editor/admin/handoffs). Nenhuma sala é partilhada entre tenants.
+ */
+export function tenantRoom(tenantId: string, suffix: string): string {
+  return `tenant:${tenantId}:${suffix}`;
+}
+
 /** Tipo/fase fora do mapa → null: nunca se adivinha um 6º evento. */
 function mapNotifyEvent(e: NotifyEvent): NotifyEventName | null {
   switch (e.type) {
@@ -67,9 +80,12 @@ export interface NotifyLog {
 }
 
 /**
- * Traduz um NotifyEvent nos 5 eventos do painel e emite por sala.
- * Payload: `{ v: 1, ...resto }` sem `type`/`phase` — pass-through dos restantes
- * campos (ex.: `outsideHours`, `opensAt`): é o contrato que a Fase 3 usa.
+ * Traduz um NotifyEvent nos 5 eventos do painel e emite pela sala DO TENANT.
+ * Payload: `{ v: 1, ...resto }` sem `type`/`phase`/`tenantId` — pass-through
+ * dos restantes campos (ex.: `outsideHours`, `opensAt`): é o contrato que a
+ * Fase 3 usa. `tenantId` é metadado de roteamento e não viaja ao cliente.
+ * Fail-closed (R31): evento sem `tenantId` (dados inválidos/JS sem tipos) é
+ * DESCARTADO — nunca há sala global para onde emitir.
  */
 export function createSocketNotify(io: SocketIoLike, log?: NotifyLog): (e: NotifyEvent) => Promise<void> {
   return async (e: NotifyEvent): Promise<void> => {
@@ -79,16 +95,24 @@ export function createSocketNotify(io: SocketIoLike, log?: NotifyLog): (e: Notif
       log?.warn({ type: e.type, phase: e.phase }, 'notify.event.ignored');
       return;
     }
+    const tenantId = typeof e.tenantId === 'string' && e.tenantId.length > 0 ? e.tenantId : null;
+    if (tenantId === null) {
+      // Só campos sem PII (docs/02 §10): tipo/fase, nunca o corpo do evento.
+      log?.warn({ type: e.type, phase: e.phase }, 'notify.event.no_tenant');
+      return;
+    }
     const payload: Record<string, unknown> = { v: 1 };
     for (const [key, value] of Object.entries(e)) {
-      if (key !== 'type' && key !== 'phase') payload[key] = value;
+      if (key !== 'type' && key !== 'phase' && key !== 'tenantId') payload[key] = value;
     }
-    for (const room of ROOMS[event]) io.to(room).emit(event, payload);
+    for (const room of ROOMS[event]) io.to(tenantRoom(tenantId, room)).emit(event, payload);
   };
 }
 
 interface SocketData {
   role: Role;
+  /** null só para platform_admin (CHECK de users): sem salas de tenant (R31). */
+  tenantId: string | null;
 }
 
 type EventMap = { [event: string]: (...args: unknown[]) => void };
@@ -103,7 +127,9 @@ export interface RealtimeHandle {
  * Handshake: cookie `session=<id>` → sessions.get (sem sessão, expirada ou
  * MFA pendente ⇒ `unauthorized`) → linha `users` (papel ACTUAL; inativo ou
  * apagado ⇒ `unauthorized`) → tenant suspenso ⇒ `tenant_suspended`. Conexões
- * entram na sala do papel + `handoffs` para agent/admin (docs/02 §9).
+ * entram na sala `tenant:<tenantId>:<papel>` + `tenant:<tenantId>:handoffs`
+ * para agent/admin (docs/02 §9; salas por tenant desde o fix R31). Sessões de
+ * plataforma (tenantId null) NÃO entram em nenhuma sala de tenant.
  */
 export function attachRealtime(deps: {
   server: HttpServer;
@@ -140,6 +166,7 @@ export function attachRealtime(deps: {
         return next(new Error('tenant_suspended'));
       }
       socket.data.role = user.role;
+      socket.data.tenantId = user.tenantId;
       next();
     } catch {
       next(new Error('unauthorized'));
@@ -147,9 +174,12 @@ export function attachRealtime(deps: {
   });
 
   io.on('connection', (socket) => {
-    const { role } = socket.data;
-    void socket.join(role);
-    if (role === 'agent' || role === 'admin') void socket.join('handoffs');
+    const { role, tenantId } = socket.data;
+    // R31: plataforma não tem salas de tenant — eventos ao vivo são do tenant;
+    // a plataforma audita por HTTP (/v1/platform/*).
+    if (tenantId === null) return;
+    void socket.join(tenantRoom(tenantId, role));
+    if (role === 'agent' || role === 'admin') void socket.join(tenantRoom(tenantId, 'handoffs'));
   });
 
   return {

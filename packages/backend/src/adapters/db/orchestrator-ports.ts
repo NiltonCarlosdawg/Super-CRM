@@ -296,9 +296,12 @@ export function createOrchestratorPorts(deps: OrchestratorPortsDeps): Orchestrat
                     ${t.model}, ${t.handoffId}, ${t.latencyMs}, ${t.isTest})`);
         },
 
-        /** Pass-through: o sink (realtime, Fase 3) decide o que faz com o evento. */
+        /** Pass-through: o sink (realtime, Fase 3) decide o que faz com o evento.
+         *  R31: o wrapper do tenant COSTURA o `tenantId` — o orquestrador é
+         *  agnóstico de tenant (os ports são dele, `forTenant`), o adaptador é
+         *  que sabe o tenant e garante que toda a sala realtime é por tenant. */
         async notify(e: Parameters<Ports['notify']>[0]): Promise<void> {
-          await notifySink(e);
+          await notifySink({ ...e, tenantId });
         },
       };
     },

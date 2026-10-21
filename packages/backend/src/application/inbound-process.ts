@@ -34,6 +34,8 @@ export interface InboundProcessDeps {
   /** Task 19: handler completo de `message.received` (já composto no main). */
   runHandleInbound: (eventId: string) => Promise<{ outcome: string }>;
   advanceStatus: (input: {
+    /** R31: tenant da conta resolvida — threading para o notify (sem query extra). */
+    tenantId: string;
     accountId: string;
     providerMessageId: string;
     status: 'sent' | 'delivered' | 'read' | 'failed';
@@ -84,6 +86,7 @@ export function createInboundProcessHandler(
         }
         await markInboundTenant(deps.db, eventId, account.tenantId);
         await deps.advanceStatus({
+          tenantId: account.tenantId, // R31: salas realtime por tenant
           accountId: account.id,
           providerMessageId: event.providerMessageId,
           status: event.status,

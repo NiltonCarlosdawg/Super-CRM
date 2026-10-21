@@ -144,6 +144,7 @@ export async function runOutboxTick(
       await notifySink({
         type: 'message',
         phase: 'status',
+        tenantId: row.tenantId, // R31: tenant da linha da outbox reivindicada
         messageId: row.messageId,
         conversationId: ctx.msg.conversationId,
         accountId: row.accountId,

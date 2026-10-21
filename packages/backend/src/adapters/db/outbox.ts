@@ -92,7 +92,9 @@ export function createOutbox(deps: {
             .onConflictDoNothing({ target: [outboxMessages.tenantId, outboxMessages.idempotencyKey] })
             .returning({ id: outboxMessages.id });
           if (row === undefined) throw new DuplicateEnqueue(conv.tenantId); // ⇒ ROLLBACK da mensagem
-          return { outboxId: row.id, createdAt: m.createdAt };
+          // O tenant sai DA TRANSAÇÃO (a conversa é a fonte de verdade, R9):
+          // o notify de COMMIT precisa dele para as salas realtime por tenant (R31).
+          return { outboxId: row.id, createdAt: m.createdAt, tenantId: conv.tenantId };
         })
         .catch(async (e: unknown) => {
           if (!(e instanceof DuplicateEnqueue)) throw e;
@@ -120,6 +122,7 @@ export function createOutbox(deps: {
       await notifySink({
         type: 'message',
         phase: 'created',
+        tenantId: committed.tenantId, // R31: tenant da conversa (vem da transação)
         messageId,
         conversationId: input.conversationId,
         accountId: input.accountId,

@@ -26,6 +26,8 @@ export async function advanceMessageStatus(
     now(): Date;
   },
   input: {
+    /** R31: tenant do evento — vem do chamador (conta resolvida, ruling R1). */
+    tenantId: string;
     accountId: string;
     providerMessageId: string;
     status: Exclude<MessageStatus, 'queued'>;
@@ -42,6 +44,7 @@ export async function advanceMessageStatus(
     await deps.notifySink({
       type: 'message',
       phase: 'status',
+      tenantId: input.tenantId, // R31: threaded do resolver da conta (sem query extra)
       messageId: result.row.messageId,
       conversationId: result.row.conversationId,
       accountId: input.accountId,

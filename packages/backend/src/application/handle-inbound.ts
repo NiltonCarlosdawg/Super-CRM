@@ -167,6 +167,7 @@ export async function handleInboundEvent(
     await deps.notifySink({
       type: 'message',
       phase: 'created',
+      tenantId: account.tenantId, // R31: tenant da conta resolvida (salas por tenant)
       messageId: stored.id,
       conversationId: conversation.id,
       accountId: account.id,

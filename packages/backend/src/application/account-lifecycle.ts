@@ -45,7 +45,7 @@ export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifec
       detail: { from: account.status, to },
       at,
     });
-    await notifySink({ type: 'account', accountId: account.id, status: to });
+    await notifySink({ type: 'account', tenantId: account.tenantId, accountId: account.id, status: to });
   };
 
   const markSuspectedBan = async (account: AccountRow, at: Date, detail: Record<string, unknown>): Promise<void> => {
@@ -60,7 +60,7 @@ export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifec
       detail,
       at,
     });
-    await notifySink({ type: 'account', accountId: account.id, status: 'suspected_ban' });
+    await notifySink({ type: 'account', tenantId: account.tenantId, accountId: account.id, status: 'suspected_ban' });
   };
 
   return {
@@ -122,7 +122,13 @@ export function createAccountLifecycle(deps: AccountLifecycleDeps): AccountLifec
       const account = await accounts.findByProviderSession(input.sessionId);
       if (account === null) return;
       // o QR também vai por evento (docs/04 §6); o REST GET :id devolve-o por polling
-      await notifySink({ type: 'account', status: 'connecting', accountId: account.id, qr: input.qr });
+      await notifySink({
+        type: 'account',
+        tenantId: account.tenantId, // R31: tenant dono da conta (salas por tenant)
+        status: 'connecting',
+        accountId: account.id,
+        qr: input.qr,
+      });
     },
 
     async recordSendResult(input) {

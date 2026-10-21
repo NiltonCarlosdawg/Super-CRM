@@ -116,7 +116,10 @@ export async function whatsappAccountsRoutes(app: FastifyInstance, deps: HttpDep
       at: now,
       ip: request.ip,
     });
-    if (changed) await notify({ type: 'account', accountId: id, status: 'disconnected' });
+    if (changed) {
+      // R31: rota de tenant — o scope da sessão traz o tenant (requireTenant).
+      await notify({ type: 'account', tenantId: s.tenantId, accountId: id, status: 'disconnected' });
+    }
     return reply.send({ account: await accounts.get(s, id) });
   });
 }

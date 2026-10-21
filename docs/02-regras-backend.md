@@ -98,8 +98,8 @@ Regras:
 
 ## 9. Tempo real (Socket.IO)
 
-- Autentica a ligação no *handshake*. Salas por permissão (ex.: fila de handoffs só para `agent` e `admin`).
-- Eventos com nome e payload versionados e documentados. O servidor é a fonte de verdade: o cliente nunca decide permissões.
+- Autentica a ligação no *handshake*. Salas por permissão E por tenant (`tenant:<tenantId>:<papel>`; ex.: fila de handoffs só para `agent` e `admin` do mesmo tenant). Uma sessão de plataforma (`platform_admin`) não entra em salas de tenant — os eventos ao vivo são do tenant; a plataforma audita por HTTP (`/v1/platform/*`).
+- Eventos com nome e payload versionados e documentados. O servidor é a fonte de verdade: o cliente nunca decide permissões. O `tenantId` do evento é metadado de roteamento (salas) e NÃO viaja no payload ao cliente.
 - Eventos mínimos: `handoff.created`, `handoff.updated`, `message.created`, `message.status`, `account.status`.
 - Reenvio/recuperação: o cliente pode pedir o estado atual por REST. Não dependas de entrega garantida do socket.
 
