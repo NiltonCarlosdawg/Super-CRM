@@ -4,6 +4,22 @@
 
 import { applyDiscount, resolveDiscountCap } from '../../domain/discounts.js';
 import type { CatalogFact, RuleDef } from '../../ports/ai-provider.js';
+import type { LLMTool } from '../../ports/llm-transport.js';
+
+/** Tool que o modelo chama para consultar o catálogo (preço/disponibilidade). */
+export const LOOKUP_CATALOG_TOOL: LLMTool = {
+  name: 'lookup_catalog',
+  description:
+    'Consulta o catálogo publicado (preço, disponibilidade). Usa sempre antes de dar preço ou prazo.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Termo de pesquisa.' },
+      discountPct: { type: 'number', description: 'Percentagem de desconto pedida (0-100).' },
+    },
+    required: ['query'],
+  },
+};
 
 export type CatalogToolResult =
   | { ok: true; facts: CatalogFact[]; appliedDiscountPct: number }
