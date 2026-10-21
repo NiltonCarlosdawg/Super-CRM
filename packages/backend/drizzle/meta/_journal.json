@@ -64,6 +64,13 @@
       "when": 1792217918545,
       "tag": "0008_plain_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792601179824,
+      "tag": "0009_lucky_wraith",
+      "breakpoints": true
     }
   ]
 }

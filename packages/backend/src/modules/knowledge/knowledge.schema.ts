@@ -25,10 +25,10 @@ import { tenants } from '../../adapters/db/schema/tenants.schema.js';
 
 // ───────────── Helpers ─────────────
 
-const pk = () => uuid('id').defaultRandom().primaryKey();
-const ts = (name: string) => timestamp(name, { withTimezone: true });
-const createdAt = () => ts('created_at').defaultNow().notNull();
-const updatedAt = () =>
+export const pk = () => uuid('id').defaultRandom().primaryKey();
+export const ts = (name: string) => timestamp(name, { withTimezone: true });
+export const createdAt = () => ts('created_at').defaultNow().notNull();
+export const updatedAt = () =>
   ts('updated_at')
     .defaultNow()
     .notNull()
@@ -257,6 +257,10 @@ export const handoffs = pgTable(
     createdAt: createdAt(),
     acceptedAt: ts('accepted_at'),
     resolvedAt: ts('resolved_at'),
+    // Fase 3 (Tasks 14/15): alertas de abertura e SLA — garantem exatamente UM alerta
+    // por handoff (sweep idempotente via destas marcas).
+    openingAlertedAt: ts('opening_alerted_at'),
+    slaAlertedAt: ts('sla_alerted_at'),
   },
   (t) => [
     index('handoffs_queue_idx').on(t.status, t.priority, t.createdAt),
