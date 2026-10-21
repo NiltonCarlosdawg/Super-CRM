@@ -23,13 +23,18 @@ import { toProblem } from './errors.js';
 import { authenticate, csrfGuard } from './guards.js';
 import { authRoutes } from './routes/auth.js';
 import { conversationsRoutes } from './routes/conversations.js';
+import { handoffsRoutes } from './routes/handoffs.js';
 import { platformRoutes } from './routes/platform.js';
 import { usersRoutes } from './routes/users.js';
 import { webhookRoutes } from './routes/webhook.js';
 import { whatsappAccountsRoutes } from './routes/whatsapp-accounts.js';
 import type { createLoginService } from '../../application/auth/login.js';
+import type { HandoffConversations } from '../../application/handoffs.js';
+import type { Settings } from '../../modules/settings/settings.js';
 import type { AccountsRepository } from '../../ports/accounts.js';
+import type { Ports } from '../../ports/ai-provider.js';
 import type { ConversationsRepository } from '../../ports/conversations.js';
+import type { HandoffQueueRepository } from '../../ports/handoff-queue.js';
 import type { JobQueue } from '../../ports/job-queue.js';
 import type { MessagingProvider } from '../../ports/messaging-provider.js';
 import type { NotifyEvent } from '../../ports/notify.js';
@@ -66,6 +71,13 @@ export interface HttpDeps {
   /** Task 21: leitura de conversas + envio humano (qualquer papel autenticado). */
   conversations?: ConversationsRepository;
   messageSender?: MessageSender;
+  /** Fase 3 (Task 14): fila de handoffs — claim/resolução/devolução à IA. */
+  handoffs?: {
+    queue: HandoffQueueRepository;
+    conversations: HandoffConversations;
+    settings: Settings;
+    notify: Ports['notify'];
+  };
   /** Sinks de evento (realtime Task 15); o logout de admin notifica a transição. */
   notifySink?: (e: NotifyEvent) => Promise<void>;
   /** Checks de readiness adicionais (ex.: ping Redis no arranque real). */
@@ -170,6 +182,10 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
       // Task 21: conversas/mensagens — só com repo + sender monta as rotas.
       if (deps.conversations !== undefined && deps.messageSender !== undefined) {
         await conversationsRoutes(instance, deps);
+      }
+      // Fase 3 (Task 14): fila de handoffs — só com o bundle montado.
+      if (deps.handoffs !== undefined) {
+        await handoffsRoutes(instance, deps);
       }
       // Task 7: superfície de plataforma (spec §5.3) — requirePlatform em todas.
       await platformRoutes(instance, deps);

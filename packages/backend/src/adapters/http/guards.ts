@@ -85,6 +85,17 @@ export function requireRole(role: Role): preHandlerHookHandler {
   };
 }
 
+/** Um de vários papéis aceites; corre DEPOIS do authenticate (ex.: handoffs: agent+admin). */
+export function requireAnyRole(...roles: Role[]): preHandlerHookHandler {
+  return async (request) => {
+    const auth = request.auth;
+    if (auth === undefined) throw new HttpError(401, 'unauthenticated');
+    if (!roles.includes(auth.role)) {
+      throw new HttpError(403, 'forbidden', `papel '${auth.role}' insuficiente: é necessário um de [${roles.join(', ')}]`);
+    }
+  };
+}
+
 /**
  * Onda 1, Task 7 (ruling R2/R15): preHandler de TODA rota de tenant — uma
  * sessão de plataforma (tenantId null) é recusada aqui em vez de construir um

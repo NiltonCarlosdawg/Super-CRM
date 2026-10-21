@@ -10,6 +10,10 @@ import { createAccountsRepository } from '../../src/adapters/db/accounts.js';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
 import { createConversationsRepository } from '../../src/adapters/db/conversations.js';
+import { createHandoffConversations, createHandoffQueueRepository } from '../../src/adapters/db/handoff-queue.js';
+import { DEFAULT_SETTINGS } from '../../src/modules/settings/settings.js';
+import type { HandoffDeps } from '../../src/application/handoffs.js';
+import type { Ports } from '../../src/ports/ai-provider.js';
 import type { DbClient } from '../../src/adapters/db/index.js';
 import { createOutbox } from '../../src/adapters/db/outbox.js';
 import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
@@ -86,6 +90,8 @@ export function createFakeWaProvider(): MessagingProvider & {
   };
 }
 
+export type HandoffNotifyEvent = Parameters<Ports['notify']>[0];
+
 export interface TestApp extends FastifyInstance {
   sessions: { agent: string; editor: string; admin: string };
   csrf: { agent: string; editor: string; admin: string };
@@ -97,6 +103,10 @@ export interface TestApp extends FastifyInstance {
   accounts: AccountsRepository;
   waProvider: MessagingProvider;
   notifyLog: NotifyEvent[];
+  /** Fase 3 (Task 14): eventos de notify da fila de handoffs (accept/resolução). */
+  handoffNotifyLog: HandoffNotifyEvent[];
+  /** Deps completas de handoffs para os casos de uso diretos nos testes. */
+  mkHandoffDeps(tenantId: string, now?: () => Date): HandoffDeps;
   close(): Promise<void>;
 }
 
@@ -169,6 +179,16 @@ export async function buildTestApp(
     now: () => new Date(),
   });
 
+  // Fase 3 (Task 14): fila de handoffs — repo real, settings por defeito e um
+  // notify que regista os eventos para os testes inspeccionarem.
+  const handoffNotifyLog: HandoffNotifyEvent[] = [];
+  const handoffNotify: Ports['notify'] = async (e) => {
+    handoffNotifyLog.push(e);
+  };
+  const handoffsQueue = createHandoffQueueRepository(db);
+  const handoffsConversations = createHandoffConversations(db);
+  const handoffsSettings = DEFAULT_SETTINGS;
+
   const app = buildHttpApp({
     cfg,
     db,
@@ -188,6 +208,12 @@ export async function buildTestApp(
     jobs,
     conversations,
     messageSender,
+    handoffs: {
+      queue: handoffsQueue,
+      conversations: handoffsConversations,
+      settings: handoffsSettings,
+      notify: handoffNotify,
+    },
     notifySink: async (e) => {
       notifyLog.push(e);
     },
@@ -215,6 +241,16 @@ export async function buildTestApp(
   withHelpers.accounts = accounts;
   withHelpers.waProvider = waProvider;
   withHelpers.notifyLog = notifyLog;
+  withHelpers.handoffNotifyLog = handoffNotifyLog;
+  withHelpers.mkHandoffDeps = (tenantId: string, now?: () => Date): HandoffDeps => ({
+    scope: { tenantId },
+    queue: handoffsQueue,
+    conversations: handoffsConversations,
+    settings: handoffsSettings,
+    audit,
+    notify: handoffNotify,
+    now: now ?? ((): Date => new Date()),
+  });
   // Task 15: Socket.IO no mesmo httpServer; o fecho vai primeiro pelo realtime
   // (desliga clientes e o server) e depois pelo Fastify (que tolera o 2º fecho).
   // Onda 1 (Task 4, R14): papel da linha `users` por ligação + tenant suspenso
