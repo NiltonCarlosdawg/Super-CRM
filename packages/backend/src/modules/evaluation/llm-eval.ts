@@ -49,6 +49,20 @@ export function parseCandidates(raw: string | undefined, fallbackModel: string):
 /** ~28 pedidos/min — abaixo do limite do Groq free (30 RPM). */
 export const EVAL_PACING_MS = 2100;
 
+/**
+ * Pacing configurável por `EVAL_PACING_MS` (ms entre chamadas). Existe por
+ * evidência: na corrida de 2026-10-22 o candidato qwen levou 69 erros `rate limit`
+ * com o default 2100 — em janela partilhada com outra candidata é preciso
+ * abrandar sem mudar código. Valor ausente/vazio/inválido → default; `0` desliga.
+ */
+export function resolvePacingMs(env: Record<string, string | undefined>): number {
+  const raw = env['EVAL_PACING_MS'];
+  if (raw === undefined || raw.trim() === '') return EVAL_PACING_MS;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return EVAL_PACING_MS;
+  return n;
+}
+
 /** Decorador que espaça todas as chamadas ao transporte (controlo de RPM). */
 export function createPacingTransport(
   inner: LLMTransport,

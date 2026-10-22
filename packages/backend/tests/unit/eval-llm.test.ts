@@ -15,6 +15,7 @@ import {
   parseCandidates,
   renderLlmEvalReport,
   resolveEvalMode,
+  resolvePacingMs,
   runLlmEval,
 } from '../../src/modules/evaluation/llm-eval.js';
 
@@ -24,6 +25,16 @@ test('resolveEvalMode: --baseline força baseline; sem chave → baseline; com c
   assert.equal(resolveEvalMode([], { AI_API_KEY: 'x' }), 'llm');
   assert.equal(resolveEvalMode([], { AI_API_KEY: '' }), 'baseline');
   assert.equal(resolveEvalMode([], {}), 'baseline');
+});
+
+test('resolvePacingMs: default 2100; EVAL_PACING_MS válido respeita; inválido cai no default', () => {
+  assert.equal(resolvePacingMs({}), EVAL_PACING_MS);
+  assert.equal(resolvePacingMs({ EVAL_PACING_MS: '' }), EVAL_PACING_MS);
+  assert.equal(resolvePacingMs({ EVAL_PACING_MS: '   ' }), EVAL_PACING_MS);
+  assert.equal(resolvePacingMs({ EVAL_PACING_MS: 'abc' }), EVAL_PACING_MS);
+  assert.equal(resolvePacingMs({ EVAL_PACING_MS: '-5' }), EVAL_PACING_MS);
+  assert.equal(resolvePacingMs({ EVAL_PACING_MS: '4500' }), 4500);
+  assert.equal(resolvePacingMs({ EVAL_PACING_MS: '0' }), 0);
 });
 
 test('parseCandidates: lista por vírgula; vazio/ausente → fallback', () => {

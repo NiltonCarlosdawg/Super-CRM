@@ -29,11 +29,11 @@ import {
   type TriggerCode,
 } from '../src/modules/evaluation/handoff-scenarios.js';
 import {
-  EVAL_PACING_MS,
   createPacingTransport,
   parseCandidates,
   renderLlmEvalReport,
   resolveEvalMode,
+  resolvePacingMs,
   runLlmEval,
 } from '../src/modules/evaluation/llm-eval.js';
 
@@ -61,7 +61,7 @@ if (mode === 'llm') {
       transport: createPacingTransport(
         createTransport({ ...evalCfg, model }, fetch),
         sleep,
-        EVAL_PACING_MS,
+        resolvePacingMs(process.env),
       ),
       config: { ...evalCfg, model },
       sleep,
