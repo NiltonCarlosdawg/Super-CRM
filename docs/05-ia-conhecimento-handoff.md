@@ -143,7 +143,7 @@ Cada pergunta: `required`, ordem e tipo de resposta. A IA pergunta **uma de cada
 
 - **80 cenários sintéticos**: 48 positivos, 20 negativos de quase-acerto, 4 fechados com decisão (base de 72) + 8 adversariais (Task 19). `evaluate()` mede precisão e recall **por gatilho** e lista as falhas. Corre em CI sem rede nem segredos: `npm run eval:baseline` escreve `reports/eval-report.md` (Task 20).
 - O baseline por palavras-chave tem 100% de precisão em ambos os gatilhos cobertos, 100% de recall em compra e 75% em pedido de humano. **Otimista**: os cenários e as regras foram escritos pela mesma pessoa. Serve para provar o *harness*, não a qualidade.
-- **Metas propostas** (o dono do produto confirma ou altera antes do gate e regista em `docs/eval-metas.md` com o relatório em mãos): recall ≥ 0,95 em `complaint`, `service_outage`, `existing_system_problem` e `human_requested`; precisão ≥ 0,90 em todos os gatilhos com ≥ 5 cenários; **0** violações `mustNot`; `ambiguous: 0`.
+- **Metas aprovadas pelo dono (2026-10-22)** e registadas em `docs/eval-metas.md`: recall ≥ 0,95 em `complaint`, `service_outage`, `existing_system_problem` e `human_requested`; precisão ≥ 0,90 em todos os gatilhos com ≥ 5 cenários; **0** violações `mustNot`; `ambiguous: 0`.
 - **Quatro cenários ambíguos decididos na Task 19** (`pi-06`, `pi-07`, `pn-04`, `lb-06`): a decisão está no `note` de cada cenário e no plano da Fase 3 (`docs/plans/2026-10-07-fase3-ia-handoff.md`). O `detectionHint` de `legal_or_billing` foi corrigido (separa "informar sobre garantia" de "acionar garantia") e o seed de gatilhos passa a actualizar também `description`/`detectionHint` de linhas já existentes. `ambiguous: 0`.
 - **Cenários adversariais acrescentados (Tasks 19–20):** 8 (`adv-01`…`adv-08`) — injeção com pedido de desconto absurdo, pedido do prompt de sistema, pedido de dados de outros clientes, afirmação de ser humano, linguagem mista EN/PT, erros de escrita, intenção de compra enterrada no fim de um texto longo e injeção com IBAN. `ForbiddenBehavior` cobre 11 comportamentos.
 - Os `mustNot` dos cenários são verificados pelo **juiz automático** `judgeMustNot` (Task 20; `claim_to_be_human` reutiliza os padrões da guarda da Task 11) e por revisão humana. Falha num `mustNot` bloqueia o gate. O baseline não gera texto de resposta — o juiz aplica-se no modo LLM, que fica para quando houver fornecedor aprovado (gate A11).
@@ -167,7 +167,7 @@ Regras (valores iniciais a confirmar pelo dono do produto):
 
 - [x] `AIProvider` real implementa o contrato com testes (resposta válida, esquema inválido com repetição, timeout, erro 429 com backoff) — **demonstrado na Task 12** (com as Tasks 6 e 9).
 - [x] As cinco guardas determinísticas estão implementadas e testadas, incluindo a de preços — **demonstrado na Task 11** (+ Task 12 na composição).
-- [x] `evaluate()` corre em CI e produz relatório por gatilho — **demonstrado na Task 20**. Metas aprovadas pelo dono: **pendente (gate abaixo)**.
+- [x] `evaluate()` corre em CI e produz relatório por gatilho — **demonstrado na Task 20**. Metas aprovadas pelo dono — **sim, 2026-10-22** (`docs/eval-metas.md`).
 - [x] Conjunto de cenários adversariais acrescentado e a passar os `mustNot` — **demonstrado nas Tasks 19 e 20**.
 - [x] Modo `ai_suggest` funciona ponta a ponta (rascunho aprovado e enviado pela outbox) — **demonstrado nas Tasks 17 e 18**.
 - [x] Chat de teste mostra fontes e não tem efeitos colaterais — **demonstrado na Task 17**.
