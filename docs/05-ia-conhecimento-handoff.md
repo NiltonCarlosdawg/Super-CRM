@@ -1,6 +1,6 @@
 # 05 — IA, conhecimento, handoff e follow-ups
 
-Código de referência já escrito e testado em `reference/`. Este documento explica o desenho e diz o que falta implementar.
+Código de referência escrito e testado em `src/` (o directório `reference/` ficou vazio após a Fase 1; os planos das fases citam os caminhos antigos). Este documento explica o desenho e diz o que falta implementar.
 
 ## 1. O que a IA faz e não faz
 
@@ -18,22 +18,25 @@ Código de referência já escrito e testado em `reference/`. Este documento exp
 
 Cada conta ou linha pode ter um modo por defeito configurável para conversas novas. Passar a `ai_active` é uma **decisão do dono do produto**, por linha e por tema, com base na avaliação (secção 8).
 
-## 3. Pipeline por mensagem (`reference/orchestrator.ts`)
+## 3. Pipeline por mensagem (`src/application/orchestrator.ts`)
 
 1. **Idempotência:** mensagem repetida ignorada (`claimMessage`).
 2. **Estado:** carrega a conversa. `human_only` termina aqui, sem chamar a IA.
 3. **Contexto:** gatilhos ativos (globais + da linha, o da linha prevalece), regras, perguntas de qualificação, chunks por pesquisa semântica.
-4. **IA:** `AIProvider.respond()` com timeout. Falha ou timeout → **fail-safe**: passa a humano com mensagem fixa (prioridade alta).
+4. **IA:** `AIProvider.respond()` com timeout (`AI_TIMEOUT_MS`, inicial 20000). Falha ou timeout → **fail-safe**: passa a humano com mensagem fixa (prioridade alta).
 5. **Qualificação:** aplica `qualificationUpdates`. Calcula se está completa.
-6. **Lacunas:** sem fonte (`answered = false`) → regista lacuna e aumenta `miss_streak`.
+6. **Lacunas:** sem fonte (`answered = false`) → regista lacuna e aumenta `miss_streak` (`MISS_STREAK_LIMIT`, inicial 2).
 7. **Gatilhos** = rede de palavras-chave ∪ gatilhos do modelo ∪ regras do sistema: `miss_streak >= 2` dispara `low_confidence`, e a qualificação a ficar completa dispara o gatilho `handoff_when_qualified` da linha. Códigos desconhecidos ou de outra linha são ignorados.
-8. **Ação** por gatilho: `handoff_now` e `handoff_when_qualified` criam handoff e **bloqueiam** a IA. `flag_only` avisa o painel e a IA continua.
-9. **Handoff:** resumo da IA (com fallback local), prioridade do gatilho mais alto, notificação ao painel, **mensagem fixa** ao cliente (configurável por gatilho). Se já houver handoff aberto: não duplica, sobe a prioridade.
-10. **Registo:** `answer_traces` com fontes, modelo e latência. `isTest` marca o chat de teste.
+8. **Ação** por gatilho: `handoff_now` e `handoff_when_qualified` criam handoff e **bloqueiam** a IA. `flag_only` avisa o painel e a IA continua. **Fora do horário de atendimento, `handoff_now` NÃO muda o `ai_mode`** — a IA continua ativa e o humano só assume na abertura (A6; a mudança de `ai_mode` só por decisão humana, ver ADR-0003). Em horário útil, o bloqueio mantém-se.
+9. **Handoff:** resumo da IA (com fallback local), prioridade do gatilho mais alto, notificação ao painel e **mensagem fixa** ao cliente. Fora de horas a notificação leva `outsideHours: true` e `opensAt` (próxima abertura), prioridade `urgent` gera ainda o alerta `urgent_out_of_hours`, e a mensagem é a fixa de fora de horas ("Registei o teu pedido — a equipa responde no próximo dia útil…"); em horário, a fixa normal ("Vou passar esta conversa a um colega da equipa…", com override por gatilho via `handoffMessages.byTrigger`). Tudo configurável em `settings`. Se já houver handoff aberto: não duplica, sobe a prioridade.
+10. **Fila humana (A6.1, A10):** o painel lista (`GET /v1/handoffs/:id`), aceita (passa a conversa a `human_only` e audita) e resolve — **resolver ou devolver manualmente** retorna a IA ao modo por defeito (o da linha, senão o global). Alertas de SLA em minutos úteis: aceitação pendente ≥ **15 min** (`sla_accept_15min`, job de sweep com CAS — só uma vez) e aceitação com mais de **2 h** desde a criação (`sla_first_response_2h` + audit `handoff.sla_breach`).
+11. **Registo:** `answer_traces` com fontes, modelo e latência. `isTest` marca o chat de teste.
+
+Horário por defeito de referência: `Africa/Luanda`, dias `[1..5]` (Seg–Sex), `08:00–17:00`, configurável em `settings` (`businessHours`).
 
 Efeitos colaterais **desligados** em modo `ai_suggest` (sem handoff nem bloqueio) e no chat de teste (sem handoff, lacunas nem notificações).
 
-## 4. Gatilhos de arranque (`reference/handoff-triggers.seed.ts`)
+## 4. Gatilhos de arranque (`src/modules/knowledge/handoff-triggers.seed.ts`)
 
 | Gatilho | Linha | Ação | Prioridade |
 |---|---|---|---|
@@ -87,7 +90,7 @@ Regras de gestão:
 ## 6. Implementação real do `AIProvider` (Fase 3)
 
 ### Contrato
-`reference/ai-provider.ts`. Dois métodos: `respond()` e `summarizeForHandoff()`.
+`src/ports/ai-provider.ts`. Dois métodos: `respond()` e `summarizeForHandoff()`.
 
 ### Prompt e mensagens
 - **Prompt de sistema fixo:** persona (assistente virtual da MilVendas, em português, tom definido em `rules`), regras de `rules`, descrição dos gatilhos ativos (`detectionHint`), perguntas de qualificação por fazer, regra de honestidade (diz que é assistente virtual) e regras de segurança.
@@ -95,7 +98,8 @@ Regras de gestão:
 - Histórico limitado (`AI_HISTORY_TURNS`). Contexto: só chunks recuperados e resultados de `lookup_catalog`.
 
 ### Ferramentas
-- `lookup_catalog(query)`: **só leitura**. Devolve `CatalogFact`. É a única forma de a IA saber preço e disponibilidade.
+- `lookup_catalog(query, discountPct?)`: **só leitura**. Devolve `CatalogFact`. É a única forma da IA saber preço e disponibilidade.
+- **Teto de desconto (A7):** `discountPct` só é aplicado até ao teto da regra `discount_limit` — **linha > global > 0** (sem regra ou `maxDiscountPct` inválido: teto 0). O cálculo é feito em centavos com `BigInt` (arredondamento half-up). Pedido acima do teto → **rejeitado** com dica `discountRejectedHint` (nomeia o teto e pede `price_negotiation`), nunca concedido.
 - A IA **não tem** ferramentas com efeitos.
 
 ### Saída estruturada
@@ -135,14 +139,14 @@ Validar com esquema. Inválido → **1 repetição**; se falhar de novo, erro do
 
 Cada pergunta: `required`, ordem e tipo de resposta. A IA pergunta **uma de cada vez** e extrai a resposta do texto livre.
 
-## 8. Avaliação (`reference/handoff-scenarios.ts`)
+## 8. Avaliação (`src/modules/evaluation/handoff-scenarios.ts`)
 
-- 72 cenários sintéticos (48 positivos, 20 negativos de quase-acerto, 4 ambíguos). `evaluate()` mede precisão e recall **por gatilho** e lista as falhas.
-- O baseline por palavras-chave tem 100% de precisão em ambos os gatilhos, 100% de recall em compra e 75% em pedido de humano. **Otimista**: os cenários e as regras foram escritos pela mesma pessoa. Serve para provar o *harness*, não a qualidade.
-- **Proposta de metas** (o dono do produto confirma antes do gate): recall muito alto nos gatilhos urgentes (`complaint`, `service_outage`, `existing_system_problem`, `human_requested`), e taxa de falsos positivos aceitável medida pelos `dismissed`.
-- **Quatro cenários ambíguos** pedem decisão da equipa (`pi-06`, `pi-07`, `pn-04`, `lb-06`): corrigir os `detectionHint` de acordo (ex.: separar "informar sobre garantia" de "acionar garantia").
-- **Antes do gate de `ai_active`, acrescentar cenários adversariais:** injeção de instruções, pedido do prompt, pedido de desconto absurdo, pedido de dados de outros clientes, afirmações sobre ser humano, mensagens em linguagem mista e com erros de escrita, mensagens longas.
-- Os comportamentos `mustNot` dos cenários (`quote_custom_price`, `concede_discount`, `promise_refund`, `claim_to_be_human`...) são verificados por revisão humana ou juiz automático. Falha num `mustNot` bloqueia o gate.
+- **80 cenários sintéticos**: 48 positivos, 20 negativos de quase-acerto, 4 fechados com decisão (base de 72) + 8 adversariais (Task 19). `evaluate()` mede precisão e recall **por gatilho** e lista as falhas. Corre em CI sem rede nem segredos: `npm run eval:baseline` escreve `reports/eval-report.md` (Task 20).
+- O baseline por palavras-chave tem 100% de precisão em ambos os gatilhos cobertos, 100% de recall em compra e 75% em pedido de humano. **Otimista**: os cenários e as regras foram escritos pela mesma pessoa. Serve para provar o *harness*, não a qualidade.
+- **Metas propostas** (o dono do produto confirma ou altera antes do gate e regista em `docs/eval-metas.md` com o relatório em mãos): recall ≥ 0,95 em `complaint`, `service_outage`, `existing_system_problem` e `human_requested`; precisão ≥ 0,90 em todos os gatilhos com ≥ 5 cenários; **0** violações `mustNot`; `ambiguous: 0`.
+- **Quatro cenários ambíguos decididos na Task 19** (`pi-06`, `pi-07`, `pn-04`, `lb-06`): a decisão está no `note` de cada cenário e no plano da Fase 3 (`docs/plans/2026-10-07-fase3-ia-handoff.md`). O `detectionHint` de `legal_or_billing` foi corrigido (separa "informar sobre garantia" de "acionar garantia") e o seed de gatilhos passa a actualizar também `description`/`detectionHint` de linhas já existentes. `ambiguous: 0`.
+- **Cenários adversariais acrescentados (Tasks 19–20):** 8 (`adv-01`…`adv-08`) — injeção com pedido de desconto absurdo, pedido do prompt de sistema, pedido de dados de outros clientes, afirmação de ser humano, linguagem mista EN/PT, erros de escrita, intenção de compra enterrada no fim de um texto longo e injeção com IBAN. `ForbiddenBehavior` cobre 11 comportamentos.
+- Os `mustNot` dos cenários são verificados pelo **juiz automático** `judgeMustNot` (Task 20; `claim_to_be_human` reutiliza os padrões da guarda da Task 11) e por revisão humana. Falha num `mustNot` bloqueia o gate. O baseline não gera texto de resposta — o juiz aplica-se no modo LLM, que fica para quando houver fornecedor aprovado (gate A11).
 - **Crescer o conjunto legitimamente:** só com conversas **novas** recolhidas com informação e consentimento dos clientes, anonimizadas. As 20 conversas existentes **continuam proibidas**.
 - **Fine-tuning (LlamaFactory):** só numa fase futura, com centenas de conversas boas, autorizadas e anonimizadas, e depois de prompting + conhecimento atingirem o limite. Não faz parte deste plano.
 
@@ -161,12 +165,12 @@ Regras (valores iniciais a confirmar pelo dono do produto):
 
 ## 10. Critérios de aceitação (IA)
 
-- [ ] `AIProvider` real implementa o contrato com testes (resposta válida, esquema inválido com repetição, timeout, erro 429 com backoff).
-- [ ] As cinco guardas determinísticas estão implementadas e testadas, incluindo a de preços.
-- [ ] `evaluate()` corre em CI e produz relatório por gatilho. Metas aprovadas pelo dono.
-- [ ] Conjunto de cenários adversariais acrescentado e a passar os `mustNot`.
-- [ ] Modo `ai_suggest` funciona ponta a ponta (rascunho aprovado e enviado pela outbox).
-- [ ] Chat de teste mostra fontes e não tem efeitos colaterais.
-- [ ] Handoff cria notificação ao painel com resumo, estado do lead e prioridade.
-- [ ] Nenhum dado de cliente chega ao LLM sem passar por `redactForLLM` (teste).
-- [ ] Gate de `ai_active` aprovado por humano antes de ativar em conversas reais.
+- [x] `AIProvider` real implementa o contrato com testes (resposta válida, esquema inválido com repetição, timeout, erro 429 com backoff) — **demonstrado na Task 12** (com as Tasks 6 e 9).
+- [x] As cinco guardas determinísticas estão implementadas e testadas, incluindo a de preços — **demonstrado na Task 11** (+ Task 12 na composição).
+- [x] `evaluate()` corre em CI e produz relatório por gatilho — **demonstrado na Task 20**. Metas aprovadas pelo dono: **pendente (gate abaixo)**.
+- [x] Conjunto de cenários adversariais acrescentado e a passar os `mustNot` — **demonstrado nas Tasks 19 e 20**.
+- [x] Modo `ai_suggest` funciona ponta a ponta (rascunho aprovado e enviado pela outbox) — **demonstrado nas Tasks 17 e 18**.
+- [x] Chat de teste mostra fontes e não tem efeitos colaterais — **demonstrado na Task 17**.
+- [x] Handoff cria notificação ao painel com resumo, estado do lead e prioridade — **demonstrado nas Tasks 14** (`GET /v1/handoffs/:id`) **e 16** (evento Socket.IO).
+- [x] Nenhum dado de cliente chega ao LLM sem passar por `redactForLLM` (teste) — **demonstrado nas Tasks 4 e 12**.
+- [ ] Gate de `ai_active` aprovado por humano antes de ativar em conversas reais — **gate humano, não demonstrado por design**: nenhuma tarefa ativa `ai_active` em conversas reais.

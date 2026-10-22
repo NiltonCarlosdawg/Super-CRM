@@ -91,7 +91,8 @@ test:              npm test
 test:integration:  npm run test:integration   # precisa Docker; contentores sobem e descem no próprio script
 db:generate:       npm run db:generate
 db:migrate:        npm run db:migrate          # só com DATABASE_URL de desenvolvimento; aplicação é Fase 1
-eval:              npm run eval                # avalia o classificador contra tests/eval/handoff-scenarios.ts
+eval:              npm run eval                # baseline do classificador (relatório reports/eval-report.md)
+eval:baseline:     npm run eval:baseline       # mesmo runner; é o que o CI corre no PR (sem rede/segredos)
 
 # frontend (em packages/frontend; porta 3000, proxy /v1 → backend :3001)
 frontend-lint:        npm run lint

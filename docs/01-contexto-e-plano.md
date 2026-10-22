@@ -129,7 +129,7 @@ Conceitos: **Contact** é a pessoa/número. **Lead** é uma oportunidade numa li
 
 **Mensagem de entrada**: webhook do WA-AKG → verificação de assinatura → grava em `inbound_events` (idempotente) → job → guarda a mensagem → `handleInbound` (orquestrador) → resposta/handoff → resposta vai para a `outbox` → fila envia com limites → evento Socket.IO ao painel.
 
-**Handoff**: gatilho dispara → `handoffs` criado (resumo da IA, estado do lead, prioridade) → conversa passa a `human_only` → mensagem fixa ao cliente → notificação ao painel → humano aceita e resolve.
+**Handoff**: gatilho dispara → `handoffs` criado (resumo da IA, estado do lead, prioridade) → notificação ao painel e mensagem fixa ao cliente. Em horário útil a conversa passa a `human_only` (bloqueio da IA); **fora de horas o `ai_mode` não muda** — a IA continua ativa e o humano só assume na abertura (A6, ADR-0003), com alerta `urgent_out_of_hours` para prioridades urgentes e `opensAt` na notificação. O humano aceita e resolve (alertas de SLA em minutos úteis: pendente ≥ 15 min, aceite > 2 h após a criação) — **resolver ou devolver retorna a IA ao modo por defeito** da conversa (o da linha, senão o global; A10). Toda a ação humana é auditada.
 
 **Campanha**: criar → selecionar destinatários com consentimento e sem opt-out → agendar → job envia com atrasos aleatórios e limites por conta → registar estado por destinatário → pausa automática se houver sinais de problema (`docs/04`).
 
