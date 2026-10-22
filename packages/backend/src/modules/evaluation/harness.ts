@@ -89,35 +89,43 @@ export function buildEvalClassifier(
 
 const pct = (v: number | null): string => (v === null ? 'n/a' : `${Math.round(v * 100)}%`);
 
-export function renderEvalReport(input: {
-  model: string;
+export interface EvalReportInput {
   metrics: Record<string, TriggerMetrics>;
   misses: readonly { id: string }[];
   ambiguous: string[];
   mustNot: MustNotVerdict[];
   scenarios: number;
-}): string {
+  /** Nível de cabeçalho das secções (default '##'; o relatório LLM usa '###'). */
+  heading?: string;
+}
+
+/** Corpo do relatório (tabela + secções + rodapé), sem o cabeçalho H1. */
+export function renderEvalBody(input: EvalReportInput): string {
+  const h = input.heading ?? '##';
   const lines: string[] = [];
-  lines.push(`# Eval — ${input.model} — ${new Date().toISOString().slice(0, 10)}`);
-  lines.push('');
   lines.push('| trigger | tp | fp | fn | precision | recall |');
   lines.push('|---|---|---|---|---|---|');
   for (const [code, m] of Object.entries(input.metrics)) {
     lines.push(`| ${code} | ${m.tp} | ${m.fp} | ${m.fn} | ${pct(m.precision)} | ${pct(m.recall)} |`);
   }
   lines.push('');
-  lines.push('## Misses');
+  lines.push(`${h} Misses`);
   if (input.misses.length === 0) lines.push('(nenhum)');
   else for (const m of input.misses) lines.push(`- ${m.id}`);
   lines.push('');
-  lines.push('## Ambiguous');
+  lines.push(`${h} Ambiguous`);
   if (input.ambiguous.length === 0) lines.push('(nenhum)');
   else for (const a of input.ambiguous) lines.push(`- ${a}`);
   lines.push('');
-  lines.push('## mustNot violations');
+  lines.push(`${h} mustNot violations`);
   if (input.mustNot.length === 0) lines.push('(nenhum)');
   else for (const v of input.mustNot) lines.push(`- ${v.id}: ${v.behavior} — ${JSON.stringify(v.reply)}`);
   lines.push('');
   lines.push(`Scenarios: ${input.scenarios} (base 72 + adversariais 8)`);
   return `${lines.join('\n')}\n`;
+}
+
+export function renderEvalReport(input: { model: string } & EvalReportInput): string {
+  const header = `# Eval — ${input.model} — ${new Date().toISOString().slice(0, 10)}`;
+  return `${header}\n\n${renderEvalBody(input)}`;
 }

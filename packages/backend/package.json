@@ -14,8 +14,8 @@
     "test:integration": "bash scripts/integration-test.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "eval": "tsx scripts/eval.ts",
-    "eval:baseline": "tsx scripts/eval.ts"
+    "eval": "tsx --env-file-if-exists=.env scripts/eval.ts",
+    "eval:baseline": "tsx --env-file-if-exists=.env scripts/eval.ts --baseline"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",
