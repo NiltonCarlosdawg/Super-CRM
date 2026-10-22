@@ -4,6 +4,7 @@
 // Os gatilhos human_requested e purchase_intent devem ter também uma regra
 // determinística (palavras-chave) como rede de segurança, sem depender só do modelo.
 
+import { and, eq } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
 import { MILVENDAS_TENANT_ID } from '../../adapters/db/schema/tenants.schema.js';
 import { businessLines, handoffTriggers } from './knowledge.schema.js';
@@ -74,7 +75,9 @@ export const triggerSeeds: TriggerSeed[] = [
     detectionHint:
       'Sinais: disputa de cobrança ou fatura, reembolso, devolução, cancelamento de contrato, garantia, ' +
       'termos contratuais, pedido de acesso ou apagamento de dados pessoais, menção a advogado, ' +
-      'autoridades ou ação legal. A IA não interpreta contratos nem promete reembolsos.',
+      'autoridades ou ação legal. Informar sobre garantia (pergunta sobre o que cobre) não dispara; ' +
+      'acionar a garantia, reclamar de uma avaria ou disputar cobertura dispara. ' +
+      'A IA não interpreta contratos nem promete reembolsos.',
     action: 'handoff_now',
     priority: 'high',
   },
@@ -203,7 +206,12 @@ export const triggerSeeds: TriggerSeed[] = [
   },
 ];
 
-// Insere só os gatilhos que ainda não existem (por linha + código). Seguro para correr várias vezes.
+// Insere só os gatilhos que ainda não existem (por linha + código) e atualiza
+// `description`/`detectionHint` dos que já existem — os hints são conteúdo
+// editorial que evolui com as decisões de docs/05 §8 (Task 19: lb-06 exige
+// corrigir o hint de garantia já aplicado em bases existentes). Ação, prioridade
+// e `active` ficam governados pela operação, não pelo seed.
+// Seguro para correr várias vezes (idempotente).
 export async function seedHandoffTriggers(db: PgDatabase<any, any, any>): Promise<number> {
   const lines = await db.select({ id: businessLines.id, slug: businessLines.slug }).from(businessLines);
   const idBySlug = new Map(lines.map((l) => [l.slug, l.id]));
@@ -217,12 +225,29 @@ export async function seedHandoffTriggers(db: PgDatabase<any, any, any>): Promis
   });
 
   const existing = await db
-    .select({ lineId: handoffTriggers.lineId, code: handoffTriggers.code })
+    .select({
+      id: handoffTriggers.id,
+      lineId: handoffTriggers.lineId,
+      code: handoffTriggers.code,
+      description: handoffTriggers.description,
+      detectionHint: handoffTriggers.detectionHint,
+    })
     .from(handoffTriggers);
   const key = (lineId: string | null, code: string) => `${lineId ?? 'global'}:${code}`;
-  const have = new Set(existing.map((e) => key(e.lineId, e.code)));
+  const byKey = new Map(existing.map((e) => [key(e.lineId, e.code), e]));
 
-  const toInsert = rows.filter((r) => !have.has(key(r.lineId, r.code)));
+  const toInsert = rows.filter((r) => !byKey.has(key(r.lineId, r.code)));
   if (toInsert.length > 0) await db.insert(handoffTriggers).values(toInsert);
+
+  for (const r of rows) {
+    const e = byKey.get(key(r.lineId, r.code));
+    if (e === undefined || (e.description === r.description && e.detectionHint === r.detectionHint)) {
+      continue;
+    }
+    await db
+      .update(handoffTriggers)
+      .set({ description: r.description, detectionHint: r.detectionHint })
+      .where(and(eq(handoffTriggers.id, e.id), eq(handoffTriggers.tenantId, MILVENDAS_TENANT_ID)));
+  }
   return toInsert.length;
 }
