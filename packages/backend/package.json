@@ -14,7 +14,8 @@
     "test:integration": "bash scripts/integration-test.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "eval": "tsx tests/eval/run.ts"
+    "eval": "tsx scripts/eval.ts",
+    "eval:baseline": "tsx scripts/eval.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *' # diário (eval)
 
 jobs:
   backend:
@@ -26,6 +29,39 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:contract
+      # Task 20: baseline da avaliação no PR — determinístico, sem rede, sem segredos.
+      - run: npm run eval:baseline
+
+  # Task 20: avaliação com o fornecedor real. Segredos não podem ser referenciados
+  # diretamente em `if:` (docs GitHub) — passam por `env` no job e o teste é por
+  # passo. Hoje `npm run eval` é o baseline (modo LLM adiado ao gate A11); o job
+  # fica pronto para quando AI_API_KEY + fornecedor forem aprovados.
+  eval:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    defaults:
+      run:
+        working-directory: packages/backend
+    env:
+      AI_API_KEY: ${{ secrets.AI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: packages/backend/package-lock.json
+      - run: npm ci
+      - name: Run eval
+        if: env.AI_API_KEY != ''
+        run: npm run eval
+      - name: Upload eval report
+        if: env.AI_API_KEY != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: packages/backend/reports/eval-report.md
 
   secret-scan:
     runs-on: ubuntu-latest
