@@ -11,11 +11,24 @@ import { joinUrl, postJson } from './http.js';
 import { parseOpenAIResponse } from './schemas.js';
 
 function toMessages(messages: readonly LLMMessage[]): unknown[] {
-  return messages.map((m) =>
-    m.role === 'tool'
-      ? { role: 'tool', tool_call_id: m.toolCallId, content: m.content }
-      : { role: m.role, content: m.content },
-  );
+  return messages.map((m) => {
+    if (m.role === 'tool') {
+      return { role: 'tool', tool_call_id: m.toolCallId, content: m.content };
+    }
+    if (m.role === 'assistant' && (m.toolCalls?.length ?? 0) > 0) {
+      // Ecoa as tool_calls com o id recebido — obrigatório antes da mensagem tool.
+      return {
+        role: 'assistant',
+        content: m.content,
+        tool_calls: (m.toolCalls ?? []).map((c) => ({
+          id: c.id,
+          type: 'function',
+          function: { name: c.name, arguments: JSON.stringify(c.args) },
+        })),
+      };
+    }
+    return { role: m.role, content: m.content };
+  });
 }
 
 function toTools(tools: readonly LLMTool[]): unknown[] {

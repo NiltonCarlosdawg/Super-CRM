@@ -18,6 +18,13 @@ function toMessage(m: LLMMessage): unknown {
       content: [{ type: 'tool_result', tool_use_id: m.toolCallId, content: m.content }],
     };
   }
+  if (m.role === 'assistant' && (m.toolCalls?.length ?? 0) > 0) {
+    // Ecoa os blocos tool_use com o id recebido — obrigatório antes do tool_result.
+    const blocks: unknown[] = [];
+    if (m.content) blocks.push({ type: 'text', text: m.content });
+    for (const c of m.toolCalls ?? []) blocks.push({ type: 'tool_use', id: c.id, name: c.name, input: c.args });
+    return { role: 'assistant', content: blocks };
+  }
   return { role: m.role, content: m.content };
 }
 

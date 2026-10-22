@@ -144,8 +144,14 @@ export function createLlmAIProvider(deps: LlmProviderDeps): AIProvider {
         }
         messages = [
           ...messages,
-          { role: 'assistant', content: result.content ?? '' },
-          { role: 'tool', content: toolText, toolCallId: `lookup-${toolCalls}`, toolName: 'lookup_catalog' },
+          // Ecoa as tool_calls recebidas com o MESMO id (protocolo OpenAI/Anthropic;
+          // sem isto o fornecedor rejeita a continuação com 400).
+          {
+            role: 'assistant',
+            content: result.content ?? '',
+            toolCalls: [{ id: call.id, name: call.name, args: call.args }],
+          },
+          { role: 'tool', content: toolText, toolCallId: call.id, toolName: call.name },
         ];
         continue;
       }

@@ -3,11 +3,19 @@
 // Anthropic, vLLM...). A implementação concreta (HTTP, auth, parsing) fica em
 // src/adapters/ai/ e troca-se sem tocar no CRM.
 
+export interface LLMToolCallRef {
+  id: string; // id real devolvido pelo fornecedor — obrigatório no eco
+  name: string;
+  args: unknown;
+}
+
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   toolCallId?: string;
   toolName?: string;
+  /** Echo das tool_calls da assistant — obrigatório antes de uma mensagem tool. */
+  toolCalls?: readonly LLMToolCallRef[];
 }
 
 export interface LLMTool {
@@ -25,7 +33,7 @@ export interface LLMCallRequest {
 
 export interface LLMCallResult {
   content: string | null;
-  toolCall: { name: string; args: unknown } | null;
+  toolCall: LLMToolCallRef | null;
   model: string;
 }
 

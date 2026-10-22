@@ -222,3 +222,32 @@ test('summarizeForHandoff redige turnos e não leva tools', async () => {
   assert.ok(body.includes('[TELEFONE]'));
   assert.ok(!body.includes('912345678'));
 });
+
+// Regressão: Groq (e OpenAI) rejeitam com 400 se a resposta de tool não ecoar
+// as tool_calls da assistant com o MESMO id — era isto que dava
+// 'LLMError: client 400' em 13 cenários do eval real (relatório 2026-10-22).
+test('lookup_catalog: assistant ecoa tool_calls e tool usa o id real do fornecedor', async () => {
+  const { transport, calls } = fakeLlm([
+    ok(toolCallResult('lookup_catalog', { query: 'plano' }, 'modelo-x', 'call-real-42')),
+    ok(submitOk('Segue o preço do catálogo.')),
+  ]);
+  const { deps } = makeDeps(transport, cfg());
+  const p = createLlmAIProvider(deps);
+  const res = await p.respond(aiRequest({ lookupCatalog: async () => [] }));
+
+  assert.equal(res.reply, 'Segue o preço do catálogo.');
+  assert.equal(calls.length, 2, 'chamada + continuação após tool');
+
+  const second = calls[1]!;
+  const assistant = second.messages.find(
+    (m) => m.role === 'assistant' && (m.toolCalls?.length ?? 0) > 0,
+  );
+  assert.ok(assistant, 'a assistant ecoa tool_calls com o id recebido');
+  assert.equal(assistant?.toolCalls?.[0]?.id, 'call-real-42');
+  assert.equal(assistant?.toolCalls?.[0]?.name, 'lookup_catalog');
+
+  const toolMsg = second.messages.find((m) => m.role === 'tool');
+  assert.ok(toolMsg, 'mensagem tool presente');
+  assert.equal(toolMsg?.toolCallId, 'call-real-42', 'tool_call_id = id real, não inventado');
+  assert.equal(toolMsg?.toolName, 'lookup_catalog');
+});

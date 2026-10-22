@@ -17,13 +17,14 @@ export const ok = (result: LLMCallResult): FakeStep => ({ kind: 'ok', result });
 export const err = (error: LLMError): FakeStep => ({ kind: 'err', error });
 export const hang: FakeStep = { kind: 'hang' };
 
-/** Tool call com um `model` fixo (os testes esperam 'modelo-x'). */
+/** Tool call com um `model` fixo (os testes esperam 'modelo-x') e id determinístico. */
 export function toolCallResult(
   name: string,
   args: unknown,
   model = 'modelo-x',
+  id = 'call-fake-1',
 ): LLMCallResult {
-  return { content: null, toolCall: { name, args }, model };
+  return { content: null, toolCall: { id, name, args }, model };
 }
 
 /** Resposta só de texto (sem tool call). */

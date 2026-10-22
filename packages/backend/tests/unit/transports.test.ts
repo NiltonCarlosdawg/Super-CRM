@@ -157,3 +157,78 @@ test('openai arguments inválido → invalid_response', async () => {
     (e: LLMError) => e.kind === 'invalid_response',
   );
 });
+
+// Regressão 2026-10-22: o eco do tool call tem de serializar tool_calls com o id
+// recebido (Groq devolve 400 — HarmonyError 'Tools should have a name!' — se o
+// id não casar). Reproduzido com curl contra a API real antes do fix.
+test('openai: assistant ecoa tool_calls com o id recebido e tool usa esse mesmo id', async () => {
+  const capture: Capture = {};
+  const t = createOpenAITransport({
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-test',
+    fetch: fakeFetch(OPENAI_TEXT, capture),
+  });
+  const req: LLMCallRequest = {
+    model: 'm',
+    messages: [
+      { role: 'user', content: 'quanto custa?' },
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'call_abc123', name: 'lookup_catalog', args: { query: 'preço' } }],
+      },
+      { role: 'tool', content: '[]', toolCallId: 'call_abc123', toolName: 'lookup_catalog' },
+    ],
+    tools: [],
+    maxTokens: 1024,
+  };
+  await t.call(req, new AbortController().signal);
+
+  const msgs = capture.body?.messages as Record<string, unknown>[];
+  const tc = msgs[1]!['tool_calls'] as {
+    id: string;
+    type: string;
+    function: { name: string; arguments: string };
+  }[];
+  assert.equal(tc[0]!.id, 'call_abc123');
+  assert.equal(tc[0]!.type, 'function');
+  assert.deepEqual(JSON.parse(tc[0]!.function.arguments), { query: 'preço' });
+  const toolMsg = msgs[2]!;
+  assert.equal(toolMsg['role'], 'tool');
+  assert.equal(toolMsg['tool_call_id'], 'call_abc123');
+  assert.ok(!('tool_name' in toolMsg), 'Groq rejeita tool_name no corpo');
+});
+
+test('anthropic: assistant ecoa tool_use com o id recebido e tool_result usa esse mesmo id', async () => {
+  const capture: Capture = {};
+  const t = createAnthropicTransport({
+    baseUrl: 'https://api.anthropic.com',
+    apiKey: 'sk-ant-test',
+    fetch: fakeFetch(ANTHROPIC_TEXT, capture),
+  });
+  const req: LLMCallRequest = {
+    model: 'm',
+    messages: [
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'quanto custa?' },
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'toolu_abc123', name: 'lookup_catalog', args: { query: 'preço' } }],
+      },
+      { role: 'tool', content: '[]', toolCallId: 'toolu_abc123', toolName: 'lookup_catalog' },
+    ],
+    tools: [],
+    maxTokens: 1024,
+  };
+  await t.call(req, new AbortController().signal);
+
+  const msgs = capture.body?.messages as Record<string, unknown>[];
+  const blocks = msgs[1]!['content'] as { type: string; id?: string; name?: string }[];
+  const toolUse = blocks.find((b) => b.type === 'tool_use');
+  assert.equal(toolUse?.id, 'toolu_abc123');
+  assert.equal(toolUse?.name, 'lookup_catalog');
+  const toolResultMsg = msgs[2]! as { role: string; content: { type: string; tool_use_id?: string }[] };
+  assert.equal(toolResultMsg.role, 'user', 'tool_result vai numa mensagem user (Anthropic)');
+  assert.equal(toolResultMsg.content[0]?.tool_use_id, 'toolu_abc123');
+});

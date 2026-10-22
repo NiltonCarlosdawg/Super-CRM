@@ -17,6 +17,7 @@ const openAIResponse = z.object({
           tool_calls: z
             .array(
               z.object({
+                id: z.string(),
                 function: z.object({ name: z.string(), arguments: z.string() }),
               }),
             )
@@ -42,7 +43,7 @@ export function parseOpenAIResponse(json: unknown): Parsed {
     } catch {
       throw new LLMError('arguments do tool_call não é JSON válido', 'invalid_response');
     }
-    return { content: message.content, toolCall: { name: call.function.name, args } };
+    return { content: message.content, toolCall: { id: call.id, name: call.function.name, args } };
   }
   return { content: message.content, toolCall: null };
 }
@@ -63,7 +64,7 @@ export function parseAnthropicResponse(json: unknown): Parsed {
     .join('');
   const toolUse = parsed.data.content.find((b) => b.type === 'tool_use');
   if (toolUse && toolUse.type === 'tool_use') {
-    return { content: text || null, toolCall: { name: toolUse.name, args: toolUse.input } };
+    return { content: text || null, toolCall: { id: toolUse.id, name: toolUse.name, args: toolUse.input } };
   }
   return { content: text || null, toolCall: null };
 }
