@@ -1,4 +1,4 @@
-# ADR-0002: Assinatura HMAC Obrigatória nos Webhooks
+# ADR-0010: Assinatura HMAC Obrigatória nos Webhooks
 
 ## Contexto
 

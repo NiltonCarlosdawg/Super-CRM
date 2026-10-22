@@ -1,4 +1,4 @@
-# ADR-0004: Dashboard e Swagger Públicos
+# ADR-0012: Dashboard e Swagger Públicos
 
 ## Contexto
 

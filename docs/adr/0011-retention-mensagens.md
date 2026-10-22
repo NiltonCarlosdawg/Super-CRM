@@ -1,4 +1,4 @@
-# ADR-0003: Retenção e Prunagem de Mensagens
+# ADR-0011: Retenção e Prunagem de Mensagens
 
 ## Contexto
 
