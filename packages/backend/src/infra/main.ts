@@ -136,6 +136,7 @@ async function main(): Promise<void> {
     jobs,
     conversations,
     messageSender,
+    outbox,
     notifySink: socketNotify,
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });

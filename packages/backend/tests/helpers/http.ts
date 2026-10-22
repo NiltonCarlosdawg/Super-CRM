@@ -208,6 +208,7 @@ export async function buildTestApp(
     jobs,
     conversations,
     messageSender,
+    outbox,
     handoffs: {
       queue: handoffsQueue,
       conversations: handoffsConversations,

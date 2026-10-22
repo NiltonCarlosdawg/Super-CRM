@@ -48,6 +48,9 @@ const DOMAIN: Record<string, [number, string]> = {
   invalid_cursor: [400, 'cursor de paginação inválido'],
   message_empty: [400, 'mensagem vazia ou só espaços'],
   message_too_long: [400, 'texto excede WA_MAX_MESSAGE_CHARS'],
+  // Task 18: aprovação/rejeição de rascunhos (ai_suggest)
+  draft_rejected: [409, 'rascunho rejeitado não pode ser aprovado'],
+  draft_not_pending: [409, 'rascunho não está pendente de aprovação'],
 };
 
 export function toProblem(

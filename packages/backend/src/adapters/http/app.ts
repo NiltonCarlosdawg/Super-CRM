@@ -23,6 +23,7 @@ import { toProblem } from './errors.js';
 import { authenticate, csrfGuard } from './guards.js';
 import { authRoutes } from './routes/auth.js';
 import { conversationsRoutes } from './routes/conversations.js';
+import { draftsRoutes } from './routes/drafts.js';
 import { handoffsRoutes } from './routes/handoffs.js';
 import { platformRoutes } from './routes/platform.js';
 import { usersRoutes } from './routes/users.js';
@@ -38,6 +39,7 @@ import type { HandoffQueueRepository } from '../../ports/handoff-queue.js';
 import type { JobQueue } from '../../ports/job-queue.js';
 import type { MessagingProvider } from '../../ports/messaging-provider.js';
 import type { NotifyEvent } from '../../ports/notify.js';
+import type { Outbox } from '../../ports/outbox.js';
 import type { MessageSender } from '../../application/messaging.js';
 
 declare module 'fastify' {
@@ -71,6 +73,8 @@ export interface HttpDeps {
   /** Task 21: leitura de conversas + envio humano (qualquer papel autenticado). */
   conversations?: ConversationsRepository;
   messageSender?: MessageSender;
+  /** Fase 3 (Task 18): a aprovação de rascunhos enfileira na outbox (única saída). */
+  outbox?: Outbox;
   /** Fase 3 (Task 14): fila de handoffs — claim/resolução/devolução à IA. */
   handoffs?: {
     queue: HandoffQueueRepository;
@@ -186,6 +190,11 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
       // Fase 3 (Task 14): fila de handoffs — só com o bundle montado.
       if (deps.handoffs !== undefined) {
         await handoffsRoutes(instance, deps);
+      }
+      // Fase 3 (Task 18): rascunhos — a aprovação enfileira na outbox, logo
+      // precisa de db (ler/atualizar) + outbox (enqueue).
+      if (deps.outbox !== undefined && deps.db !== undefined) {
+        await draftsRoutes(instance, deps);
       }
       // Task 7: superfície de plataforma (spec §5.3) — requirePlatform em todas.
       await platformRoutes(instance, deps);
