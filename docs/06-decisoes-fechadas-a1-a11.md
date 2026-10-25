@@ -31,10 +31,17 @@ Este documento é a fonte de verdade dessas decisões; os ADRs guardam o porquê
 
 ## A3 — Modelo de LLM e fornecedor
 
-**Decisão:** **API externa**, modelo escolhido por **`evaluate()`** contra os 72 cenários
-de `reference/handoff-scenarios.ts`, entre 2–3 candidatos (mínimo: um OpenAI, um Anthropic).
+**Decisão:** **API externa**, modelo escolhido por **`evaluate()`** contra os 80 cenários
+de `src/modules/evaluation/handoff-scenarios.ts`, entre 2–3 candidatos (mínimo: um OpenAI, um Anthropic).
 Configurável por env (`AI_MODEL`).
 
+- **Variante free aceite pelo dono (2026-10-25):** no free tier Groq o catálogo não tem
+  modelos Anthropic (verificado via `GET /openai/v1/models`, 2026-10-22). A comparação
+  real usou `openai/gpt-oss-120b` (família OpenAI, open-weight) vs `qwen/qwen3.8-27b`
+  (Alibaba) — `evaluate()` escolheu **`openai/gpt-oss-120b`** (corridas de 2026-10-22:
+  misses 17/28 vs 36 do qwen; qwen bloqueou por rate limit em corridas dedicadas).
+  Comparação com um modelo Anthropic (ex.: Claude) fica **pendente de chave paga** —
+  não bloqueia o gate `ai_active`, que por agora falha as metas (`docs/eval-metas.md`).
 - Só avança para dados reais após o gate **A11**.
 - Desenvolvimento e benchmark usam **apenas dados sintéticos**.
 - Auto-hospedado rejeitado como plano A (qualidade de structured output inferior;
