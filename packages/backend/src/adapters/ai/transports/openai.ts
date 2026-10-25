@@ -45,6 +45,8 @@ function buildBody(req: LLMCallRequest): Record<string, unknown> {
     max_completion_tokens: req.maxTokens,
   };
   if (req.tools.length > 0) body.tools = toTools(req.tools);
+  // Só presente quando definida — payloads por omissão inalterados.
+  if (req.temperature !== undefined) body.temperature = req.temperature;
   return body;
 }
 

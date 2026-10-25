@@ -232,3 +232,37 @@ test('anthropic: assistant ecoa tool_use com o id recebido e tool_result usa ess
   assert.equal(toolResultMsg.role, 'user', 'tool_result vai numa mensagem user (Anthropic)');
   assert.equal(toolResultMsg.content[0]?.tool_use_id, 'toolu_abc123');
 });
+
+test('temperature só vai no corpo quando definida (eval fixa 0 — decisão 2026-10-25)', async () => {
+  const sig = new AbortController().signal;
+  const reqBase: Omit<LLMCallRequest, 'temperature'> = {
+    model: 'm',
+    messages: [{ role: 'user', content: 'oi' }],
+    tools: [],
+    maxTokens: 10,
+  };
+
+  const capOai: Capture = {};
+  await createOpenAITransport({
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-test',
+    fetch: fakeFetch(OPENAI_TEXT, capOai),
+  }).call({ ...reqBase, temperature: 0 }, sig);
+  assert.equal(capOai.body?.temperature, 0, 'openai: temperature presente quando definida');
+
+  const capOai2: Capture = {};
+  await createOpenAITransport({
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-test',
+    fetch: fakeFetch(OPENAI_TEXT, capOai2),
+  }).call(reqBase, sig);
+  assert.ok(!('temperature' in (capOai2.body ?? {})), 'openai: ausente quando não definida');
+
+  const capAnt: Capture = {};
+  await createAnthropicTransport({
+    baseUrl: 'https://api.anthropic.com',
+    apiKey: 'sk-ant-test',
+    fetch: fakeFetch(ANTHROPIC_TEXT, capAnt),
+  }).call({ ...reqBase, temperature: 0 }, sig);
+  assert.equal(capAnt.body?.temperature, 0, 'anthropic: temperature presente quando definida');
+});

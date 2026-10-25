@@ -251,3 +251,28 @@ test('lookup_catalog: assistant ecoa tool_calls e tool usa o id real do forneced
   assert.equal(toolMsg?.toolCallId, 'call-real-42', 'tool_call_id = id real, não inventado');
   assert.equal(toolMsg?.toolName, 'lookup_catalog');
 });
+
+// Decisão do dono 2026-10-25: o eval fixa temperature 0 (reprodutibilidade do gate;
+// run 1 vs run 2 do mesmo modelo variou 17→28 misses). Sem definição nos deps,
+// o pedido NÃO leva temperature (payloads de produção inalterados).
+test('temperature só vai no pedido quando os deps a definem', async () => {
+  const { transport, calls } = fakeLlm([ok(submitOk('ok'))]);
+  const { deps } = makeDeps(transport, cfg());
+  const p = createLlmAIProvider({ ...deps, temperature: 0 });
+  await p.respond(aiRequest());
+  assert.equal(calls[0]!.temperature, 0, 'respond() leva temperature 0');
+
+  const { transport: t2, calls: c2 } = fakeLlm([ok(textResult('Resumo: cliente pediu plano.'))]);
+  const p2 = createLlmAIProvider({ ...makeDeps(t2, cfg()).deps, temperature: 0 });
+  await p2.summarizeForHandoff({
+    turns: [{ from: 'customer', text: 'oi' }],
+    qualification: {},
+    reason: 'pedido humano',
+  });
+  assert.equal(c2[0]!.temperature, 0, 'summarizeForHandoff() leva temperature 0');
+
+  const { transport: t3, calls: c3 } = fakeLlm([ok(submitOk('ok'))]);
+  const p3 = createLlmAIProvider(makeDeps(t3, cfg()).deps);
+  await p3.respond(aiRequest());
+  assert.equal(c3[0]!.temperature, undefined, 'sem definição: sem temperature');
+});

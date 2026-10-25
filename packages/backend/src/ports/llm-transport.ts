@@ -29,6 +29,8 @@ export interface LLMCallRequest {
   messages: readonly LLMMessage[];
   tools: readonly LLMTool[];
   maxTokens: number;
+  /** Opcional: fixa a temperatura da amostragem (0 = determinista — usado pelo eval). */
+  temperature?: number;
 }
 
 export interface LLMCallResult {

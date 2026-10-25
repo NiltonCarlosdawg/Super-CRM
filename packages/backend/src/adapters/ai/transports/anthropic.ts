@@ -48,6 +48,8 @@ function buildBody(req: LLMCallRequest): Record<string, unknown> {
   };
   if (system) body.system = system;
   if (req.tools.length > 0) body.tools = toTools(req.tools);
+  // Só presente quando definida — payloads por omissão inalterados.
+  if (req.temperature !== undefined) body.temperature = req.temperature;
   return body;
 }
 

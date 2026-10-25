@@ -48,6 +48,8 @@ export interface LlmProviderDeps {
   sleep: (ms: number) => Promise<void>;
   random: () => number;
   now: () => number;
+  /** Fixa a temperatura (0 = determinista). Só o eval define — decisão 2026-10-25. */
+  temperature?: number;
 }
 
 export function createLlmAIProvider(deps: LlmProviderDeps): AIProvider {
@@ -82,6 +84,7 @@ export function createLlmAIProvider(deps: LlmProviderDeps): AIProvider {
         messages,
         tools,
         maxTokens: config.maxTokens,
+        temperature: deps.temperature,
       };
       const result = await callWithPolicy(transport, request, policy, signal);
       const call = result.toolCall;
@@ -192,6 +195,7 @@ export function createLlmAIProvider(deps: LlmProviderDeps): AIProvider {
       messages,
       tools: [],
       maxTokens: config.maxTokens,
+      temperature: deps.temperature,
     };
     const result = await callWithPolicy(transport, request, policy, signal);
     return result.content ?? '';

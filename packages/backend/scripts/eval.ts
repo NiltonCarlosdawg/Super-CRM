@@ -64,6 +64,8 @@ if (mode === 'llm') {
         resolvePacingMs(process.env),
       ),
       config: { ...evalCfg, model },
+      // temperature 0: gate reprodutível entre corridas (decisão 2026-10-25).
+      temperature: 0,
       sleep,
       random: Math.random,
       now: () => Date.now(),
