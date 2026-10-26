@@ -379,6 +379,19 @@ export async function deleteDraftItem(deps: TrainDeps, id: string): Promise<void
 }
 
 /**
+ * Transcrição do fluxo guiado: uma linha por pergunta e outra por resposta,
+ * pares separados por linha em branco, na ordem em que o editor respondeu.
+ * É este texto que entra no pipeline como upload `text/plain` (T5).
+ */
+export function formatGuidedTranscript(
+  answers: ReadonlyArray<{ question: string; answer: string }>,
+): string {
+  return answers
+    .map(({ question, answer }) => `Pergunta: ${question}\nResposta: ${answer}`)
+    .join('\n\n');
+}
+
+/**
  * Cria o upload (`status: 'pending'`) e enfileira `knowledge.extract` com um
  * payload de SÓ ids. Helper partilhado pela rota de documentos (T4) e pelo
  * fluxo guiado (T5).

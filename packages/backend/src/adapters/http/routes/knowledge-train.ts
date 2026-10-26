@@ -1,14 +1,17 @@
-// Treinar agente, Task 4: rotas de upload de documentos e do rascunho.
+// Treinar agente, Tasks 4 e 5: upload de documentos, fluxo guiado e rascunho.
 // editor|admin (o `agent` não escreve conhecimento — spec §9), tenant da sessão
 // em todas as queries, zod em todas as entradas e erros pela fronteira HTTP.
-// O upload é só a porta de entrada: extração e staging correm no job
-// `knowledge.extract` (payload com o id do upload).
+// O upload (documento ou passo a passo) é só a porta de entrada: extração e
+// staging correm no job `knowledge.extract` (payload com o id do upload).
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { businessLines } from '../../../modules/knowledge/knowledge.schema.js';
 import {
   deleteDraftItem,
+  formatGuidedTranscript,
   listDraftItems,
   patchDraftItem,
   queueExtraction,
@@ -41,6 +44,21 @@ const uploadBodySchema = z
   .object({
     documents: z.array(documentSchema).min(1).max(20),
     lineSlug: lineSlugSchema.optional(),
+  })
+  .strict();
+
+// Passo a passo (T5): cada resposta vira texto e entra no mesmo pipeline da T4.
+const guidedAnswerSchema = z
+  .object({
+    question: z.string().min(1).max(300),
+    answer: z.string().min(1).max(4000),
+  })
+  .strict();
+
+const guidedBodySchema = z
+  .object({
+    lineSlug: lineSlugSchema,
+    answers: z.array(guidedAnswerSchema).min(1),
   })
   .strict();
 
@@ -147,6 +165,48 @@ export async function knowledgeTrainRoutes(app: FastifyInstance, deps: HttpDeps)
       return reply.status(202).send({ uploadIds });
     },
   );
+
+  app.post('/v1/knowledge/train/guided', { preHandler: guard }, async (request, reply) => {
+    const body = guidedBodySchema.parse(request.body);
+    const tenantScope = scope(request);
+    const changedById = request.auth!.userId;
+
+    // A linha escolhida tem de existir no dicionário global `business_lines`
+    // e é validada ANTES de criar o upload (sem efeitos parciais). O slug é
+    // válido no contrato mas ausente na BD ⇒ 404 na fronteira.
+    const [line] = await db
+      .select({ id: businessLines.id })
+      .from(businessLines)
+      .where(eq(businessLines.slug, body.lineSlug))
+      .limit(1);
+    if (line === undefined) {
+      throw new HttpError(
+        404,
+        'line_not_found',
+        `linha de negócio inexistente: ${body.lineSlug}`,
+      );
+    }
+
+    let uploadId: string;
+    try {
+      uploadId = await queueExtraction(
+        { db, scope: tenantScope, jobs: knowledge.jobs, now: knowledge.now },
+        {
+          filename: 'passo-a-passo',
+          mediaType: 'text/plain',
+          text: formatGuidedTranscript(body.answers),
+          lineSlug: body.lineSlug,
+          lineConfirmed: true,
+          changedById,
+        },
+        { correlationId: String(request.id) },
+      );
+    } catch (error) {
+      return mapTrainError(error);
+    }
+
+    return reply.status(202).send({ uploadIds: [uploadId] });
+  });
 
   app.get('/v1/knowledge/train/draft', { preHandler: guard }, async (request, reply) => {
     const items = await listDraftItems(mkDeps(request));
