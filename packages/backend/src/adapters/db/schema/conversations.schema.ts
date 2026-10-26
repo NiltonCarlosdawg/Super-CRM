@@ -3,7 +3,7 @@
 // `ai_mode` usa o enum único do módulo de conhecimento (fonte única do enum) e
 // arranca em 'ai_suggest' por D13 (arranque da IA em modo sugestão).
 
-import { index, integer, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgTable, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { aiModeEnum, businessLines } from '../../../modules/knowledge/knowledge.schema.js';
 import { contacts } from './contacts.schema.js';
 import { leads } from './leads.schema.js';
@@ -40,6 +40,9 @@ export const conversations = pgTable(
     lineId: uuid('line_id').references(() => businessLines.id), // nulo até identificar a linha
     // Quem responde. Default ai_suggest = D13; mudar para ai_active exige gate.
     aiMode: aiModeEnum('ai_mode').notNull().default('ai_suggest'),
+    // Conversa sintética do mini-chat de teste ("Treinar agente" spec §7):
+    // sem handoffs, lacunas, notificações nem envios.
+    isTest: boolean('is_test').notNull().default(false),
     missStreak: integer('miss_streak').notNull().default(0), // falhas seguidas da IA (docs/01 §6)
     lastMessageAt: ts('last_message_at'),
     createdAt: createdAt(),

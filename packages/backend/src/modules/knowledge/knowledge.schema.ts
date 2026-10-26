@@ -20,7 +20,7 @@ import {
   uuid,
   vector,
 } from 'drizzle-orm/pg-core';
-import type { PgDatabase } from 'drizzle-orm/pg-core';
+import type { AnyPgColumn, PgDatabase } from 'drizzle-orm/pg-core';
 import { tenants } from '../../adapters/db/schema/tenants.schema.js';
 
 // ───────────── Helpers ─────────────
@@ -68,6 +68,8 @@ export const aiModeEnum = pgEnum('ai_mode', ['ai_active', 'ai_suggest', 'human_o
 export const gapStatusEnum = pgEnum('gap_status', ['open', 'resolved', 'ignored']);
 export const suggestionStatusEnum = pgEnum('suggestion_status', ['pending', 'approved', 'rejected']);
 export const chunkSourceEnum = pgEnum('chunk_source', ['doc', 'catalog']);
+// Estado do upload de um documento de treino (extração assíncrona, Task 4).
+export const uploadStatusEnum = pgEnum('upload_status', ['pending', 'processing', 'done', 'error']);
 
 // ───────────── Linhas de negócio ─────────────
 
@@ -95,7 +97,9 @@ export const catalogItems = pgTable(
       .references(() => businessLines.id),
     kind: catalogKindEnum('kind').notNull(),
     name: text('name').notNull(),
-    slug: text('slug').notNull().unique(),
+    // Identidade estável do item dentro do tenant (spec "Treinar agente" §5–6):
+    // o slug é único por tenant, não globalmente.
+    slug: text('slug').notNull(),
     summary: text('summary').notNull(),
     details: jsonb('details'), // funcionalidades, especificações, requisitos
     pricingMode: pricingModeEnum('pricing_mode').notNull(),
@@ -114,6 +118,7 @@ export const catalogItems = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
+    uniqueIndex('catalog_items_tenant_slug_uq').on(t.tenantId, t.slug),
     index('catalog_items_status_valid_idx').on(t.status, t.validUntil),
     index('catalog_items_line_idx').on(t.lineId),
   ],
@@ -333,6 +338,9 @@ export const knowledgeRevisions = pgTable(
     version: integer('version').notNull(),
     snapshot: jsonb('snapshot').notNull(),
     changedById: uuid('changed_by_id').notNull(),
+    // Publicação que aplicou esta revisão (nula nas revisões anteriores a esta
+    // entrega). A callback evita depender da ordem de declaração das tabelas.
+    publicationId: uuid('publication_id').references((): AnyPgColumn => knowledgePublications.id),
     note: text('note'),
     createdAt: createdAt(),
   },
@@ -366,6 +374,88 @@ export const answerTraces = pgTable(
     index('answer_traces_test_created_idx').on(t.isTest, t.createdAt),
   ],
 );
+
+// ───────────── Área de rascunho e publicações ("Treinar agente") ─────────────
+// O fluxo de treino escreve primeiro em `knowledge_draft_items` (nada fica
+// activo) e só a validação atómica cria uma `knowledge_publications` + revisões.
+// Spec: docs/superpowers/specs/2026-10-25-treinar-agente-conhecimento-design.md §5.
+
+/** Entidades que podem entrar no rascunho (mesmos valores de `knowledge_revisions`). */
+export type DraftEntityType = 'catalog_item' | 'knowledge_doc' | 'rule';
+/** Operação staged sobre uma entidade: criar, actualizar ou remover. */
+export type DraftOp = 'create' | 'update' | 'delete';
+
+// Documento carregado para treino. O texto extraído fica guardado para permitir
+// reprocessar sem novo upload; `status` segue o job de extração.
+export const knowledgeTrainUploads = pgTable(
+  'knowledge_train_uploads',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
+    filename: text('filename').notNull(),
+    mediaType: text('media_type').notNull(),
+    text: text('text').notNull(),
+    status: uploadStatusEnum('status').notNull().default('pending'),
+    error: text('error'), // falha visível ao utilizador; nada staged
+    lineSlug: text('line_slug'), // linha proposta pelo extractor
+    lineConfirmed: boolean('line_confirmed').notNull().default(false),
+    changedById: uuid('changed_by_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('train_uploads_tenant_status_idx').on(t.tenantId, t.status)],
+);
+
+// Item staged do rascunho: payload estruturado (jsonb) pronto a publicar.
+// `slug` é a identidade do item dentro do tenant — no máximo uma linha por slug.
+export const knowledgeDraftItems = pgTable(
+  'knowledge_draft_items',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
+    slug: text('slug').notNull(),
+    entityType: text('entity_type').notNull(), // DraftEntityType
+    op: text('op').notNull(), // DraftOp
+    lineSlug: text('line_slug'),
+    lineConfirmed: boolean('line_confirmed').notNull().default(false),
+    payload: jsonb('payload').notNull(), // item estruturado validado por zod (T3)
+    chunks: jsonb('chunks'), // chunks + embeddings calculados na extração (T2)
+    baseVersion: integer('base_version'), // versão activa de origem (deteção de corrida, §6)
+    changedById: uuid('changed_by_id').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('draft_items_tenant_slug_uq').on(t.tenantId, t.slug)],
+);
+
+// Registo da publicação atómica. `idempotency_key` dá retry seguro à validação;
+// `publication_id` nas revisões permite reverter "a última publicação".
+export const knowledgePublications = pgTable(
+  'knowledge_publications',
+  {
+    id: pk(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
+    kind: text('kind').notNull(), // 'train' | 'quick_edit' | 'revert'
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdById: uuid('created_by_id').notNull(),
+    applied: jsonb('applied'), // contagens { added, updated, archived }
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('publications_tenant_key_uq').on(t.tenantId, t.idempotencyKey)],
+);
+
+/** Linha staged lida da BD (consumida pelas T4–T8). */
+export type StagedItemRow = typeof knowledgeDraftItems.$inferSelect;
+/** Linha de upload lida da BD. */
+export type UploadRow = typeof knowledgeTrainUploads.$inferSelect;
+/** Linha de publicação lida da BD. */
+export type PublicationRow = typeof knowledgePublications.$inferSelect;
 
 // ───────────── Relações (para db.query) ─────────────
 
