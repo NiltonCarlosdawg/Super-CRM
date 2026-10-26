@@ -135,6 +135,9 @@ export const knowledgeDocs = pgTable(
     lineId: uuid('line_id').references(() => businessLines.id), // null = vale para toda a empresa
     type: docTypeEnum('type').notNull(),
     title: text('title').notNull(),
+    // Identidade estável do documento dentro do tenant (mesma regra do catálogo:
+    // o diff da validação e o `baseVersion` casam por tenant + slug).
+    slug: text('slug').notNull(),
     body: text('body').notNull(),
     status: knowledgeStatusEnum('status').notNull().default('draft'),
     validFrom: ts('valid_from'),
@@ -147,6 +150,7 @@ export const knowledgeDocs = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
+    uniqueIndex('knowledge_docs_tenant_slug_uq').on(t.tenantId, t.slug),
     index('knowledge_docs_status_valid_idx').on(t.status, t.validUntil),
     index('knowledge_docs_line_type_idx').on(t.lineId, t.type),
   ],
@@ -166,7 +170,7 @@ export const knowledgeChunks = pgTable(
     catalogItemId: uuid('catalog_item_id').references(() => catalogItems.id, { onDelete: 'cascade' }),
     position: integer('position').notNull(),
     content: text('content').notNull(),
-    embedding: vector('embedding', { dimensions: 1536 }), // depende do modelo de embeddings
+    embedding: vector('embedding', { dimensions: 384 }), // multilingual-e5-small (ADR-0002/A4)
     embeddingModel: text('embedding_model'),
     active: boolean('active').notNull().default(true), // só chunks de itens publicados e válidos
   },
@@ -189,15 +193,23 @@ export const rules = pgTable(
     lineId: uuid('line_id').references(() => businessLines.id),
     kind: ruleKindEnum('kind').notNull(),
     title: text('title').notNull(),
+    // Identidade estável da regra dentro do tenant (casa com o slug staged).
+    slug: text('slug').notNull(),
     instruction: text('instruction').notNull(),
     params: jsonb('params'), // ex.: { "maxDiscountPct": 10 }
     priority: integer('priority').notNull().default(0),
     status: knowledgeStatusEnum('status').notNull().default('draft'),
+    // Versão publicada, como em `knowledge_docs` e `catalog_items`: é o
+    // `baseVersion` que a validação usa para detetar corridas (spec §6).
+    version: integer('version').notNull().default(1),
     ownerId: uuid('owner_id').notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('rules_status_line_idx').on(t.status, t.lineId)],
+  (t) => [
+    uniqueIndex('rules_tenant_slug_uq').on(t.tenantId, t.slug),
+    index('rules_status_line_idx').on(t.status, t.lineId),
+  ],
 );
 
 // Guião de qualificação por linha (ex.: CCTV: nº de câmaras, interior/exterior).

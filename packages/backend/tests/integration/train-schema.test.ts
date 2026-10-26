@@ -12,10 +12,13 @@ import * as base from '../../src/adapters/db/schema/index.js';
 import {
   businessLines,
   catalogItems,
+  knowledgeChunks,
+  knowledgeDocs,
   knowledgeDraftItems,
   knowledgePublications,
   knowledgeRevisions,
   knowledgeTrainUploads,
+  rules,
   type DraftEntityType,
   type DraftOp,
   type PublicationRow,
@@ -35,6 +38,15 @@ function sqlState(err: unknown): unknown {
 
 /** Violação de UNIQUE (23505). */
 const isUniqueViolation = (err: unknown): boolean => sqlState(err) === '23505';
+
+/** Mensagem de um erro, incluindo o `cause` embrulhado pelo Drizzle. */
+function errorMessage(err: unknown): string {
+  const message = (e: unknown): string =>
+    typeof (e as { message?: unknown } | null)?.message === 'string'
+      ? ((e as { message: string }).message)
+      : '';
+  return `${message(err)} ${message((err as { cause?: unknown } | null)?.cause)}`;
+}
 
 /** Violação de FOREIGN KEY (23503). */
 const isForeignKeyViolation = (err: unknown): boolean => sqlState(err) === '23503';
@@ -147,6 +159,74 @@ test('catalog_items: mesmo slug em tenants distintos coexiste; duplicado no mesm
     rows.map((r) => r.tenantId).sort(),
     [base.MILVENDAS_TENANT_ID, tenantB].sort(),
     'as duas linhas pertencem a tenants distintos',
+  );
+});
+
+test('knowledge_chunks.embedding: vector(384) aceita 384 dimensões; 1536 é rejeitado', async () => {
+  const db = await migratedDb();
+  const v384 = Array.from({ length: 384 }, (_, i) => (i === 0 ? 1 : 0));
+
+  const [chunk] = await db
+    .insert(knowledgeChunks)
+    .values({
+      tenantId: base.MILVENDAS_TENANT_ID,
+      source: 'doc',
+      position: 0,
+      content: 'Chunk sintético com embedding de 384 dimensões.',
+      embedding: v384,
+    })
+    .returning({ id: knowledgeChunks.id });
+  assert.ok(chunk !== undefined, 'chunk com 384 dimensões é aceite');
+
+  // Dimensão errada (o antigo 1536) tem de falhar no pgvector, não no ORM.
+  const v1536 = Array.from({ length: 1536 }, (_, i) => (i === 0 ? 1 : 0));
+  await assert.rejects(
+    () =>
+      db.insert(knowledgeChunks).values({
+        tenantId: base.MILVENDAS_TENANT_ID,
+        source: 'doc',
+        position: 1,
+        content: 'Chunk sintético com embedding de 1536 dimensões.',
+        embedding: v1536,
+      }),
+    (err: unknown) => /expected 384 dimensions/i.test(errorMessage(err)),
+    '1536 dimensões têm de ser rejeitadas pelo vector(384)',
+  );
+});
+
+test('knowledge_docs: mesmo slug em tenants distintos coexiste; duplicado no mesmo tenant é rejeitado', async () => {
+  const db = await migratedDb();
+  const tenantB = await createTenant(db, 'Empresa B (train-schema sintética)');
+  const values = {
+    type: 'policy' as const,
+    title: 'Política de garantia sintética',
+    slug: 'politica-garantia-sintetica',
+    body: 'A instalação tem garantia de 12 meses.',
+    ownerId: ACTOR_ID,
+  };
+
+  await db.insert(knowledgeDocs).values({ ...values, tenantId: base.MILVENDAS_TENANT_ID });
+  await db.insert(knowledgeDocs).values({ ...values, tenantId: tenantB });
+
+  await assert.rejects(
+    () => db.insert(knowledgeDocs).values({ ...values, tenantId: base.MILVENDAS_TENANT_ID }),
+    isUniqueViolation,
+    'slug repetido no mesmo tenant tem de violar o unique composto',
+  );
+
+  const ruleValues = {
+    kind: 'discount_limit' as const,
+    title: 'Desconto máximo sintético',
+    slug: 'desconto-maximo-sintetico',
+    instruction: 'Nunca dar mais de 10% de desconto.',
+    ownerId: ACTOR_ID,
+  };
+  await db.insert(rules).values({ ...ruleValues, tenantId: base.MILVENDAS_TENANT_ID });
+  await db.insert(rules).values({ ...ruleValues, tenantId: tenantB });
+  await assert.rejects(
+    () => db.insert(rules).values({ ...ruleValues, tenantId: base.MILVENDAS_TENANT_ID }),
+    isUniqueViolation,
+    'slug de regra repetido no mesmo tenant tem de violar o unique composto',
   );
 });
 

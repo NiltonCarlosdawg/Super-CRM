@@ -78,6 +78,13 @@
       "when": 1793038266338,
       "tag": "0010_light_veda",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793045572621,
+      "tag": "0011_powerful_stranger",
+      "breakpoints": true
     }
   ]
 }

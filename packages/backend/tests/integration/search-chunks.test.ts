@@ -12,9 +12,9 @@ test('searchChunks: vetor igual devolve o próprio chunk; base vazia devolve []'
   const db = await migratedDb();
   assert.deepEqual(await searchChunks(db, [0.1, 0.2, 0.3]), []);
   // inserir um chunk sintético com embedding normalizado e consultar com o mesmo vetor
-  // dimensão real do schema: vector(1536) (docs/schema-base.md §4 Q8 — 384 é
-  // ADR-0002/Fase 2); vetor one-hot = normalizado
-  const v = Array.from({ length: 1536 }, (_, i) => (i === 0 ? 1 : 0));
+  // dimensão real do schema: vector(384) (ADR-0002/A4, multilingual-e5-small);
+  // vetor one-hot = normalizado
+  const v = Array.from({ length: 384 }, (_, i) => (i === 0 ? 1 : 0));
   await db
     .insert(knowledgeChunks)
     .values({

@@ -369,6 +369,7 @@ test('SQL do orquestrador não escreve nem lê linhas de outro tenant (busca por
         lineId: line.id,
         kind: 'tone',
         title: `Tom ${tag}`,
+        slug: `tom-${tag.toLowerCase()}`,
         instruction: 'Tratar por Você.',
         status: 'published',
         ownerId: owner,

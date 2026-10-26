@@ -16,8 +16,10 @@ import * as base from '../../src/adapters/db/schema/index.js';
 import {
   businessLines,
   catalogItems,
+  knowledgeDocs,
   knowledgeDraftItems,
   knowledgeTrainUploads,
+  rules,
 } from '../../src/modules/knowledge/knowledge.schema.js';
 import { buildTestApp, type TestApp } from '../helpers/http.js';
 import { ok, textResult, toolCallResult } from '../helpers/fake-llm.js';
@@ -46,6 +48,12 @@ const call = (
   });
 
 const b64 = (text: string): string => Buffer.from(text, 'utf8').toString('base64');
+
+/** Código SQLSTATE 23505 (o Drizzle embrulha o erro do `pg` em `cause`). */
+const isUniqueViolation = (err: unknown): boolean => {
+  const code = (e: unknown): unknown => (e as { code?: unknown } | null)?.code;
+  return code(err) === '23505' || code((err as { cause?: unknown } | null)?.cause) === '23505';
+};
 
 const txt = (filename: string, text: string) => ({
   filename,
@@ -454,6 +462,99 @@ test('PATCH corrige payload/confirma linha e DELETE remove o item staged', async
 
     const missing = await call(app, 'DELETE', `/v1/knowledge/train/draft/${item.id}`, s);
     assert.equal(missing.statusCode, 404);
+  } finally {
+    await app.close();
+  }
+});
+
+test('slug de doc/rule: coexiste entre tenants e é rejeitado quando repetido no mesmo tenant', async () => {
+  const app = await buildTestApp();
+  try {
+    const [tenantB] = await app.db
+      .insert(base.tenants)
+      .values({ id: randomUUID(), name: 'Empresa B (slug sintético)' })
+      .returning({ id: base.tenants.id });
+    assert.ok(tenantB !== undefined, 'fixture tenant B');
+
+    const doc = {
+      type: 'policy' as const,
+      title: 'Política de garantia sintética',
+      slug: 'politica-garantia-sintetica',
+      body: 'A instalação tem garantia de 12 meses.',
+      ownerId: app.users.editor.id,
+    };
+    // Mesmo slug nos dois tenants → OK.
+    await app.db.insert(knowledgeDocs).values({ ...doc, tenantId: base.MILVENDAS_TENANT_ID });
+    await app.db.insert(knowledgeDocs).values({ ...doc, tenantId: tenantB.id });
+    // Repetido no mesmo tenant → unique violation.
+    await assert.rejects(
+      () => app.db.insert(knowledgeDocs).values({ ...doc, tenantId: base.MILVENDAS_TENANT_ID }),
+      isUniqueViolation,
+      'knowledge_docs: slug repetido no mesmo tenant tem de falhar',
+    );
+
+    const rule = {
+      kind: 'discount_limit' as const,
+      title: 'Desconto máximo sintético',
+      slug: 'desconto-maximo-sintetico',
+      instruction: 'Nunca dar mais de 10% de desconto.',
+      ownerId: app.users.editor.id,
+    };
+    await app.db.insert(rules).values({ ...rule, tenantId: base.MILVENDAS_TENANT_ID });
+    await app.db.insert(rules).values({ ...rule, tenantId: tenantB.id });
+    await assert.rejects(
+      () => app.db.insert(rules).values({ ...rule, tenantId: base.MILVENDAS_TENANT_ID }),
+      isUniqueViolation,
+      'rules: slug repetido no mesmo tenant tem de falhar',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('staging de knowledge_doc casa o doc publicado pelo slug → baseVersion = versão activa', async () => {
+  const app = await buildTestApp({
+    llmSteps: [ok(toolCallResult('submit_knowledge', { items: [DOC_ITEM] }))],
+  });
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    const [line] = await app.db
+      .select({ id: businessLines.id })
+      .from(businessLines)
+      .where(eq(businessLines.slug, 'cctv'));
+    assert.ok(line !== undefined, 'linha cctv semeada');
+
+    await app.db.insert(knowledgeDocs).values({
+      tenantId: base.MILVENDAS_TENANT_ID,
+      lineId: line.id,
+      type: 'policy',
+      title: 'Garantia da instalação (publicada)',
+      slug: DOC_ITEM.slug,
+      body: 'Versão publicada que o rascunho vai actualizar.',
+      status: 'published',
+      ownerId: app.users.editor.id,
+      version: 4,
+    });
+
+    const res = await call(app, 'POST', '/v1/knowledge/train/documents', s, {
+      documents: [txt('garantia.txt', DOCUMENTO)],
+    });
+    assert.equal(res.statusCode, 202);
+    await app.runPendingJobs();
+
+    const draft = await call(app, 'GET', '/v1/knowledge/train/draft', s);
+    const items = draft.json().items as Array<{ slug: string; baseVersion: number | null }>;
+    const item = items.find((i) => i.slug === DOC_ITEM.slug);
+    assert.ok(item !== undefined, 'doc staged');
+    assert.equal(item.baseVersion, 4, 'versão do doc publicado do mesmo slug');
+
+    // O activo não é tocado pelo staging.
+    const [active] = await app.db
+      .select({ version: knowledgeDocs.version, status: knowledgeDocs.status })
+      .from(knowledgeDocs)
+      .where(eq(knowledgeDocs.slug, DOC_ITEM.slug));
+    assert.deepEqual(active, { version: 4, status: 'published' });
   } finally {
     await app.close();
   }

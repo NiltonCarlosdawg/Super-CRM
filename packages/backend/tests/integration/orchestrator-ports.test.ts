@@ -128,17 +128,17 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
   // regras: da linha (publicada) + global ativa + global expirada (archived)
   const ruleLine = (await db.insert(k.rules).values({
     tenantId: base.MILVENDAS_TENANT_ID,
-    lineId: line.id, kind: 'tone', title: 'Tom formal', instruction: 'Tratar por Você.',
+    lineId: line.id, kind: 'tone', title: 'Tom formal', slug: 'tom-formal', instruction: 'Tratar por Você.',
     status: 'published', ownerId: owner, priority: 10,
   }).returning())[0]!;
   const ruleGlobal = (await db.insert(k.rules).values({
     tenantId: base.MILVENDAS_TENANT_ID,
-    lineId: null, kind: 'may_promise', title: 'Promessas', instruction: 'Nunca prometer prazo.',
+    lineId: null, kind: 'may_promise', title: 'Promessas', slug: 'promessas', instruction: 'Nunca prometer prazo.',
     status: 'published', ownerId: owner,
   }).returning())[0]!;
   await db.insert(k.rules).values({
     tenantId: base.MILVENDAS_TENANT_ID,
-    lineId: null, kind: 'discount_limit', title: 'Desconto velho', instruction: 'Até 50%.',
+    lineId: null, kind: 'discount_limit', title: 'Desconto velho', slug: 'desconto-velho', instruction: 'Até 50%.',
     status: 'archived', ownerId: owner,
   });
 

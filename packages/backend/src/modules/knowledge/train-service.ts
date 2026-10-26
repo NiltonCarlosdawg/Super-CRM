@@ -4,9 +4,9 @@
 // cross-tenant é indistinguível de inexistente (`not_found`).
 //
 // `baseVersion`: marcador de versão de origem para a deteção de corridas da
-// validação (spec §6). Só `catalog_items` tem `slug` no schema; `knowledge_docs`
-// e `rules` não têm, por isso ficam com `baseVersion: null` (limitação conhecida,
-// a resolver na validação T6 — nunca se inventa uma correspondência por título).
+// validação (spec §6). `catalog_items`, `knowledge_docs` e `rules` têm `slug`
+// e `version`, por isso a versão activa resolve-se por tenant + slug. Os
+// restantes kinds ficam com `baseVersion: null`.
 
 import { and, asc, eq } from 'drizzle-orm';
 
@@ -21,8 +21,11 @@ import { chunkCatalogItemText, chunkText } from './chunking.js';
 import {
   businessLines,
   catalogItems,
+  knowledgeDocs,
   knowledgeDraftItems,
   knowledgeTrainUploads,
+  rules,
+  type DraftEntityType,
   type StagedItemRow,
   type UploadRow,
 } from './knowledge.schema.js';
@@ -157,25 +160,58 @@ async function assertLineExists(db: DbClient, slug: string): Promise<void> {
   }
 }
 
-/** Versão activa para o item staged (só catálogo tem identidade `slug`). */
+/** Versão activa para o item staged (identidade por tenant + slug). */
 async function activeVersion(
   deps: TrainDeps,
-  entityType: string,
+  entityType: DraftEntityType,
   slug: string,
 ): Promise<number | null> {
-  if (entityType !== 'catalog_item') return null;
-  const [row] = await deps.db
-    .select({ version: catalogItems.version })
-    .from(catalogItems)
-    .where(
-      and(
-        eq(catalogItems.tenantId, deps.scope.tenantId),
-        eq(catalogItems.slug, slug),
-        eq(catalogItems.status, 'published'),
-      ),
-    )
-    .limit(1);
-  return row?.version ?? null;
+  switch (entityType) {
+    case 'catalog_item': {
+      const [row] = await deps.db
+        .select({ version: catalogItems.version })
+        .from(catalogItems)
+        .where(
+          and(
+            eq(catalogItems.tenantId, deps.scope.tenantId),
+            eq(catalogItems.slug, slug),
+            eq(catalogItems.status, 'published'),
+          ),
+        )
+        .limit(1);
+      return row?.version ?? null;
+    }
+    case 'knowledge_doc': {
+      const [row] = await deps.db
+        .select({ version: knowledgeDocs.version })
+        .from(knowledgeDocs)
+        .where(
+          and(
+            eq(knowledgeDocs.tenantId, deps.scope.tenantId),
+            eq(knowledgeDocs.slug, slug),
+            eq(knowledgeDocs.status, 'published'),
+          ),
+        )
+        .limit(1);
+      return row?.version ?? null;
+    }
+    case 'rule': {
+      const [row] = await deps.db
+        .select({ version: rules.version })
+        .from(rules)
+        .where(
+          and(
+            eq(rules.tenantId, deps.scope.tenantId),
+            eq(rules.slug, slug),
+            eq(rules.status, 'published'),
+          ),
+        )
+        .limit(1);
+      return row?.version ?? null;
+    }
+    default:
+      return null;
+  }
 }
 
 /** Linha do upload aplicável ao item: linha confirmada manda; senão a proposta. */
