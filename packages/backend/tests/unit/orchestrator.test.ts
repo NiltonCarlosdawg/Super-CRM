@@ -121,6 +121,9 @@ function fakeProvider(make: Partial<AIResponse> | ((req: AIRequest) => Partial<A
     async summarizeForHandoff() {
       return 'resumo da IA';
     },
+    async extractKnowledge() {
+      return { items: [] };
+    },
   };
   return provider;
 }
@@ -234,6 +237,7 @@ test('falha do fornecedor de IA: passa a humano com mensagem fixa e sem gatilho'
       throw new Error('503');
     },
     summarizeForHandoff: async () => '',
+    extractKnowledge: async () => ({ items: [] }),
   };
   const out = await send('olá', broken);
   assert.equal(out.status, 'provider_error');
@@ -255,6 +259,7 @@ test('tempo excedido: aborta o pedido ao fornecedor e passa a humano', async () 
         });
       }),
     summarizeForHandoff: async () => '',
+    extractKnowledge: async () => ({ items: [] }),
   };
   const out = await send('olá', hanging, { cfg: { providerTimeoutMs: 30 } });
   assert.equal(out.status, 'provider_error');

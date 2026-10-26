@@ -52,6 +52,7 @@ function fakeProvider(over?: Partial<AIProvider>): AIProvider {
   return {
     respond: async () => reply,
     summarizeForHandoff: async () => 'resumo',
+    extractKnowledge: async () => ({ items: [] }),
     ...over,
   };
 }

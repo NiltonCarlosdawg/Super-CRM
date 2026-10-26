@@ -28,6 +28,9 @@ const fakeProvider: AIProvider = {
   async summarizeForHandoff() {
     return 'resumo';
   },
+  async extractKnowledge() {
+    return { items: [] };
+  },
 };
 
 test('buildEvalClassifier monta o AIRequest e devolve triggers+reply', async () => {

@@ -69,6 +69,46 @@ export interface SourceRef {
   score?: number;
 }
 
+// ───────────── Extração de conhecimento (Treinar agente) ─────────────
+
+/**
+ * Payload de um item extraído de um documento da empresa. Os preços nunca vêm
+ * de texto livre: `fixed`/`from` exigem um valor numérico explícito e
+ * `quote_only` exige `null` (ver `extraction-schema.ts`).
+ */
+export type ExtractedPayload =
+  | {
+      kind: 'catalog_item';
+      name: string;
+      summary: string;
+      details: Record<string, unknown> | null;
+      pricingMode: 'fixed' | 'from' | 'quote_only';
+      priceAmount: string | null;
+      currency: string;
+      priceNote: string | null;
+      availability: 'available' | 'limited' | 'unavailable';
+    }
+  | {
+      kind: 'knowledge_doc';
+      docType: 'faq' | 'policy' | 'process' | 'company_info' | 'objection';
+      title: string;
+      body: string;
+    }
+  | {
+      kind: 'rule';
+      ruleKind: 'may_promise' | 'must_not_claim' | 'discount_limit' | 'payment_terms' | 'tone';
+      title: string;
+      instruction: string;
+      params: Record<string, unknown> | null;
+    };
+
+export interface ExtractedItem {
+  slug: string;
+  lineSlug: LineSlug | null;
+  op: 'create' | 'update';
+  payload: ExtractedPayload;
+}
+
 // ───────────── AIProvider ─────────────
 
 export interface AIRequest {
@@ -125,6 +165,11 @@ export interface AIProvider {
     },
     signal?: AbortSignal,
   ): Promise<string>;
+  /** Extrai itens de conhecimento estruturados do documento da empresa. */
+  extractKnowledge(
+    input: { text: string },
+    signal?: AbortSignal,
+  ): Promise<{ items: ExtractedItem[] }>;
 }
 
 // ───────────── Ports (dados e notificações) ─────────────

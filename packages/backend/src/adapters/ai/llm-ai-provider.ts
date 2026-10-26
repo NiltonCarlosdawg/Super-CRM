@@ -2,8 +2,9 @@
 // Fluxo: gate A11 → buildMessages (redação incluída) → loop de tools
 // (lookup_catalog → runCatalogLookup; submit_response → parse + guardas).
 // Um submit_response inválido ou ausente leva a 1 repetição com SUBMIT_RETRY_NOTE;
-// se falhar de novo → AIValidationError. Toda a fala com o LLM passa por
-// `callWithPolicy` (retry só em rate_limit/server).
+// se falhar de novo → AIValidationError.
+// `extractKnowledge` (Treinar agente) é uma chamada única com `submit_knowledge`
+// e sem retries no provider — o job da Task 4 é que retenta.
 
 import { allowedSourceIds, applyBlockingGuards, filterSources } from '../../domain/guards.js';
 import type {
@@ -11,6 +12,7 @@ import type {
   AIRequest,
   AIResponse,
   CatalogFact,
+  ExtractedItem,
   Turn,
 } from '../../ports/ai-provider.js';
 import type { LLMCallRequest, LLMMessage, LLMTool, LLMTransport } from '../../ports/llm-transport.js';
@@ -21,8 +23,13 @@ import {
 } from './catalog-tool.js';
 import type { AIConfig } from './config.js';
 import {
+  EXTRACT_KNOWLEDGE_TOOL,
+  parseExtractedKnowledge,
+} from './extraction-schema.js';
+import {
   callWithPolicy,
   DEFAULT_RETRY_POLICY,
+  LLMError,
   type RetryPolicy,
 } from './llm-client.js';
 import { buildMessages } from './prompt.js';
@@ -34,6 +41,12 @@ import {
 } from './submit-response.js';
 
 export const MAX_TOOL_CALLS = 4;
+
+const EXTRACT_SYSTEM_PROMPT =
+  'Extrai o conhecimento da empresa para o CRM MilVendas usando a ferramenta submit_knowledge. ' +
+  'Extrai apenas o que está explícito no texto; não inventes preços, prazos nem coberturas. ' +
+  "Se um preço não estiver explícito, usa pricingMode 'quote_only' com priceAmount null. " +
+  'Usa slugs estáveis em kebab-case e propõe a linha de negócio quando for clara.';
 
 export class AIGateError extends Error {
   constructor(message: string) {
@@ -61,6 +74,8 @@ export function createLlmAIProvider(deps: LlmProviderDeps): AIProvider {
     sleep: deps.sleep,
     random: deps.random,
   };
+  // Extração faz UMA chamada: sem retries no provider (o job da Task 4 retenta).
+  const extractPolicy: RetryPolicy = { ...policy, maxRetries: 0 };
   const tools: LLMTool[] = [LOOKUP_CATALOG_TOOL, SUBMIT_RESPONSE_TOOL];
 
   function gate(): void {
@@ -201,5 +216,28 @@ export function createLlmAIProvider(deps: LlmProviderDeps): AIProvider {
     return result.content ?? '';
   }
 
-  return { respond, summarizeForHandoff };
+  async function extractKnowledge(
+    input: { text: string },
+    signal?: AbortSignal,
+  ): Promise<{ items: ExtractedItem[] }> {
+    gate();
+    const request: LLMCallRequest = {
+      model: config.model,
+      messages: [
+        { role: 'system', content: EXTRACT_SYSTEM_PROMPT },
+        { role: 'user', content: input.text },
+      ],
+      tools: [EXTRACT_KNOWLEDGE_TOOL],
+      maxTokens: config.maxTokens,
+      temperature: deps.temperature,
+    };
+    const result = await callWithPolicy(transport, request, extractPolicy, signal);
+    const call = result.toolCall;
+    if (!call || call.name !== 'submit_knowledge') {
+      throw new LLMError('submit_knowledge ausente na resposta do LLM', 'invalid_response');
+    }
+    return parseExtractedKnowledge(call.args);
+  }
+
+  return { respond, summarizeForHandoff, extractKnowledge };
 }

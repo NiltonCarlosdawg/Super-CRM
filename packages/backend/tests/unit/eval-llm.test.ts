@@ -119,6 +119,9 @@ test('runLlmEval: violação mustNot, erro por cenário isolado e métricas por 
       async summarizeForHandoff() {
         return 'resumo';
       },
+      async extractKnowledge() {
+        return { items: [] };
+      },
     };
   };
 

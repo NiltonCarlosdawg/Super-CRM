@@ -121,6 +121,9 @@ function fakeProvider(make: Partial<AIResponse> | ((req: AIRequest) => Partial<A
     async summarizeForHandoff() {
       return 'resumo da IA';
     },
+    async extractKnowledge() {
+      return { items: [] };
+    },
   };
   return provider;
 }
