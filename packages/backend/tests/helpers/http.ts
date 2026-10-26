@@ -6,21 +6,25 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import { buildHttpApp } from '../../src/adapters/http/app.js';
+import { createLlmAIProvider } from '../../src/adapters/ai/llm-ai-provider.js';
+import type { AIConfig } from '../../src/adapters/ai/config.js';
 import { createAccountsRepository } from '../../src/adapters/db/accounts.js';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
 import { createConversationsRepository } from '../../src/adapters/db/conversations.js';
 import { createHandoffConversations, createHandoffQueueRepository } from '../../src/adapters/db/handoff-queue.js';
-import { DEFAULT_SETTINGS } from '../../src/modules/settings/settings.js';
+import { DEFAULT_SETTINGS, type Settings } from '../../src/modules/settings/settings.js';
 import type { HandoffDeps } from '../../src/application/handoffs.js';
-import type { Ports } from '../../src/ports/ai-provider.js';
+import type { AIProvider, Ports } from '../../src/ports/ai-provider.js';
 import type { DbClient } from '../../src/adapters/db/index.js';
+import type { EmbeddingsProvider } from '../../src/ports/embeddings.js';
 import { createOutbox } from '../../src/adapters/db/outbox.js';
 import { MILVENDAS_TENANT_ID } from '../../src/adapters/db/schema/tenants.schema.js';
 import { users } from '../../src/adapters/db/schema/users.schema.js';
 import { createTenancyPort } from '../../src/adapters/db/tenancy.js';
 import { createTenantsRepository } from '../../src/adapters/db/tenants.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
+import { createExtractHandler } from '../../src/modules/knowledge/extract-job.js';
 import { attachRealtime, type RealtimeHandle } from '../../src/adapters/realtime/socket.js';
 import { createLoginService } from '../../src/application/auth/login.js';
 import { createLoginLimiter } from '../../src/application/auth/login-limiter.js';
@@ -34,8 +38,31 @@ import type { MessagingProvider } from '../../src/ports/messaging-provider.js';
 import type { NotifyEvent } from '../../src/ports/notify.js';
 import pino from 'pino';
 import { migratedDb } from './db.js';
+import { fakeEmbeddings } from './fake-embeddings.js';
+import { fakeLlm, ok, toolCallResult, type FakeStep } from './fake-llm.js';
+import {
+  createCapturingJobQueue,
+  type CapturingJobQueue,
+  type EnqueuedJob,
+} from './fake-jobs.js';
 
 export const TEST_PASSWORD = 'senha-muito-forte-123';
+
+/** Config da IA nos testes: gate A11 aberto e transporte falso (sem rede/chave). */
+const TEST_AI_CONFIG: AIConfig = {
+  provider: 'openai',
+  model: 'modelo-teste',
+  baseUrl: null,
+  apiKey: null,
+  timeoutMs: 20_000,
+  maxRetries: 0,
+  maxTokens: 1024,
+  historyTurns: 10,
+  retrievalTopK: 5,
+  retrievalMinSimilarity: 0.75,
+  missStreakLimit: 2,
+  dataApproved: true,
+};
 
 export const testAuthConfig: AuthConfig = {
   authSecret: 'x'.repeat(32),
@@ -107,6 +134,20 @@ export interface TestApp extends FastifyInstance {
   handoffNotifyLog: HandoffNotifyEvent[];
   /** Deps completas de handoffs para os casos de uso diretos nos testes. */
   mkHandoffDeps(tenantId: string, now?: () => Date): HandoffDeps;
+  /** Treinar agente (Task 4): bundle de conhecimento montado no app. */
+  knowledge: {
+    provider: AIProvider;
+    aiCfg: AIConfig;
+    settings: Settings;
+    embedder: EmbeddingsProvider;
+    jobs: CapturingJobQueue;
+  };
+  /** Fila capturadora dos jobs de conhecimento (enqueue/register em memória). */
+  knowledgeJobs: CapturingJobQueue;
+  /** Jobs enfileirados pela app (o teste inspeciona payloads/chaves). */
+  enqueuedJobs: EnqueuedJob[];
+  /** Corre uma passagem dos jobs pendentes (extração incluída). */
+  runPendingJobs(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -122,6 +163,11 @@ export async function buildTestApp(
     waProvider?: MessagingProvider;
     /** Task 20: fila capturadora (os testes inspecionam os jobs enfileirados). */
     jobs?: JobQueue;
+    /**
+     * Treinar agente (Task 4): guião do transporte LLM falso. Por omissão
+     * devolve `submit_knowledge` com `items: []` (extração sem itens).
+     */
+    llmSteps?: FakeStep[];
   },
 ): Promise<TestApp> {
   const db = await migratedDb();
@@ -189,6 +235,34 @@ export async function buildTestApp(
   const handoffsConversations = createHandoffConversations(db);
   const handoffsSettings = DEFAULT_SETTINGS;
 
+  // Treinar agente (Task 4): provider LLM real sobre transporte falso,
+  // embeddings determinísticos, fila capturadora e o handler do job registado
+  // (os testes correm-no com runPendingJobs()).
+  const llm = fakeLlm(
+    overrides?.llmSteps ?? [ok(toolCallResult('submit_knowledge', { items: [] }))],
+  );
+  const knowledgelog = pino({ level: 'silent' });
+  const knowledgeProvider = createLlmAIProvider({
+    transport: llm.transport,
+    config: TEST_AI_CONFIG,
+    sleep: async () => {},
+    random: () => 0.5,
+    now: () => Date.now(),
+  });
+  const knowledgeEmbedder = fakeEmbeddings();
+  const knowledgeJobs = createCapturingJobQueue();
+  await knowledgeJobs.register(
+    'knowledge.extract',
+    createExtractHandler({
+      db,
+      provider: knowledgeProvider,
+      embedder: knowledgeEmbedder,
+      audit,
+      now: () => new Date(),
+      logger: knowledgelog,
+    }),
+  );
+
   const app = buildHttpApp({
     cfg,
     db,
@@ -214,6 +288,16 @@ export async function buildTestApp(
       conversations: handoffsConversations,
       settings: handoffsSettings,
       notify: handoffNotify,
+    },
+    knowledge: {
+      db,
+      provider: knowledgeProvider,
+      aiCfg: TEST_AI_CONFIG,
+      settings: DEFAULT_SETTINGS,
+      jobs: knowledgeJobs,
+      embedder: knowledgeEmbedder,
+      audit,
+      now: () => new Date(),
     },
     notifySink: async (e) => {
       notifyLog.push(e);
@@ -243,6 +327,18 @@ export async function buildTestApp(
   withHelpers.waProvider = waProvider;
   withHelpers.notifyLog = notifyLog;
   withHelpers.handoffNotifyLog = handoffNotifyLog;
+  withHelpers.knowledge = {
+    provider: knowledgeProvider,
+    aiCfg: TEST_AI_CONFIG,
+    settings: DEFAULT_SETTINGS,
+    embedder: knowledgeEmbedder,
+    jobs: knowledgeJobs,
+  };
+  withHelpers.knowledgeJobs = knowledgeJobs;
+  withHelpers.enqueuedJobs = knowledgeJobs.enqueued;
+  withHelpers.runPendingJobs = async (): Promise<void> => {
+    await knowledgeJobs.runAll();
+  };
   withHelpers.mkHandoffDeps = (tenantId: string, now?: () => Date): HandoffDeps => ({
     scope: { tenantId },
     queue: handoffsQueue,

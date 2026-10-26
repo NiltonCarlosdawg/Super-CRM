@@ -12,6 +12,7 @@ import { sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 import type { NodeEnv } from '../../infra/config.js';
 import type { AuthConfig } from '../../infra/config-app.js';
+import type { AIConfig } from '../ai/config.js';
 import type { Audit } from '../../ports/audit.js';
 import type { AuthUserRepo, MfaPort, SessionStore } from '../../ports/auth.js';
 import type { PasswordHasher } from '../../ports/security.js';
@@ -25,6 +26,7 @@ import { authRoutes } from './routes/auth.js';
 import { conversationsRoutes } from './routes/conversations.js';
 import { draftsRoutes } from './routes/drafts.js';
 import { handoffsRoutes } from './routes/handoffs.js';
+import { knowledgeTrainRoutes } from './routes/knowledge-train.js';
 import { platformRoutes } from './routes/platform.js';
 import { usersRoutes } from './routes/users.js';
 import { webhookRoutes } from './routes/webhook.js';
@@ -33,8 +35,9 @@ import type { createLoginService } from '../../application/auth/login.js';
 import type { HandoffConversations } from '../../application/handoffs.js';
 import type { Settings } from '../../modules/settings/settings.js';
 import type { AccountsRepository } from '../../ports/accounts.js';
-import type { Ports } from '../../ports/ai-provider.js';
+import type { AIProvider, Ports } from '../../ports/ai-provider.js';
 import type { ConversationsRepository } from '../../ports/conversations.js';
+import type { EmbeddingsProvider } from '../../ports/embeddings.js';
 import type { HandoffQueueRepository } from '../../ports/handoff-queue.js';
 import type { JobQueue } from '../../ports/job-queue.js';
 import type { MessagingProvider } from '../../ports/messaging-provider.js';
@@ -81,6 +84,21 @@ export interface HttpDeps {
     conversations: HandoffConversations;
     settings: Settings;
     notify: Ports['notify'];
+  };
+  /**
+   * Treinar agente (Task 4): upload → extração → rascunho. Só com o bundle
+   * montado as rotas `/v1/knowledge/train/*` são registadas. `aiCfg`/`settings`
+   * servem as tarefas seguintes (chat de teste); aqui só se transportam.
+   */
+  knowledge?: {
+    db: DbClient;
+    provider: AIProvider;
+    aiCfg: AIConfig;
+    settings: Settings;
+    jobs: JobQueue;
+    embedder?: EmbeddingsProvider;
+    audit: Audit;
+    now(): Date;
   };
   /** Sinks de evento (realtime Task 15); o logout de admin notifica a transição. */
   notifySink?: (e: NotifyEvent) => Promise<void>;
@@ -195,6 +213,10 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
       // precisa de db (ler/atualizar) + outbox (enqueue).
       if (deps.outbox !== undefined && deps.db !== undefined) {
         await draftsRoutes(instance, deps);
+      }
+      // Treinar agente (Task 4): upload/extração/rascunho — só com o bundle.
+      if (deps.knowledge !== undefined) {
+        await knowledgeTrainRoutes(instance, deps);
       }
       // Task 7: superfície de plataforma (spec §5.3) — requirePlatform em todas.
       await platformRoutes(instance, deps);
