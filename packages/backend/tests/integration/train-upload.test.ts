@@ -292,6 +292,25 @@ test('fronteira do upload: PDF → 415 (ADR pendente), base64 inválido → 400,
   }
 });
 
+test('lineSlug inexistente na BD → 404 line_not_found e nenhum upload criado', async () => {
+  const app = await buildTestApp();
+  try {
+    // `business_lines` vazia: o slug é válido no contrato mas não existe na BD.
+    const res = await call(app, 'POST', '/v1/knowledge/train/documents', editor(app), {
+      documents: [txt('x.txt', 'texto sintético')],
+      lineSlug: 'telecom',
+    });
+    assert.equal(res.statusCode, 404, 'linha em falta é recurso inexistente');
+    assert.equal(res.json().title, 'line_not_found');
+    assert.match(String(res.json().detail), /linha de negócio inexistente: telecom/);
+
+    const uploads = await app.db.select({ id: knowledgeTrainUploads.id }).from(knowledgeTrainUploads);
+    assert.equal(uploads.length, 0, 'sem upload parcial');
+  } finally {
+    await app.close();
+  }
+});
+
 test('falha de extração → upload error (mensagem sem conteúdo), rascunho vazio, activo intacto', async () => {
   const app = await buildTestApp({ llmSteps: [ok(textResult('resposta sem ferramenta'))] });
   try {

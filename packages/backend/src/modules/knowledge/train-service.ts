@@ -148,7 +148,12 @@ async function buildChunks(
   return group ?? [];
 }
 
-/** Valida o slug contra o dicionário global `business_lines`. */
+/**
+ * Valida o slug contra o dicionário global `business_lines`. Uma linha em falta
+ * é um recurso referenciado que não existe ⇒ `line_not_found` (404 em todas as
+ * rotas de treino, ruling da revisão da T5). Partilhado pelos caminhos de
+ * upload (documentos e passo a passo) através de `queueExtraction`.
+ */
 async function assertLineExists(db: DbClient, slug: string): Promise<void> {
   const [row] = await db
     .select({ id: businessLines.id })
@@ -156,7 +161,7 @@ async function assertLineExists(db: DbClient, slug: string): Promise<void> {
     .where(eq(businessLines.slug, slug))
     .limit(1);
   if (row === undefined) {
-    throw new TrainServiceError('line_not_found', 422, `linha de negócio inexistente: ${slug}`);
+    throw new TrainServiceError('line_not_found', 404, `linha de negócio inexistente: ${slug}`);
   }
 }
 

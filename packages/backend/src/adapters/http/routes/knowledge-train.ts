@@ -5,10 +5,8 @@
 // staging correm no job `knowledge.extract` (payload com o id do upload).
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { businessLines } from '../../../modules/knowledge/knowledge.schema.js';
 import {
   deleteDraftItem,
   formatGuidedTranscript,
@@ -171,22 +169,8 @@ export async function knowledgeTrainRoutes(app: FastifyInstance, deps: HttpDeps)
     const tenantScope = scope(request);
     const changedById = request.auth!.userId;
 
-    // A linha escolhida tem de existir no dicionário global `business_lines`
-    // e é validada ANTES de criar o upload (sem efeitos parciais). O slug é
-    // válido no contrato mas ausente na BD ⇒ 404 na fronteira.
-    const [line] = await db
-      .select({ id: businessLines.id })
-      .from(businessLines)
-      .where(eq(businessLines.slug, body.lineSlug))
-      .limit(1);
-    if (line === undefined) {
-      throw new HttpError(
-        404,
-        'line_not_found',
-        `linha de negócio inexistente: ${body.lineSlug}`,
-      );
-    }
-
+    // `queueExtraction` valida a linha em `business_lines` antes de criar o
+    // upload (linha em falta ⇒ 404 `line_not_found`, sem efeitos parciais).
     let uploadId: string;
     try {
       uploadId = await queueExtraction(
