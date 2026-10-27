@@ -272,6 +272,20 @@ test('draft: responde com o chunk do rascunho e não cria handoff nem lacuna', a
     );
     assert.equal(body.sources[0]?.type, 'chunk');
 
+    // Grounding ponta-a-ponta: o transporte recebeu o texto do chunk staged no
+    // contexto da chamada do chat (não só na extração).
+    const chatCall = app.llmCalls.find((call) =>
+      call.messages.some(
+        (message) => message.role === 'system' && message.content.includes('assistente virtual'),
+      ),
+    );
+    assert.ok(chatCall !== undefined, 'chamada do chat ao LLM');
+    const chatContext = chatCall.messages.map((message) => message.content).join('\n');
+    assert.ok(
+      chatContext.includes('250.000 AOA'),
+      'o texto do chunk staged entra no prompt do modelo',
+    );
+
     assert.equal((await app.db.select().from(handoffs)).length, 0, 'isTest → sem handoff');
     assert.equal((await app.db.select().from(knowledgeGaps)).length, 0, 'isTest → sem lacuna');
 

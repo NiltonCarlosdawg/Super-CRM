@@ -34,6 +34,7 @@ import type { AuthConfig } from '../../src/infra/config-app.js';
 import { createArgon2Hasher } from '../../src/infra/security/argon2.js';
 import type { MfaPort, SessionStore } from '../../src/ports/auth.js';
 import type { JobQueue } from '../../src/ports/job-queue.js';
+import type { LLMCallRequest } from '../../src/ports/llm-transport.js';
 import type { AccountsRepository } from '../../src/ports/accounts.js';
 import type { MessagingProvider } from '../../src/ports/messaging-provider.js';
 import type { NotifyEvent } from '../../src/ports/notify.js';
@@ -147,6 +148,8 @@ export interface TestApp extends FastifyInstance {
   knowledgeJobs: CapturingJobQueue;
   /** Jobs enfileirados pela app (o teste inspeciona payloads/chaves). */
   enqueuedJobs: EnqueuedJob[];
+  /** Chamadas feitas ao transporte LLM falso (extração e chat). */
+  llmCalls: LLMCallRequest[];
   /** Corre uma passagem dos jobs pendentes (extração incluída). */
   runPendingJobs(): Promise<void>;
   close(): Promise<void>;
@@ -357,6 +360,7 @@ export async function buildTestApp(
   };
   withHelpers.knowledgeJobs = knowledgeJobs;
   withHelpers.enqueuedJobs = knowledgeJobs.enqueued;
+  withHelpers.llmCalls = llm.calls;
   withHelpers.runPendingJobs = async (): Promise<void> => {
     await knowledgeJobs.runAll();
   };
