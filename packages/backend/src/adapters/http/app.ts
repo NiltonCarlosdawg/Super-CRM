@@ -26,6 +26,7 @@ import { authRoutes } from './routes/auth.js';
 import { conversationsRoutes } from './routes/conversations.js';
 import { draftsRoutes } from './routes/drafts.js';
 import { handoffsRoutes } from './routes/handoffs.js';
+import { knowledgeItemsRoutes } from './routes/knowledge-items.js';
 import { knowledgeTrainRoutes } from './routes/knowledge-train.js';
 import { platformRoutes } from './routes/platform.js';
 import { usersRoutes } from './routes/users.js';
@@ -217,6 +218,8 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
       // Treinar agente (Task 4): upload/extração/rascunho — só com o bundle.
       if (deps.knowledge !== undefined) {
         await knowledgeTrainRoutes(instance, deps);
+        // Task 7: edição rápida, listagem do activo e reversão de publicações.
+        await knowledgeItemsRoutes(instance, deps);
       }
       // Task 7: superfície de plataforma (spec §5.3) — requirePlatform em todas.
       await platformRoutes(instance, deps);
