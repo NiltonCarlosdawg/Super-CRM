@@ -24,6 +24,7 @@ import { canonicalPayload, computeDraftDiff, stagedCanonical } from './diff.js';
 import {
   businessLines,
   catalogItems,
+  knowledgeChunks,
   knowledgeDocs,
   knowledgeDraftItems,
   knowledgePublications,
@@ -36,6 +37,7 @@ import {
   listDraftItems,
   resolveLineId,
   TrainServiceError,
+  type StagedChunk,
   type TrainDeps,
 } from './train-service.js';
 
@@ -99,6 +101,14 @@ const rulePayloadSchema = z.object({
   kind: z.string().optional(),
 });
 
+// Chunks calculados na extracção (T2/T4): conteúdo + vetor (null sem embedder).
+const stagedChunkSchema = z.object({
+  position: z.number().int().nonnegative(),
+  content: z.string().min(1),
+  embedding: z.array(z.number()).nullable(),
+});
+const stagedChunksSchema = z.array(stagedChunkSchema);
+
 /** Valores já normalizados para insert/update e para o snapshot da revisão. */
 type StagedValues =
   | {
@@ -141,13 +151,20 @@ interface PublishedEntity {
 }
 
 type PlannedWrite =
-  | { action: 'insert'; entry: DiffEntry; staged: StagedItemRow; values: StagedValues }
+  | {
+      action: 'insert';
+      entry: DiffEntry;
+      staged: StagedItemRow;
+      values: StagedValues;
+      chunks: StagedChunk[];
+    }
   | {
       action: 'update';
       entry: DiffEntry;
       staged: StagedItemRow;
       published: PublishedEntity;
       values: StagedValues;
+      chunks: StagedChunk[];
     }
   | { action: 'archive'; entry: DiffEntry; staged: StagedItemRow; published: PublishedEntity };
 
@@ -218,6 +235,16 @@ function parseStagedValues(entityType: DraftEntityType, payload: unknown): Stage
       };
     }
   }
+}
+
+/** Chunks do staging validados para materialização em `knowledge_chunks`. */
+function parseStagedChunks(value: unknown): StagedChunk[] {
+  if (value === null || value === undefined) return [];
+  const parsed = stagedChunksSchema.safeParse(value);
+  if (!parsed.success) {
+    throw invalidPayload(parsed.error.issues[0]?.path.join('.') || 'chunks');
+  }
+  return parsed.data;
 }
 
 /** Snapshot da revisão: só o estado editável + a linha (para edição rápida e reversão). */
@@ -431,6 +458,85 @@ async function writeRevision(
   });
 }
 
+/**
+ * Materializa os chunks do rascunho em `knowledge_chunks` (mesma transacção).
+ * Update substitui: apaga os chunks da entidade antes de inserir os novos.
+ */
+async function replaceChunks(
+  tx: TxClient,
+  input: {
+    tenantId: string;
+    entityType: 'knowledge_doc' | 'catalog_item';
+    entityId: string;
+    chunks: readonly StagedChunk[];
+    embeddingModel: string | null;
+  },
+): Promise<void> {
+  if (input.entityType === 'knowledge_doc') {
+    await tx
+      .delete(knowledgeChunks)
+      .where(
+        and(
+          eq(knowledgeChunks.tenantId, input.tenantId),
+          eq(knowledgeChunks.docId, input.entityId),
+        ),
+      );
+  } else {
+    await tx
+      .delete(knowledgeChunks)
+      .where(
+        and(
+          eq(knowledgeChunks.tenantId, input.tenantId),
+          eq(knowledgeChunks.catalogItemId, input.entityId),
+        ),
+      );
+  }
+
+  if (input.chunks.length === 0) return;
+  const source: 'doc' | 'catalog' = input.entityType === 'knowledge_doc' ? 'doc' : 'catalog';
+  await tx.insert(knowledgeChunks).values(
+    input.chunks.map((chunk) => ({
+      tenantId: input.tenantId,
+      source,
+      docId: input.entityType === 'knowledge_doc' ? input.entityId : null,
+      catalogItemId: input.entityType === 'catalog_item' ? input.entityId : null,
+      position: chunk.position,
+      content: chunk.content,
+      embedding: chunk.embedding,
+      embeddingModel: input.embeddingModel,
+      active: true,
+    })),
+  );
+}
+
+/** Arquivar um doc/catálogo tira os chunks da pesquisa sem apagar o histórico. */
+async function deactivateChunks(
+  tx: TxClient,
+  input: { tenantId: string; entityType: 'knowledge_doc' | 'catalog_item'; entityId: string },
+): Promise<void> {
+  if (input.entityType === 'knowledge_doc') {
+    await tx
+      .update(knowledgeChunks)
+      .set({ active: false })
+      .where(
+        and(
+          eq(knowledgeChunks.tenantId, input.tenantId),
+          eq(knowledgeChunks.docId, input.entityId),
+        ),
+      );
+  } else {
+    await tx
+      .update(knowledgeChunks)
+      .set({ active: false })
+      .where(
+        and(
+          eq(knowledgeChunks.tenantId, input.tenantId),
+          eq(knowledgeChunks.catalogItemId, input.entityId),
+        ),
+      );
+  }
+}
+
 /** Aplica uma entrada do plano dentro da transacção. */
 async function applyWrite(
   tx: TxClient,
@@ -440,10 +546,11 @@ async function applyWrite(
     changedById: string;
     publicationId: string;
     lineId: string | null;
+    embeddingModel: string | null;
     now: Date;
   },
 ): Promise<void> {
-  const { tenantId, changedById, publicationId, lineId, now } = ctx;
+  const { tenantId, changedById, publicationId, lineId, embeddingModel, now } = ctx;
 
   if (write.action === 'archive') {
     await writeRevision(tx, {
@@ -475,6 +582,13 @@ async function applyWrite(
     if (archived.length === 0) {
       throw new HttpError(409, 'draft_conflicts', `item mudou durante a validação: ${write.entry.slug}`, undefined, {
         entries: [write.entry],
+      });
+    }
+    if (write.entry.entityType !== 'rule') {
+      await deactivateChunks(tx, {
+        tenantId,
+        entityType: write.entry.entityType,
+        entityId: write.published.rowId,
       });
     }
     return;
@@ -517,6 +631,13 @@ async function applyWrite(
           changedById,
           publicationId,
         });
+        await replaceChunks(tx, {
+          tenantId,
+          entityType: 'catalog_item',
+          entityId: row.id,
+          chunks: write.chunks,
+          embeddingModel,
+        });
         return;
       }
       case 'knowledge_doc': {
@@ -544,6 +665,13 @@ async function applyWrite(
           snapshot: snapshotOf(write.values, write.staged.lineSlug),
           changedById,
           publicationId,
+        });
+        await replaceChunks(tx, {
+          tenantId,
+          entityType: 'knowledge_doc',
+          entityId: row.id,
+          chunks: write.chunks,
+          embeddingModel,
         });
         return;
       }
@@ -620,6 +748,13 @@ async function applyWrite(
           entries: [write.entry],
         });
       }
+      await replaceChunks(tx, {
+        tenantId,
+        entityType: 'catalog_item',
+        entityId: published.rowId,
+        chunks: write.chunks,
+        embeddingModel,
+      });
       return;
     }
     case 'knowledge_doc': {
@@ -641,6 +776,13 @@ async function applyWrite(
           entries: [write.entry],
         });
       }
+      await replaceChunks(tx, {
+        tenantId,
+        entityType: 'knowledge_doc',
+        entityId: published.rowId,
+        chunks: write.chunks,
+        embeddingModel,
+      });
       return;
     }
     case 'rule': {
@@ -746,7 +888,13 @@ export async function validateDraft(
     const current = publishedByKey.get(keyOf(entry.entityType, entry.slug));
 
     if (entry.classification === 'added') {
-      plan.push({ action: 'insert', entry, staged: stagedRow, values: parseStagedValues(entry.entityType, stagedRow.payload) });
+      plan.push({
+        action: 'insert',
+        entry,
+        staged: stagedRow,
+        values: parseStagedValues(entry.entityType, stagedRow.payload),
+        chunks: parseStagedChunks(stagedRow.chunks),
+      });
     } else if (entry.classification === 'updated') {
       if (current === undefined) throw new Error(`update sem activo: ${entry.slug}`);
       plan.push({
@@ -755,6 +903,7 @@ export async function validateDraft(
         staged: stagedRow,
         published: current,
         values: parseStagedValues(entry.entityType, stagedRow.payload),
+        chunks: parseStagedChunks(stagedRow.chunks),
       });
     } else if (entry.classification === 'archived') {
       if (current === undefined) throw new Error(`archive sem activo: ${entry.slug}`);
@@ -764,7 +913,13 @@ export async function validateDraft(
       if (current !== undefined) plan.push({ action: 'archive', entry, staged: stagedRow, published: current });
     } else if (current === undefined) {
       // Conflito de update sobre item entretanto inexistente: o rascunho entra.
-      plan.push({ action: 'insert', entry, staged: stagedRow, values: parseStagedValues(entry.entityType, stagedRow.payload) });
+      plan.push({
+        action: 'insert',
+        entry,
+        staged: stagedRow,
+        values: parseStagedValues(entry.entityType, stagedRow.payload),
+        chunks: parseStagedChunks(stagedRow.chunks),
+      });
     } else {
       // Conflito de create/update aceite: o rascunho prevalece sobre o activo.
       plan.push({
@@ -773,6 +928,7 @@ export async function validateDraft(
         staged: stagedRow,
         published: current,
         values: parseStagedValues(entry.entityType, stagedRow.payload),
+        chunks: parseStagedChunks(stagedRow.chunks),
       });
     }
   }
@@ -831,6 +987,7 @@ export async function validateDraft(
           changedById: input.changedById,
           publicationId: publication.id,
           lineId: lineIds[index] ?? null,
+          embeddingModel: deps.embedder?.model ?? null,
           now,
         });
       }

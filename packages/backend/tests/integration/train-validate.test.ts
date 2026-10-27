@@ -16,6 +16,7 @@ import * as base from '../../src/adapters/db/schema/index.js';
 import {
   businessLines,
   catalogItems,
+  knowledgeChunks,
   knowledgeDocs,
   knowledgeDraftItems,
   knowledgePublications,
@@ -105,7 +106,12 @@ interface StagedInput {
   lineSlug?: string | null;
   lineConfirmed?: boolean;
   baseVersion?: number | null;
+  chunks?: Array<{ position: number; content: string; embedding: number[] | null }> | null;
 }
+
+/** Vetor unitário determinístico de 384 dimensões (coluna vector(384)). */
+const unitVector = (index: number): number[] =>
+  Array.from({ length: 384 }, (_, i) => (i === index ? 1 : 0));
 
 /** Insert directo no staging (o mesmo que o job faria). */
 async function insertStaged(app: TestApp, input: StagedInput): Promise<string> {
@@ -119,7 +125,7 @@ async function insertStaged(app: TestApp, input: StagedInput): Promise<string> {
       lineSlug: input.lineSlug === undefined ? 'cctv' : input.lineSlug,
       lineConfirmed: input.lineConfirmed ?? true,
       payload: input.payload,
-      chunks: null,
+      chunks: input.chunks ?? null,
       baseVersion: input.baseVersion ?? null,
       changedById: app.users.editor.id,
     })
@@ -650,6 +656,223 @@ test('papéis: agent recusado (403); sem sessão 401; admin lê o diff', async (
     const diffAdmin = await call(app, 'GET', '/v1/knowledge/train/diff', admin(app));
     assert.equal(diffAdmin.statusCode, 200);
     assert.deepEqual(diffAdmin.json().entries, []);
+  } finally {
+    await app.close();
+  }
+});
+
+test('fix round 1 (a): publicar doc com 2 chunks → 2 rows activas em knowledge_chunks', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    await insertStaged(app, {
+      slug: 'doc-com-chunks',
+      entityType: 'knowledge_doc',
+      op: 'create',
+      payload: DOC_PAYLOAD,
+      chunks: [
+        { position: 0, content: 'Garantia de 12 meses.', embedding: unitVector(0) },
+        { position: 1, content: 'Instalação num dia útil.', embedding: unitVector(1) },
+      ],
+    });
+
+    const res = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.json() as { applied: { added: number } }).applied.added, 1);
+
+    const [doc] = await app.db
+      .select({ id: knowledgeDocs.id })
+      .from(knowledgeDocs)
+      .where(eq(knowledgeDocs.slug, 'doc-com-chunks'));
+    assert.ok(doc !== undefined, 'documento publicado');
+
+    const chunks = await app.db
+      .select()
+      .from(knowledgeChunks)
+      .where(eq(knowledgeChunks.docId, doc.id))
+      .orderBy(knowledgeChunks.position);
+    assert.equal(chunks.length, 2, 'um chunk publicado por cada chunk staged');
+    assert.deepEqual(
+      chunks.map((c) => c.content),
+      ['Garantia de 12 meses.', 'Instalação num dia útil.'],
+    );
+    for (const chunk of chunks) {
+      assert.equal(chunk.tenantId, base.MILVENDAS_TENANT_ID);
+      assert.equal(chunk.source, 'doc');
+      assert.equal(chunk.active, true);
+      assert.equal(chunk.docId, doc.id);
+      assert.equal(chunk.catalogItemId, null);
+      assert.equal(chunk.embeddingModel, 'fake-embeddings-384', 'modelo do embedder do publish');
+      assert.equal(chunk.embedding?.length, 384);
+    }
+  } finally {
+    await app.close();
+  }
+});
+
+test('fix round 1 (b): update do doc substitui os chunks (1 row, sem acumular)', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    const line = await lineId(app, 'cctv');
+    const [doc] = await app.db
+      .insert(knowledgeDocs)
+      .values({
+        tenantId: base.MILVENDAS_TENANT_ID,
+        lineId: line,
+        type: 'policy',
+        title: DOC_PAYLOAD.title,
+        slug: 'doc-substitui-chunks',
+        body: DOC_PAYLOAD.body,
+        status: 'published',
+        ownerId: app.users.editor.id,
+        version: 1,
+      })
+      .returning({ id: knowledgeDocs.id });
+    assert.ok(doc !== undefined, 'fixture: doc publicado');
+
+    await app.db.insert(knowledgeChunks).values([
+      {
+        tenantId: base.MILVENDAS_TENANT_ID,
+        source: 'doc',
+        docId: doc.id,
+        position: 0,
+        content: 'Chunk antigo A.',
+        embedding: unitVector(2),
+        embeddingModel: 'fake-embeddings-384',
+        active: true,
+      },
+      {
+        tenantId: base.MILVENDAS_TENANT_ID,
+        source: 'doc',
+        docId: doc.id,
+        position: 1,
+        content: 'Chunk antigo B.',
+        embedding: unitVector(3),
+        embeddingModel: 'fake-embeddings-384',
+        active: true,
+      },
+    ]);
+
+    await insertStaged(app, {
+      slug: 'doc-substitui-chunks',
+      entityType: 'knowledge_doc',
+      op: 'update',
+      payload: { ...DOC_PAYLOAD, body: 'Texto novo do documento.' },
+      baseVersion: 1,
+      chunks: [{ position: 0, content: 'Chunk novo único.', embedding: unitVector(4) }],
+    });
+
+    const res = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.json() as { applied: { updated: number } }).applied.updated, 1);
+
+    const chunks = await app.db
+      .select()
+      .from(knowledgeChunks)
+      .where(eq(knowledgeChunks.docId, doc.id));
+    assert.equal(chunks.length, 1, 'os chunks antigos são apagados antes do insert');
+    assert.equal(chunks[0]?.content, 'Chunk novo único.');
+    assert.equal(chunks[0]?.active, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('fix round 1 (c): arquivar doc desactiva os chunks existentes', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    const line = await lineId(app, 'cctv');
+    const [doc] = await app.db
+      .insert(knowledgeDocs)
+      .values({
+        tenantId: base.MILVENDAS_TENANT_ID,
+        lineId: line,
+        type: 'policy',
+        title: DOC_PAYLOAD.title,
+        slug: 'doc-a-arquivar-chunks',
+        body: DOC_PAYLOAD.body,
+        status: 'published',
+        ownerId: app.users.editor.id,
+        version: 2,
+      })
+      .returning({ id: knowledgeDocs.id });
+    assert.ok(doc !== undefined, 'fixture: doc publicado');
+
+    await app.db.insert(knowledgeChunks).values([
+      {
+        tenantId: base.MILVENDAS_TENANT_ID,
+        source: 'doc',
+        docId: doc.id,
+        position: 0,
+        content: 'Chunk activo A.',
+        embedding: unitVector(5),
+        embeddingModel: 'fake-embeddings-384',
+        active: true,
+      },
+      {
+        tenantId: base.MILVENDAS_TENANT_ID,
+        source: 'doc',
+        docId: doc.id,
+        position: 1,
+        content: 'Chunk activo B.',
+        embedding: unitVector(6),
+        embeddingModel: 'fake-embeddings-384',
+        active: true,
+      },
+    ]);
+
+    await insertStaged(app, {
+      slug: 'doc-a-arquivar-chunks',
+      entityType: 'knowledge_doc',
+      op: 'delete',
+      payload: { kind: 'knowledge_doc' },
+      baseVersion: 2,
+    });
+
+    const res = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.json() as { applied: { archived: number } }).applied.archived, 1);
+
+    const chunks = await app.db
+      .select({ active: knowledgeChunks.active })
+      .from(knowledgeChunks)
+      .where(eq(knowledgeChunks.docId, doc.id));
+    assert.equal(chunks.length, 2, 'as linhas ficam para histórico');
+    assert.ok(chunks.every((c) => c.active === false), 'fora da pesquisa semântica');
+  } finally {
+    await app.close();
+  }
+});
+
+test('fix round 1 (d): publicar uma regra não gera chunks', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    await insertStaged(app, {
+      slug: 'regra-sem-chunks',
+      entityType: 'rule',
+      op: 'create',
+      payload: RULE_PAYLOAD,
+      chunks: [{ position: 0, content: 'não deve ser materializado', embedding: unitVector(7) }],
+    });
+
+    const res = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.json() as { applied: { added: number } }).applied.added, 1);
+
+    const [rule] = await app.db.select().from(rules).where(eq(rules.slug, 'regra-sem-chunks'));
+    assert.ok(rule !== undefined, 'regra publicada');
+    assert.equal(
+      (await app.db.select().from(knowledgeChunks)).length,
+      0,
+      'regras nunca entram em knowledge_chunks (chunk_source não tem rule)',
+    );
   } finally {
     await app.close();
   }
