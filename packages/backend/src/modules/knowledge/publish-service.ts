@@ -1446,6 +1446,10 @@ export async function quickEditItem(
     // Revisão do estado ACTUAL (versão anterior ao bump). Pode já existir uma
     // revisão desse estado (a `create` da versão 1); nesse caso reaproveita-se
     // o snapshot e o vínculo fica em `applied.changes`.
+    // Invariante: o item está bloqueado com FOR UPDATE nesta transacção
+    // (`loadEntityForUpdate`), logo não há escrita concorrente na mesma versão
+    // e o snapshot é idêntico ao já existente por construção — o pré-estado não
+    // muda dentro do lock.
     await writeRevision(tx, {
       tenantId: deps.scope.tenantId,
       entityType: current.entityType,
@@ -1967,6 +1971,10 @@ export async function revertPublication(
     if (publication === undefined) throw new Error('revert: publicação sem returning');
 
     for (const plan of planned) {
+      // Invariante: a entidade foi bloqueada com FOR UPDATE nesta transacção
+      // (em `loadEntityForUpdate`, ao planear), logo não há escrita concorrente
+      // na mesma versão e o snapshot é idêntico ao já existente por construção —
+      // o pré-estado não muda dentro do lock.
       await writeRevision(tx, {
         tenantId,
         entityType: plan.entity.entityType,
