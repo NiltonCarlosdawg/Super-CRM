@@ -481,3 +481,55 @@ test('reverter a publicação de treino que criou o item → arquiva-o', async (
   }
 });
 
+
+test('listagem de publicações: 200 desc por createdAt, só do tenant, agent 403', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    // Uma publicação de treino (T6) e uma edição rápida (T7): as duas rotas que
+    // criam `knowledge_publications`.
+    await stageCatalog(app, { slug: 'pacote-treinado', priceAmount: '150000.00' });
+    const trainPublication = await trainPublish(app);
+
+    const item = await insertPublishedCatalog(app, { slug: 'pacote-cctv', version: 1 });
+    const edited = await quickEditPrice(app, item.id, '180000.00');
+    assert.equal(edited.statusCode, 200);
+    const quickPublication = (edited.json() as { publicationId: string }).publicationId;
+
+    const res = await call(app, 'GET', '/v1/knowledge/publications', editor(app));
+    assert.equal(res.statusCode, 200);
+    const { publications } = res.json() as {
+      publications: Array<{ id: string; kind: string; createdAt: string }>;
+    };
+    assert.equal(publications.length, 2, 'só as duas publicações do tenant da sessão');
+    assert.deepEqual(
+      new Set(publications.map((publication) => publication.id)),
+      new Set([trainPublication, quickPublication]),
+    );
+    assert.deepEqual(
+      publications.map((publication) => publication.kind).sort(),
+      ['quick_edit', 'train'],
+    );
+
+    const times = publications.map((publication) => new Date(publication.createdAt).getTime());
+    assert.ok(times.every((time) => Number.isFinite(time)), 'createdAt serializado');
+    assert.deepEqual(times, [...times].sort((a, b) => b - a), 'ordem desc por createdAt');
+
+    const b = await tenantBSession(app);
+    const listB = await call(app, 'GET', '/v1/knowledge/publications', b);
+    assert.equal(listB.statusCode, 200);
+    assert.deepEqual(
+      (listB.json() as { publications: unknown[] }).publications,
+      [],
+      'B não vê publicações de A',
+    );
+
+    const forbidden = await call(app, 'GET', '/v1/knowledge/publications', {
+      session: app.sessions.agent,
+      csrf: app.csrf.agent,
+    });
+    assert.equal(forbidden.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
