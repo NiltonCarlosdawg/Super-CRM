@@ -406,12 +406,20 @@ test('item criado pela T6 → edição rápida e reversão restauram o valor tre
       .where(eq(catalogItems.id, trained.id));
     assert.deepEqual(afterEdit[0], { priceAmount: '180000.00', version: 2 });
 
-    // A revisão `create` da versão 1 já guarda este estado: não se duplica.
+    // A revisão `create` fica na versão 0 (estado ausente); a edição rápida
+    // grava o pré-estado na versão 1 sem colidir.
     const revisions = await app.db
       .select()
       .from(knowledgeRevisions)
-      .where(eq(knowledgeRevisions.entityId, trained.id));
-    assert.equal(revisions.length, 1, 'uma revisão por estado (versão 1)');
+      .where(eq(knowledgeRevisions.entityId, trained.id))
+      .orderBy(knowledgeRevisions.version);
+    assert.deepEqual(
+      revisions.map((revision) => ({ version: revision.version, note: revision.note })),
+      [
+        { version: 0, note: 'create' },
+        { version: 1, note: 'quick_edit' },
+      ],
+    );
 
     const quickPublicationId = (edited.json() as { publicationId: string }).publicationId;
     const [quickPublication] = await app.db

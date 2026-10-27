@@ -306,11 +306,11 @@ test('carga nova válida → diff added e publicação atómica dos três tipos'
       .from(knowledgeRevisions)
       .where(eq(knowledgeRevisions.publicationId, result.publicationId));
     assert.equal(revisions.length, 3);
-    for (const revision of revisions) assert.equal(revision.version, 1);
-    const catalogRevision = revisions.find((r) => r.entityType === 'catalog_item');
-    const catalogSnapshot = catalogRevision?.snapshot as Record<string, unknown> | undefined;
-    assert.equal(catalogSnapshot?.name, 'Pacote CFTV 4 câmaras');
-    assert.equal(catalogSnapshot?.lineSlug, 'cctv');
+    for (const revision of revisions) {
+      assert.equal(revision.version, 0, 'criação registada antes da primeira versão');
+      assert.equal(revision.note, 'create');
+      assert.deepEqual(revision.snapshot, { absent: true }, 'o estado anterior é a inexistência');
+    }
 
     const audits = await app.db
       .select({ actorId: base.auditLog.actorId, details: base.auditLog.details })
@@ -872,6 +872,73 @@ test('fix round 1 (d): publicar uma regra não gera chunks', async () => {
       (await app.db.select().from(knowledgeChunks)).length,
       0,
       'regras nunca entram em knowledge_chunks (chunk_source não tem rule)',
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test('fix round 1 (e): criar pela publicação A e actualizar pela publicação B (sem colisão de revisões)', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const s = editor(app);
+
+    // Carga 1: o item nasce com uma publicação `train`.
+    await insertStaged(app, {
+      slug: 'doc-em-duas-cargas',
+      entityType: 'knowledge_doc',
+      op: 'create',
+      payload: DOC_PAYLOAD,
+    });
+    const first = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(first.statusCode, 200);
+    assert.equal((first.json() as { applied: { added: number } }).applied.added, 1);
+
+    const [created] = await app.db
+      .select()
+      .from(knowledgeDocs)
+      .where(eq(knowledgeDocs.slug, 'doc-em-duas-cargas'));
+    assert.ok(created !== undefined, 'documento publicado pela carga 1');
+    assert.equal(created.version, 1);
+
+    // Carga 2: corrige o mesmo slug (baseVersion 1). Antes da correção esta
+    // publicação rebentava no unique (entity, version) das revisões.
+    await insertStaged(app, {
+      slug: 'doc-em-duas-cargas',
+      entityType: 'knowledge_doc',
+      op: 'update',
+      payload: { ...DOC_PAYLOAD, body: 'Texto corrigido na segunda carga.' },
+      baseVersion: 1,
+    });
+    const second = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(second.statusCode, 200, 'a segunda publicação conclui sem violação de unique');
+    assert.equal((second.json() as { applied: { updated: number } }).applied.updated, 1);
+
+    const [after] = await app.db
+      .select({ version: knowledgeDocs.version, body: knowledgeDocs.body })
+      .from(knowledgeDocs)
+      .where(eq(knowledgeDocs.id, created.id));
+    assert.deepEqual(after, { version: 2, body: 'Texto corrigido na segunda carga.' });
+
+    const revisions = await app.db
+      .select()
+      .from(knowledgeRevisions)
+      .where(eq(knowledgeRevisions.entityId, created.id))
+      .orderBy(knowledgeRevisions.version);
+    assert.deepEqual(
+      revisions.map((revision) => ({ version: revision.version, note: revision.note })),
+      [
+        { version: 0, note: 'create' },
+        { version: 1, note: 'update' },
+      ],
+      'a criação é registada antes da primeira versão (estado ausente)',
+    );
+    assert.deepEqual(revisions[0]?.snapshot, { absent: true });
+    assert.equal(
+      (revisions[1]?.snapshot as Record<string, unknown>).body,
+      DOC_PAYLOAD.body,
+      'o pré-estado da carga 2 é o texto da carga 1',
     );
   } finally {
     await app.close();

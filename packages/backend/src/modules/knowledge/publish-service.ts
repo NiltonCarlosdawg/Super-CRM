@@ -247,33 +247,6 @@ function parseStagedChunks(value: unknown): StagedChunk[] {
   return parsed.data;
 }
 
-/** Snapshot da revisão: só o estado editável + a linha (para edição rápida e reversão). */
-function snapshotOf(values: StagedValues, lineSlug: string | null): Record<string, unknown> {
-  switch (values.entityType) {
-    case 'catalog_item':
-      return {
-        name: values.catalog.name,
-        summary: values.catalog.summary,
-        details: values.catalog.details,
-        pricingMode: values.catalog.pricingMode,
-        priceAmount: values.catalog.priceAmount,
-        currency: values.catalog.currency,
-        priceNote: values.catalog.priceNote,
-        availability: values.catalog.availability,
-        lineSlug,
-      };
-    case 'knowledge_doc':
-      return { ...values.doc, lineSlug };
-    case 'rule':
-      return {
-        title: values.rule.title,
-        instruction: values.rule.instruction,
-        params: values.rule.params,
-        lineSlug,
-      };
-  }
-}
-
 /** Carga dos activos dos três tipos, com a linha resolvida por join. */
 async function loadPublished(deps: TrainDeps): Promise<PublishedEntity[]> {
   const tenantId = deps.scope.tenantId;
@@ -437,14 +410,17 @@ function isUniqueViolation(error: unknown): boolean {
 /**
  * Revisão do estado da entidade na versão indicada.
  *
- * T6 escrevia sem `note`; desde a T7 a nota diz explicitamente o que a
- * publicação fez (`create`/`update`/`archive`), porque a reversão precisa de
- * distinguir "criado por esta publicação" de "actualizado por esta". A versão
- * continua a ser a ANTERIOR ao bump (no create é a 1, o estado criado).
+ * A criação grava uma revisão na versão 0 com `snapshot: { absent: true }`
+ * (o estado anterior é a inexistência) e a entidade nasce na versão 1. Assim
+ * a primeira actualização, que regista o pré-estado na versão 1, nunca colide
+ * com a revisão da criação no unique (entityType, entityId, version).
  *
- * `ignoreVersionConflict` serve a T7: o índice único (entidade, versão) impede
- * duas revisões do MESMO estado. Quando já existe uma (ex.: a revisão `create`
- * da versão 1), o snapshot é o mesmo por definição e reaproveita-se.
+ * `note` diz explicitamente o que a publicação fez (`create`/`update`/
+ * `archive`), porque a reversão precisa de distinguir "criado por esta
+ * publicação" de "actualizado por esta".
+ *
+ * `ignoreVersionConflict` é uma rede defensiva da T7 para dados anteriores a
+ * esta semântica (revisões `create` gravadas na versão 1).
  */
 async function writeRevision(
   tx: TxClient,
@@ -556,6 +532,9 @@ async function deactivateChunks(
   }
 }
 
+/** Estado anterior à criação: a entidade não existia. */
+const ABSENT_SNAPSHOT = { absent: true } as const;
+
 /** Aplica uma entrada do plano dentro da transacção. */
 async function applyWrite(
   tx: TxClient,
@@ -646,8 +625,8 @@ async function applyWrite(
           tenantId,
           entityType: 'catalog_item',
           entityId: row.id,
-          version: 1,
-          snapshot: snapshotOf(write.values, write.staged.lineSlug),
+          version: 0,
+          snapshot: ABSENT_SNAPSHOT,
           changedById,
           publicationId,
           note: 'create',
@@ -682,8 +661,8 @@ async function applyWrite(
           tenantId,
           entityType: 'knowledge_doc',
           entityId: row.id,
-          version: 1,
-          snapshot: snapshotOf(write.values, write.staged.lineSlug),
+          version: 0,
+          snapshot: ABSENT_SNAPSHOT,
           changedById,
           publicationId,
           note: 'create',
@@ -719,8 +698,8 @@ async function applyWrite(
           tenantId,
           entityType: 'rule',
           entityId: row.id,
-          version: 1,
-          snapshot: snapshotOf(write.values, write.staged.lineSlug),
+          version: 0,
+          snapshot: ABSENT_SNAPSHOT,
           changedById,
           publicationId,
           note: 'create',
@@ -1420,6 +1399,11 @@ function changesFromApplied(applied: unknown): PublicationChange[] | null {
  * Edita um item publicado. O patch é parcial e validado por tipo; preço e
  * `quote_only` seguem a regra da extracção. Tudo numa transacção: publicação
  * `quick_edit` + revisão do estado actual + update com bump de versão.
+ *
+ * Os `knowledge_chunks` NÃO são regenerados aqui: a busca semântica está
+ * inactiva por desenho até ao ADR dos embeddings e os chunks voltam a ser
+ * materializados na próxima publicação que corra com embedder. Limitação
+ * aceite no fix round 1 (ruling 2).
  */
 export async function quickEditItem(
   deps: TrainDeps,
@@ -1645,8 +1629,10 @@ async function changesFromRevisions(
       entityId: row.entityId,
       slug: '',
       action,
+      // A criação regista a versão 0 (estado ausente): a entidade nasce na 1,
+      // por isso a versão imediatamente posterior é sempre `row.version + 1`.
       preVersion: action === 'create' ? null : row.version,
-      postVersion: action === 'create' ? row.version : row.version + 1,
+      postVersion: row.version + 1,
     };
   });
 }
