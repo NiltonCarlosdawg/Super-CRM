@@ -1,6 +1,7 @@
 # Desenho — "Treinar agente": conhecimento self-service pelo painel (Fase 2)
 
 - **Data:** 2026-10-25 · **Estado:** revisto (`builder-check` de 2026-10-25) e com respostas do dono incorporadas — **não construir até o dono aprovar este documento**.
+- **Estado actual (2026-10-27):** aprovado 2026-10-25 → **implementado**; plano em `docs/superpowers/plans/2026-10-25-treinar-agente.md`.
 - **Origem:** brainstorming com o dono (2026-10-25). Decisões do dono marcadas **[dono]**; chamadas minhas marcadas **[call]**.
 - **Âmbito deste repo:** backend. A interface ("painel") é construída por fora — o contrato é a **API REST + guardas + eventos**.
 

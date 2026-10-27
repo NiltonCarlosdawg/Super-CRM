@@ -7,11 +7,14 @@ import { Redis } from 'ioredis';
 import { Pool } from 'pg';
 import { z } from 'zod';
 import { buildHttpApp } from '../adapters/http/app.js';
+import { parseAIConfig, type AIConfig } from '../adapters/ai/config.js';
+import { createLlmAIProvider } from '../adapters/ai/llm-ai-provider.js';
+import { createTransport } from '../adapters/ai/transports/index.js';
 import { createUnavailableAiProvider } from '../adapters/ai/unavailable.js';
 import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
-import { createDb } from '../adapters/db/index.js';
+import { createDb, type DbClient } from '../adapters/db/index.js';
 import { createConversationsRepository } from '../adapters/db/conversations.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
@@ -31,11 +34,83 @@ import { advanceMessageStatus } from '../application/message-status.js';
 import { createMessageSender } from '../application/messaging.js';
 import { handleInbound, type InboundMessage, type Outcome } from '../application/orchestrator.js';
 import { runOutboxTick } from '../application/outbox-worker.js';
+import { createExtractHandler } from '../modules/knowledge/extract-job.js';
+import {
+  DEFAULT_SETTINGS,
+  ensureSettingsSeed,
+  readSettings,
+  type Settings,
+} from '../modules/settings/settings.js';
+import type { AIProvider } from '../ports/ai-provider.js';
 import { ConfigError } from './config.js';
 import { loadFullConfig } from './config-app.js';
 import { createLogger, withCorrelationId } from './logger.js';
 import { createArgon2Hasher } from './security/argon2.js';
 import { createTotp } from './security/totp.js';
+
+/**
+ * Leitura de `app_settings` no arranque não pode bloquear o contrato da Fase 0
+ * (a app arranca sem Redis/BD). Com a BD inacessível cai nos defaults e a app
+ * serve; o chat de teste continua a falhar quando a BD estiver em baixo.
+ */
+const SETTINGS_BOOT_TIMEOUT_MS = 2000;
+
+type BootLogger = { warn(obj: object, msg?: string): void };
+
+/** Settings globais reais (`app_settings`); sem BD → `DEFAULT_SETTINGS` + warn. */
+async function loadBootSettings(db: DbClient, log: BootLogger): Promise<Settings> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('timeout')), SETTINGS_BOOT_TIMEOUT_MS);
+    timer.unref();
+  });
+  try {
+    const read = (async (): Promise<Settings> => {
+      await ensureSettingsSeed(db);
+      return readSettings(db);
+    })();
+    return await Promise.race([read, timeout]);
+  } catch (error) {
+    log.warn(
+      { err: { message: error instanceof Error ? error.message : String(error) } },
+      'settings.boot_read_failed',
+    );
+    return DEFAULT_SETTINGS;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * Provider do módulo "Treinar agente": LLM real quando `AI_API_KEY` está
+ * definida (valida AI_PROVIDER/AI_MODEL e lança ConfigError se inválida), senão
+ * o provider indisponível — as rotas respondem, a extração falha e o upload
+ * fica `status='error'` (comportamento honesto, T9). A config devolvida no caso
+ * sem IA é só para o orquestrador do chat de teste (timeouts/limites): os
+ * marcadores de provider/modelo nunca chegam a uma chamada de rede.
+ */
+function createKnowledgeAi(env: NodeJS.ProcessEnv, fallback: AIProvider): {
+  provider: AIProvider;
+  aiCfg: AIConfig;
+} {
+  if ((env.AI_API_KEY ?? '') === '') {
+    return {
+      provider: fallback,
+      aiCfg: parseAIConfig({ AI_PROVIDER: 'openai', AI_MODEL: 'unavailable' }),
+    };
+  }
+  const aiCfg = parseAIConfig(env);
+  return {
+    provider: createLlmAIProvider({
+      transport: createTransport(aiCfg, globalThis.fetch),
+      config: aiCfg,
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      random: Math.random,
+      now: () => Date.now(),
+    }),
+    aiCfg,
+  };
+}
 
 async function main(): Promise<void> {
   const config = loadFullConfig(process.env);
@@ -117,6 +192,28 @@ async function main(): Promise<void> {
     now,
   });
 
+  // Task 19+20 (docs/05 §3.1): orquestrador de inbound SEM IA configurada —
+  // `createUnavailableAiProvider` rejeita sempre → o orquestrador cai no
+  // failSafe (ai_active: mensagem fixa + passa a humano; ai_suggest: rascunho
+  // por aprovar, D13) — e o job 'inbound.process' que despacha por tipo.
+  // Onda 1 (Task 5, ruling R1): o job resolve o tenant pela conta do webhook e
+  // cria os ports do orquestrador DESSE tenant (`forTenant`).
+  const orchestratorPorts = createOrchestratorPorts({
+    db,
+    notifySink: socketNotify,
+    claimTtlMs: config.messaging.claimTtlMs,
+    now,
+  });
+  const unavailableAiProvider = createUnavailableAiProvider();
+
+  // Treinar agente (Task 9): bundle de conhecimento SEMPRE montado — as rotas
+  // `/v1/knowledge/*` respondem mesmo sem `AI_API_KEY`; nesse caso a extração
+  // falha e o upload fica `status='error'` (nunca se inventa conhecimento).
+  // `embedder` omitido de propósito: o runtime de embeddings é ADR pendente
+  // (ADR-0002/A4) e o código já lida com a ausência (chunks sem vetor).
+  const knowledgeAi = createKnowledgeAi(process.env, unavailableAiProvider);
+  const settings = await loadBootSettings(db, log);
+
   const app = buildHttpApp({
     cfg: config,
     db,
@@ -137,6 +234,17 @@ async function main(): Promise<void> {
     conversations,
     messageSender,
     outbox,
+    knowledge: {
+      db,
+      provider: knowledgeAi.provider,
+      aiCfg: knowledgeAi.aiCfg,
+      settings,
+      jobs,
+      audit,
+      now,
+      // Chat de teste (T8): ports do orquestrador scoped por tenant.
+      portsFactory: orchestratorPorts,
+    },
     notifySink: socketNotify,
     readyChecks: [{ name: 'redis', run: () => redis.ping() }],
   });
@@ -157,21 +265,9 @@ async function main(): Promise<void> {
     log,
   });
 
-  // Task 19+20 (docs/05 §3.1): orquestrador de inbound SEM IA configurada —
-  // `createUnavailableAiProvider` rejeita sempre → o orquestrador cai no
-  // failSafe (ai_active: mensagem fixa + passa a humano; ai_suggest: rascunho
-  // por aprovar, D13) — e o job 'inbound.process' que despacha por tipo.
-  // Onda 1 (Task 5, ruling R1): o job resolve o tenant pela conta do webhook e
-  // cria os ports do orquestrador DESSE tenant (`forTenant`).
-  const orchestratorPorts = createOrchestratorPorts({
-    db,
-    notifySink: socketNotify,
-    claimTtlMs: config.messaging.claimTtlMs,
-    now,
-  });
-  const unavailableAiProvider = createUnavailableAiProvider();
   const orchestrate = (msg: InboundMessage, tenantId: string): Promise<Outcome> =>
     handleInbound(orchestratorPorts.forTenant(tenantId), unavailableAiProvider, msg);
+
   await jobs.register(
     'inbound.process',
     createInboundProcessHandler({
@@ -194,6 +290,20 @@ async function main(): Promise<void> {
         ),
       advanceStatus: (input) => advanceMessageStatus({ db, notifySink: socketNotify, now }, input),
       lifecycle,
+    }),
+  );
+
+  // Treinar agente (Task 4/Task 9): extração de UM upload por job. O handler
+  // (sem rethrow) deixa o upload `error` quando não há IA — nenhum efeito
+  // parcial no activo; o staging só é tocado depois de `extractKnowledge`.
+  await jobs.register(
+    'knowledge.extract',
+    createExtractHandler({
+      db,
+      provider: knowledgeAi.provider,
+      audit,
+      now,
+      logger: log,
     }),
   );
 
