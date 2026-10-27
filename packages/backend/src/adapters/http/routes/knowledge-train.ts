@@ -16,6 +16,7 @@ import {
   TrainServiceError,
   type TrainDeps,
 } from '../../../modules/knowledge/train-service.js';
+import { diffDraft, validateDraft } from '../../../modules/knowledge/publish-service.js';
 import { parseUpload, UnsupportedFormatError } from '../../../modules/knowledge/parsers.js';
 import type { TenantScope } from '../../../ports/tenancy.js';
 import type { HttpDeps } from '../app.js';
@@ -67,6 +68,14 @@ const patchBodySchema = z
     payload: z.record(z.string(), z.unknown()).optional(),
     lineSlug: lineSlugSchema.optional(),
     confirmLine: z.boolean().optional(),
+  })
+  .strict();
+
+// Validação da carga: o diff já foi mostrado; aqui só chegam os conflitos que
+// o utilizador decidiu aceitar explicitamente (nunca merge silencioso).
+const validateBodySchema = z
+  .object({
+    acceptConflicts: z.array(z.string().min(1)).optional(),
   })
   .strict();
 
@@ -195,6 +204,28 @@ export async function knowledgeTrainRoutes(app: FastifyInstance, deps: HttpDeps)
   app.get('/v1/knowledge/train/draft', { preHandler: guard }, async (request, reply) => {
     const items = await listDraftItems(mkDeps(request));
     return reply.send({ items });
+  });
+
+  // Diff de mesclagem (added/updated/unchanged/conflict/archived) para o painel
+  // mostrar antes da confirmação única. Não escreve nada.
+  app.get('/v1/knowledge/train/diff', { preHandler: guard }, async (request, reply) => {
+    const result = await diffDraft(mkDeps(request));
+    return reply.send(result);
+  });
+
+  // Publicação atómica aditiva. Linhas por confirmar ⇒ 422; conflitos não
+  // aceites ⇒ 409 com as entradas no payload (ambos mapeados em `HttpError`).
+  app.post('/v1/knowledge/train/validate', { preHandler: guard }, async (request, reply) => {
+    const body = validateBodySchema.parse(request.body ?? {});
+    try {
+      const result = await validateDraft(mkDeps(request), {
+        changedById: request.auth!.userId,
+        ...(body.acceptConflicts !== undefined ? { acceptConflicts: body.acceptConflicts } : {}),
+      });
+      return reply.send(result);
+    } catch (error) {
+      return mapTrainError(error);
+    }
   });
 
   app.patch('/v1/knowledge/train/draft/:id', { preHandler: guard }, async (request, reply) => {

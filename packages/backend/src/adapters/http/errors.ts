@@ -20,6 +20,8 @@ export class HttpError extends Error {
     readonly code: string,
     readonly detail?: string,
     readonly headers?: Record<string, string>,
+    /** Campos extra do problem+json (ex.: lista de conflitos do treino). */
+    readonly extra?: Record<string, unknown>,
   ) {
     super(code);
     this.name = 'HttpError';
@@ -57,13 +59,20 @@ export function toProblem(
   err: unknown,
   requestId?: string,
 ): { status: number; body: ProblemJson } {
-  const mk = (status: number, code: string, detail: string) => ({
+  const mk = (status: number, code: string, detail: string, extra?: Record<string, unknown>) => ({
     status,
-    body: { type: `about:blank#${code}`, title: code, status, detail, requestId },
+    body: {
+      ...(extra ?? {}),
+      type: `about:blank#${code}`,
+      title: code,
+      status,
+      detail,
+      requestId,
+    },
   });
 
   if (err instanceof HttpError) {
-    return mk(err.status, err.code, err.detail ?? err.code);
+    return mk(err.status, err.code, err.detail ?? err.code, err.extra);
   }
   if (err instanceof DomainError) {
     const mapped = DOMAIN[err.code];

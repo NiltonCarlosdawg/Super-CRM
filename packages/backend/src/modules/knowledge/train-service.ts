@@ -149,12 +149,12 @@ async function buildChunks(
 }
 
 /**
- * Valida o slug contra o dicionário global `business_lines`. Uma linha em falta
- * é um recurso referenciado que não existe ⇒ `line_not_found` (404 em todas as
- * rotas de treino, ruling da revisão da T5). Partilhado pelos caminhos de
- * upload (documentos e passo a passo) através de `queueExtraction`.
+ * Resolve o id de uma linha de negócio. Uma linha em falta é um recurso
+ * referenciado que não existe ⇒ `line_not_found` (404 em todas as rotas de
+ * treino, ruling da revisão da T5). Usado pelo upload (`assertLineExists`) e
+ * pela validação atómica (T6), que precisa do `lineId` para publicar.
  */
-async function assertLineExists(db: DbClient, slug: string): Promise<void> {
+export async function resolveLineId(db: DbClient, slug: string): Promise<string> {
   const [row] = await db
     .select({ id: businessLines.id })
     .from(businessLines)
@@ -163,6 +163,11 @@ async function assertLineExists(db: DbClient, slug: string): Promise<void> {
   if (row === undefined) {
     throw new TrainServiceError('line_not_found', 404, `linha de negócio inexistente: ${slug}`);
   }
+  return row.id;
+}
+
+async function assertLineExists(db: DbClient, slug: string): Promise<void> {
+  await resolveLineId(db, slug);
 }
 
 /** Versão activa para o item staged (identidade por tenant + slug). */
