@@ -13,6 +13,7 @@ import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
 import { createConversationsRepository } from '../../src/adapters/db/conversations.js';
 import { createHandoffConversations, createHandoffQueueRepository } from '../../src/adapters/db/handoff-queue.js';
+import { createOrchestratorPorts } from '../../src/adapters/db/orchestrator-ports.js';
 import { DEFAULT_SETTINGS, type Settings } from '../../src/modules/settings/settings.js';
 import type { HandoffDeps } from '../../src/application/handoffs.js';
 import type { AIProvider, Ports } from '../../src/ports/ai-provider.js';
@@ -168,6 +169,14 @@ export async function buildTestApp(
      * devolve `submit_knowledge` com `items: []` (extração sem itens).
      */
     llmSteps?: FakeStep[];
+    /**
+     * Treinar agente (Task 8): embedder do bundle de conhecimento. O default é o
+     * hash determinístico (`fakeEmbeddings`); o chat de teste passa um lexical
+     * quando precisa de similaridade real entre a pergunta e o chunk.
+     */
+    embedder?: EmbeddingsProvider;
+    /** Treinar agente (Task 8): monta a app SEM a fábrica de ports (caso 503). */
+    omitKnowledgePorts?: boolean;
   },
 ): Promise<TestApp> {
   const db = await migratedDb();
@@ -235,6 +244,17 @@ export async function buildTestApp(
   const handoffsConversations = createHandoffConversations(db);
   const handoffsSettings = DEFAULT_SETTINGS;
 
+  // Treinar agente (Task 8): ports reais do orquestrador para o chat de teste.
+  // O teste do 503 monta a app sem esta fábrica.
+  const knowledgePortsFactory = createOrchestratorPorts({
+    db,
+    notifySink: async (e) => {
+      notifyLog.push(e);
+    },
+    claimTtlMs: 60_000,
+    now: () => new Date(),
+  });
+
   // Treinar agente (Task 4): provider LLM real sobre transporte falso,
   // embeddings determinísticos, fila capturadora e o handler do job registado
   // (os testes correm-no com runPendingJobs()).
@@ -249,7 +269,7 @@ export async function buildTestApp(
     random: () => 0.5,
     now: () => Date.now(),
   });
-  const knowledgeEmbedder = fakeEmbeddings();
+  const knowledgeEmbedder = overrides?.embedder ?? fakeEmbeddings();
   const knowledgeJobs = createCapturingJobQueue();
   await knowledgeJobs.register(
     'knowledge.extract',
@@ -298,6 +318,7 @@ export async function buildTestApp(
       embedder: knowledgeEmbedder,
       audit,
       now: () => new Date(),
+      ...(overrides?.omitKnowledgePorts === true ? {} : { portsFactory: knowledgePortsFactory }),
     },
     notifySink: async (e) => {
       notifyLog.push(e);

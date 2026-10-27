@@ -18,6 +18,7 @@ import type { AuthUserRepo, MfaPort, SessionStore } from '../../ports/auth.js';
 import type { PasswordHasher } from '../../ports/security.js';
 import type { TenancyPort } from '../../ports/tenancy.js';
 import type { DbClient } from '../db/index.js';
+import type { OrchestratorPortsFactory } from '../db/orchestrator-ports.js';
 import type { TenantsRepository } from '../db/tenants.js';
 import type { UsersRepository } from '../db/users.js';
 import { toProblem } from './errors.js';
@@ -26,6 +27,7 @@ import { authRoutes } from './routes/auth.js';
 import { conversationsRoutes } from './routes/conversations.js';
 import { draftsRoutes } from './routes/drafts.js';
 import { handoffsRoutes } from './routes/handoffs.js';
+import { knowledgeChatTestRoutes } from './routes/knowledge-chat-test.js';
 import { knowledgeItemsRoutes } from './routes/knowledge-items.js';
 import { knowledgeTrainRoutes } from './routes/knowledge-train.js';
 import { platformRoutes } from './routes/platform.js';
@@ -100,6 +102,8 @@ export interface HttpDeps {
     embedder?: EmbeddingsProvider;
     audit: Audit;
     now(): Date;
+    /** Chat de teste (Task 8): sem a fábrica de ports do orquestrador → 503. */
+    portsFactory?: OrchestratorPortsFactory;
   };
   /** Sinks de evento (realtime Task 15); o logout de admin notifica a transição. */
   notifySink?: (e: NotifyEvent) => Promise<void>;
@@ -220,6 +224,8 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
         await knowledgeTrainRoutes(instance, deps);
         // Task 7: edição rápida, listagem do activo e reversão de publicações.
         await knowledgeItemsRoutes(instance, deps);
+        // Task 8: chat de teste (substrato sintético + retrieve por alvo).
+        await knowledgeChatTestRoutes(instance, deps);
       }
       // Task 7: superfície de plataforma (spec §5.3) — requirePlatform em todas.
       await platformRoutes(instance, deps);
