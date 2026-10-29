@@ -1,6 +1,6 @@
 # Treinar Agente (Conhecimento Self-Service) — Plano de Implementação
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Expor a API completa do fluxo "Treinar agente" (upload/guiado → itens em rascunho editáveis → mini-chat de teste → validação atómica aditiva → edição rápida → reversão) para o painel construir por fora.
 
@@ -9,6 +9,8 @@
 **Tech Stack:** Fastify 5, Drizzle ORM + Postgres (pgvector), BullMQ/Redis, zod, node:test + contentores reais.
 
 **Spec:** `docs/superpowers/specs/2026-10-25-treinar-agente-conhecimento-design.md` (aprovado pelo dono 2026-10-25). O plano argumenta do spec; executores leem ambos.
+
+**Estado:** implementado em 2026-10-29 — todas as tasks concluídas em `main`, commits `ae6ae58..bc7c0d9` (+ `5114e55` de dependências). Gates finais: typecheck 0 · lint 0 erros · unit 236/236 · integração 166/166 · `eval:baseline` exacto. Revisão final whole-branch aprovada após corrigir a migração `0011`. Continuação da Fase 2 (embeddings, PDF/OCR, `qualification_questions`, alertas de revisão, fila de sugestões) fica para o incremento seguinte — ver `packages/backend/src/modules/knowledge/README.md`.
 
 ## Global Constraints
 
@@ -45,7 +47,7 @@ Falhas prováveis que nenhum teste isolado apanha; cada uma tem teste fixado na 
 **Interfaces:**
 - Produz (para T4–T8): tabelas `knowledgeTrainUploads`, `knowledgeDraftItems`, `knowledgePublications`; coluna `knowledgeRevisions.publicationId`; `conversations.isTest`; tipos `StagedItemRow = typeof knowledgeDraftItems.$inferSelect`, `UploadRow`, `PublicationRow`, e constantes `DraftEntityType = 'catalog_item' | 'knowledge_doc' | 'rule'`, `DraftOp = 'create' | 'update' | 'delete'` exportadas do schema.
 
-- [ ] **Step 1: Escrever o teste que falha**
+- [x] **Step 1: Escrever o teste que falha**
 
 `tests/integration/train-schema.test.ts` (padrão de `tests/integration/migrations.test.ts` + `migrateFromEmptyDb`):
 - `catalog_items` aceita o mesmo `slug` em dois tenants (insert 2 linhas com mesmo slug, tenantIds distintos → OK) mas **rejeita** slug repetido no mesmo tenant (assert rejeição com unique violation).
@@ -54,12 +56,12 @@ Falhas prováveis que nenhum teste isolado apanha; cada uma tem teste fixado na 
 - `knowledge_revisions` aceita `publication_id` nulo e não nulo (FK para publicação existente).
 - `conversations.is_test` existe, `NOT NULL default false` (via `information_schema`).
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npm run test:integration -- train-schema`
 Expected: FAIL (tabelas/colunas inexistentes).
 
-- [ ] **Step 3: Alterar o schema Drizzle**
+- [x] **Step 3: Alterar o schema Drizzle**
 
 Em `knowledge.schema.ts`:
 - `catalogItems.slug`: remover `.unique()`; no array de índices, `uniqueIndex('catalog_items_tenant_slug_uq').on(t.tenantId, t.slug)`.
@@ -71,17 +73,17 @@ Em `knowledge.schema.ts`:
 
 Em `conversations.schema.ts`: `isTest: boolean('is_test').notNull().default(false)`.
 
-- [ ] **Step 4: Gerar e revistar a migração**
+- [x] **Step 4: Gerar e revistar a migração**
 
 Run: `cd packages/backend && npm run db:generate`
 Revistar o SQL gerado: tem de (a) fazer drop de `catalog_items_slug_unique` e criar o índice composto, (b) criar as 3 tabelas + enum, (c) adicionar `publication_id` e `is_test`. Se o drizzle-kit gerar `ALTER TABLE ... DROP CONSTRAINT` inesperado em outras tabelas, corrigir o schema (não o SQL à mão) e regenerar.
 
-- [ ] **Step 5: Correr o teste e a suíte de migrações**
+- [x] **Step 5: Correr o teste e a suíte de migrações**
 
 Run: `cd packages/backend && npm run test:integration -- "train-schema|migrations|database-ready"`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/backend/src/modules/knowledge/knowledge.schema.ts packages/backend/src/adapters/db/schema/conversations.schema.ts packages/backend/drizzle/ packages/backend/tests/integration/train-schema.test.ts
@@ -101,7 +103,7 @@ git commit -m "feat(knowledge): draft workspace, publications and tenant-scoped 
 **Interfaces:**
 - Produz: `EmbeddingsProvider { readonly model: string; readonly dimensions: number; embedTexts(texts: readonly string[], signal?: AbortSignal): Promise<readonly number[][]> }`; `chunkText(text: string, opts?: { maxChars?: number; overlapChars?: number }): string[]` (default 1200/150); `chunkCatalogItemText(item: { name: string; summary: string; details?: Record<string, unknown> | null }): string[]`; `fakeEmbeddings(dimensions?: number): EmbeddingsProvider` (vetores determinísticos por hash do texto — mesmos textos → mesmos vetores; base para T8 com cosine).
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `tests/unit/chunking.test.ts`:
 - `chunkText` de texto com 3 parágrafos longos → 3+ chunks, cada um `<= maxChars`, todos presentes (join dos chunks contém todos os parágrafos, sem cortar palavra no limite — último espaço antes de `maxChars`).
@@ -110,21 +112,21 @@ git commit -m "feat(knowledge): draft workspace, publications and tenant-scoped 
 - `chunkCatalogItemText` inclui `name`, `summary` e valores de `details`, um chunk.
 - `fakeEmbeddings`: mesmo texto → mesmo vetor; textos diferentes → vetores diferentes; `dimensions` respeitado.
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npx tsx --test tests/unit/chunking.test.ts`
 Expected: FAIL (ficheiros não existem).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Port puro (sem lógica, estilo `src/ports/llm-transport.ts`). `chunkText`: divide por parágrafo (`\n\s*\n`), junta parágrafos até `maxChars`, parte por espaço no limite, avança com passo `maxChars - overlapChars`. `chunkCatalogItemText` = 1 chunk `name — summary — details em JSON.stringify`. Fake: hash FNV-1a por caractere → pseudo-vetor normalizado (mesma semente por texto).
 
-- [ ] **Step 4: Correr e ver passar**
+- [x] **Step 4: Correr e ver passar**
 
 Run: `cd packages/backend && npx tsx --test tests/unit/chunking.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/backend/src/ports/embeddings.ts packages/backend/src/modules/knowledge/chunking.ts packages/backend/tests/helpers/fake-embeddings.ts packages/backend/tests/unit/chunking.test.ts
@@ -159,7 +161,7 @@ export interface ExtractedItem { slug: string; lineSlug: LineSlug | null; op: 'c
 
 e `AIProvider.extractKnowledge(input: { text: string }, signal?: AbortSignal): Promise<{ items: ExtractedItem[] }>`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `tests/unit/extract-knowledge.test.ts` (padrão `tests/helpers/fake-llm.ts`, `createLlmAIProvider` com transport fake):
 - tool call `submit_knowledge` com args válidos `{ items: [...] }` → retorna os items normalizados (enums intactos, `currency` default `'AOA'` quando ausente, slug kebab-case passado pelo modelo preservado).
@@ -167,24 +169,24 @@ e `AIProvider.extractKnowledge(input: { text: string }, signal?: AbortSignal): P
 - resposta só com texto (sem tool call) → `LLMError`.
 - `createUnavailableAiProvider().extractKnowledge(...)` → rejeita com `LLMError` (mesma semântica de indisponibilidade do resto do provider).
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npx tsx --test tests/unit/extract-knowledge.test.ts`
 Expected: FAIL (`extractKnowledge` não existe).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 - `extraction-schema.ts`: zod `extractedKnowledgeSchema` (espelho dos tipos; enums como `z.enum`; regra: `pricingMode: 'fixed' | 'from'` exige `priceAmount` string numérica — caso contrário erro).
 - `llm-ai-provider.ts`: tool `EXTRACT_KNOWLEDGE_TOOL` (`submit_knowledge`, inputSchema JSON Schema dos items); `extractKnowledge` faz **uma** chamada (system curto: "extrai o conhecimento da empresa para o CRM; não inventes preços") com a tool, ecoa o tool call como nos métodos existentes, valida args com o schema → `LLMError` em falha. Não toca em `respond`.
 - `unavailable.ts`: método que rejeita sempre com `LLMError('ai_unavailable', ...)`.
 - Actualizar qualquer outro implementador de `AIProvider` nos ficheiros (grep `: AIProvider` / `satisfies AIProvider`) para não quebrar o typecheck.
 
-- [ ] **Step 4: Correr teste + typecheck**
+- [x] **Step 4: Correr teste + typecheck**
 
 Run: `cd packages/backend && npx tsx --test tests/unit/extract-knowledge.test.ts && npm run typecheck`
 Expected: PASS, 0 erros.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/backend/src/ports/ai-provider.ts packages/backend/src/adapters/ai/ packages/backend/tests/unit/extract-knowledge.test.ts
@@ -220,7 +222,7 @@ git commit -m "feat(ai): extractKnowledge port with validated structured output"
     - `PATCH /v1/knowledge/train/draft/:id` body `{ payload?: object; lineSlug?: string; confirmLine?: boolean }`.
     - `DELETE /v1/knowledge/train/draft/:id`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `tests/integration/train-upload.test.ts` (usa `buildTestApp`, `fakeLlm` com `toolCallResult('submit_knowledge', {...})`, `fakeEmbeddings()`, `createCapturingJobQueue()` de `fake-jobs.ts`):
 - editor faz upload de TXT (base64) → `202` com `uploadIds`; TestApp `runPendingJobs()` → GET draft devolve os items staged com `chunks` e `embedding` (array) preenchidos; audit tem `knowledge.staged`.
@@ -231,21 +233,21 @@ git commit -m "feat(ai): extractKnowledge port with validated structured output"
 - **isolamento:** utilizador do tenant B (criar 2º tenant + utilizador via SQL directo, padrão de `isolation.test.ts`) não vê o rascunho de A no GET.
 - PATCH confirma linha (`confirmLine: true`) e DELETE remove item.
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npm run test:integration -- train-upload`
 Expected: FAIL (rotas 404).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `parsers.ts` com registry simples `{ 'text/plain': utf8, 'text/markdown': utf8 }`; `train-service.ts` e `extract-job.ts` conforme as assinaturas acima; rota compõe `TrainDeps` por pedido a partir de `deps.knowledge!` + `request.auth` (padrão do `scope()` de `drafts.ts`). `buildTestApp` passa a construir o bundle com `createLlmAIProvider({ transport: fakeTransport, config: ... })` (guião injectável por override), `fakeEmbeddings()`, `createCapturingJobQueue()` e expõe `runPendingJobs()` + `knowledgeApp` para os testes; `app.ts` regista `knowledge-trainRoutes` quando `deps.knowledge` presente. Registar o handler `knowledge.extract` também no `main.ts` fica para T9.
 
-- [ ] **Step 4: Correr teste + typecheck**
+- [x] **Step 4: Correr teste + typecheck**
 
 Run: `cd packages/backend && npm run test:integration -- train-upload && npm run typecheck`
 Expected: PASS, 0 erros.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/backend/src/modules/knowledge/ packages/backend/src/adapters/http/ packages/backend/tests/
@@ -265,27 +267,27 @@ git commit -m "feat(knowledge): document upload, extraction job and draft stagin
 - Consumes: T4 (pipeline, `knowledge_train_uploads`, job).
 - Produz: `formatGuidedTranscript(answers: ReadonlyArray<{ question: string; answer: string }>): string` (transcrição numerada `Pergunta: ... Resposta: ...`); rota `POST /v1/knowledge/train/guided` body `{ lineSlug: LineSlug; answers: Array<{ question: string; max 300; answer: string; max 4000 }> }` (mínimo 1 resposta) → cria upload (`filename: 'passo-a-passo'`, `mediaType: 'text/plain'`, `lineSlug`, `lineConfirmed: true`) → enfileira → `202 { uploadIds }`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `tests/integration/train-guided.test.ts`:
 - editor responde 3 perguntas da linha cctv → `202`; `runPendingJobs()` → draft tem itens staged com `lineSlug: 'cctv'` e `lineConfirmed: true`; o texto do upload guardado contém as respostas.
 - `answers: []` → `400`; `lineSlug` desconhecido (não existe em `business_lines`) → `400`/`404` com mensagem clara.
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npm run test:integration -- train-guided`
 Expected: FAIL (rota 404).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `formatGuidedTranscript` puro; rota valida `lineSlug` contra `business_lines` (select por slug; inexistente → `HttpError(404, 'line_not_found')`); reutiliza a criação de upload + enqueue da T4 (extrair helper `queueExtraction(deps, { filename, mediaType, text, lineSlug, lineConfirmed, changedById })` no train-service e usar nos dois).
 
-- [ ] **Step 4: Correr teste + typecheck**
+- [x] **Step 4: Correr teste + typecheck**
 
 Run: `cd packages/backend && npm run test:integration -- train-guided && npm run typecheck`
 Expected: PASS, 0 erros.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/backend/src/modules/knowledge/ packages/backend/src/adapters/http/routes/knowledge-train.ts packages/backend/tests/integration/train-guided.test.ts
@@ -309,20 +311,20 @@ git commit -m "feat(knowledge): guided step-by-step capture into the training pi
   - `publish-service.ts`: `diffDraft(deps: TrainDeps): Promise<{ entries: DiffEntry[]; unconfirmedSlugs: string[]; digest: string }>` (`digest = sha256` dos staged slugs + canónicos ordenados); `validateDraft(deps, input: { changedById: string; acceptConflicts?: string[] }): Promise<{ publicationId: string; applied: { added: number; updated: number; archived: number }; idempotent: boolean }>` — se `unconfirmedSlugs` não vazio → `HttpError(422, 'lines_unconfirmed', slugs)`; se conflitos fora de `acceptConflicts` → `HttpError(409, 'draft_conflicts', entries)`; senão **transacção**: publicação idempotente pelo `digest` (chave única `(tenantId, digest)`; repetição → devolve publicação existente com `idempotent: true`), `added` → insert `status:'published'` + revisão `version: 1`, `updated`/`archived`/conflitos aceites → snapshot na revisão (`version` actual, `publicationId`) + update (bump `version`, `archived` = `status:'archived'`), limpa staged rows do tenant, audit `knowledge.validated`.
   - Rotas novas: `GET /v1/knowledge/train/diff` → `{ entries, unconfirmedSlugs, digest }`; `POST /v1/knowledge/train/validate` body `{ acceptConflicts?: string[] }` → resultado acima.
 
-- [ ] **Step 1: Testes unitários que falham**
+- [x] **Step 1: Testes unitários que falham**
 
 `tests/unit/diff.test.ts`: uma tabela por regra da interface `computeDraftDiff` (added, updated, unchanged, conflict×3 origens: create-sobre-existente, update-sobre-versão-mudada, delete-sausente; archived; unconfirmed) + `canonicalPayload` ignora ordem de chaves e campos extra, mas deteta mudança de preço.
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npx tsx --test tests/unit/diff.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 3: Implementar `diff.ts` e os seus testes**
+- [x] **Step 3: Implementar `diff.ts` e os seus testes**
 
 Regras puras acima; sem DB.
 
-- [ ] **Step 4: Testes de integração que falham**
+- [x] **Step 4: Testes de integração que falham**
 
 `tests/integration/train-validate.test.ts` (staging directo na tabela + activo via insert `catalog_items published`):
 - carga nova válida → `GET diff` devolve `added`; `POST validate` → publicação criada (`kind:'train'`, `applied.added = n`), staged vazia, itens activos consultáveis, revisões com `publication_id`; audit `knowledge.validated`.
@@ -333,12 +335,12 @@ Regras puras acima; sem DB.
 - **concorrência:** duas chamadas `validateDraft` em paralelo (Promise.all) → exactamente uma publicação nova.
 - **isolamento:** tenant B no mesmo request scope não enxerga staged de A (validate sobre B com staged vazio → diff vazio).
 
-- [ ] **Step 5: Correr tudo**
+- [x] **Step 5: Correr tudo**
 
 Run: `cd packages/backend && npx tsx --test tests/unit/diff.test.ts && npm run test:integration -- train-validate && npm run typecheck`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/backend/src/modules/knowledge/ packages/backend/src/adapters/http/routes/knowledge-train.ts packages/backend/tests/
@@ -359,7 +361,7 @@ git commit -m "feat(knowledge): additive merge diff and atomic publication with 
 - Consumes: T6 (`canonicalPayload`, `PublishedSnapshot`, publicações/revisões).
 - Produz: `quickEditItem(deps, input: { itemId: string; entityType: DraftEntityType; patch: Record<string, unknown>; changedById: string }): Promise<{ publicationId: string }>` — transacção: carrega activo sob scope (não existe → `404`), valida `patch` por tipo (zod parcial: preço só número/`null` em `fixed`, etc.), snapshot-revisão (`version` actual, `publicationId`), update + bump `version`, publicação `kind:'quick_edit'` (idempotencyKey = uuid), audit `knowledge.item_edited`; `listPublications(deps, limit?)`; `revertPublication(deps, input: { publicationId: string; changedById: string }): Promise<{ reverted: number }>` — só reverte se **todas** as entidades da publicação estiverem na `version` posterior à publicação (se entidade mudou depois → `409 stale_revert` com slugs); transacção: snapshot actual → revisão, restaura snapshot anterior (bump `version`), publicação `kind:'revert'`, audit `knowledge.reverted`. Rotas: `PATCH /v1/knowledge/items/:id` body `{ entityType, patch }` (editor/admin); `GET /v1/knowledge/published` (é a listagem dos itens activos — consolida o `GET /v1/knowledge/items` + `GET /v1/knowledge/published` do desenho numa só rota); `POST /v1/knowledge/published/revert` body `{ publicationId }`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `tests/integration/train-quickedit.test.ts`:
 - item publicado (seed direto) → PATCH preço → `200`; activo reflecte o preço; `GET /v1/knowledge/published` lista; revisão + publicação `quick_edit` criadas.
@@ -368,21 +370,21 @@ git commit -m "feat(knowledge): additive merge diff and atomic publication with 
 - **reversão velha:** quick-edit 1, quick-edit 2 (mesmo item), reverte 1 → `409 stale_revert`.
 - isolamento: item de outro tenant → `404`.
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npm run test:integration -- train-quickedit`
 Expected: FAIL.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Padrão T6 (transacção + revisão + publicação); `zodPatchByType` no publish-service; rotas com os guards de sempre; registo em `app.ts` dentro do mesmo bloco `deps.knowledge`.
 
-- [ ] **Step 4: Correr teste + typecheck**
+- [x] **Step 4: Correr teste + typecheck**
 
 Run: `cd packages/backend && npm run test:integration -- train-quickedit && npm run typecheck`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/backend/src/modules/knowledge/ packages/backend/src/adapters/http/ packages/backend/tests/integration/train-quickedit.test.ts
@@ -404,7 +406,7 @@ git commit -m "feat(knowledge): quick single-item edits and publication revert"
 - Consumes: T2 (`fakeEmbeddings`), T4 (staged `chunks` jsonb), T6 (activo), `test-chat.ts` existente (`createTestChat({ ports, provider, db, settings, aiCfg, conversationId })` → `{ reply, sources }`).
 - Produz: `ensureTestConversation(db: DbClient, tenantId: string): Promise<string>` (encontra-ou-cria conta `label: 'chat-de-teste'` + contacto sintético + conversa com `isTest: true`, `lineId: null`); `draft-retrieval.ts`: `scoreChunks(query: string, chunks: ReadonlyArray<{ id: string; content: string; embedding: readonly number[] | null }>, embedder?: EmbeddingsProvider): Promise<Array<{ id: string; score: number }>>` (com embedder → cosseno com a query embebida; sem → sobreposição de tokens normalizada) e `retrieveForTarget(deps: TrainDeps, query: string, target: 'draft' | 'published'): Promise<RetrievedChunk[]>` (draft → chunks staged do tenant ordenados por score com `topK = 5`, `minSimilarity = 0.15`; published → `[]` por agora — o runtime de embeddings é ADR pendente, documentado); `lookupCatalogForTarget(deps, query, target): Promise<CatalogFact[]>` (draft → facts dos staged `catalog_item` filtrados por score de tokens; published → `[]`). Rota `POST /v1/knowledge/chat/test` body `{ text: string; max 2000; target?: 'draft' | 'published' (default 'published') }` → ports = `{ ...factory.forTenant(tenantId), retrieve: (q) => retrieveForTarget(..., q, target), lookupCatalog: (q) => lookupCatalogForTarget(...) }` → `createTestChat` → `200 { reply, sources }`. `HttpDeps.knowledge` ganha `portsFactory?: OrchestratorPortsFactory`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `tests/integration/train-chat-test.test.ts`:
 - staged doc "As nossas câmaras CCTV custam 250.000 AOA" + `target: 'draft'` → `reply` presente e `sources` contêm o item staged; **nenhuma** row nova em `handoffs` nem `knowledge_gaps`.
@@ -413,21 +415,21 @@ git commit -m "feat(knowledge): quick single-item edits and publication revert"
 - isolamento: tenant B com staged próprio → o chat de B só vê chunks de B.
 - `agent` → `403` (papéis da decisão do dono).
 
-- [ ] **Step 2: Correr e ver falhar**
+- [x] **Step 2: Correr e ver falhar**
 
 Run: `cd packages/backend && npm run test:integration -- train-chat-test`
 Expected: FAIL.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `test-conversation.ts` (select por `contacts.phoneE164` sintético único por tenant — ex.: `+2449000000<suffix do tenant>` — e `conversations.isTest = true`); `draft-retrieval.ts` puro o suficiente para unit-testável, consultas drizzle sob scope; rota compõe ports a partir de `deps.knowledge.portsFactory` (ausente → `503 knowledge_ports_unavailable`); mensagens do chat ficam na conversa de teste (turnos guardados pelo orquestrador como no normal).
 
-- [ ] **Step 4: Correr teste + typecheck**
+- [x] **Step 4: Correr teste + typecheck**
 
 Run: `cd packages/backend && npm run test:integration -- train-chat-test && npm run typecheck`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/backend/src/modules/knowledge/ packages/backend/src/adapters/http/ packages/backend/tests/integration/train-chat-test.test.ts
@@ -446,20 +448,20 @@ git commit -m "feat(knowledge): test chat with synthetic conversation and draft-
 **Interfaces:**
 - Consumes: T4 (`createExtractHandler`), T8 (`HttpDeps.knowledge` completo).
 
-- [ ] **Step 1: Ligar no main.ts**
+- [x] **Step 1: Ligar no main.ts**
 
 Construir o bundle de conhecimento quando `config` tiver `AI_API_KEY` (provider LLM real, já existente) ou mesmo com o `unavailableAiProvider` (rotas respondem; extração falha com `ai_unavailable` e upload fica `error` — comportamento honesto documentado): `{ db, provider, aiCfg, settings: await readSettings(db), jobs, audit, now, portsFactory: orchestratorPorts }` (embedder **omitido** — runtime de embeddings é ADR pendente; o código está preparado). Registar `jobs.register('knowledge.extract', createExtractHandler(...))` junto do `inbound.process`. `settings` usa `ensureSettingsSeed` já existente.
 
-- [ ] **Step 2: Verificar arranque**
+- [x] **Step 2: Verificar arranque**
 
 Run: `cd packages/backend && npm run typecheck && npm run test:integration -- "http-foundations|config-startup|train-"`
 Expected: PASS (arranque sem Redis/AI continua a funcionar — contrato Fase 0).
 
-- [ ] **Step 3: README + doc de desenho**
+- [x] **Step 3: README + doc de desenho**
 
 `src/modules/knowledge/README.md`: fluxo (diagrama de passos), tabelas novas, semântica de mesclagem, formatos aceites (TXT/MD; PDF/OCR = ADR pendente), runtime embeddings = ADR pendente, exemplos de payload por rota; nota de âmbito: `qualification_questions` (guião de qualificação), alertas de revisão e fila de sugestões ficam na continuação da Fase 2 (decisão do dono 2026-10-25). No design doc: linha de estado "aprovado 2026-10-25 → implementado; plano: docs/superpowers/plans/2026-10-25-treinar-agente.md".
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add packages/backend/src/infra/main.ts packages/backend/src/modules/knowledge/README.md docs/superpowers/specs/2026-10-25-treinar-agente-conhecimento-design.md
@@ -470,7 +472,7 @@ git commit -m "feat(knowledge): wire training flow into composition root and doc
 
 ### Task 10: Gates finais
 
-- [ ] **Step 1: Suítes completas (nunca em paralelo)**
+- [x] **Step 1: Suítes completas (nunca em paralelo)**
 
 Run (colar output no relatório):
 ```
@@ -482,10 +484,10 @@ cd packages/backend && npm run eval:baseline   # tem de bater certo com docs/eva
 ```
 Expected: 0 erros de typecheck; lint sem erros novos; unit + integração todos PASS; baseline exacto (o eval não pode ter mudado).
 
-- [ ] **Step 2: Semântica de commits verificada**
+- [x] **Step 2: Semântica de commits verificada**
 
 Run: `git log --oneline -12` — commits pequenos e convencionais; working tree limpa (excepto `.env` e `graphify-out/`).
 
-- [ ] **Step 3: Relatório final**
+- [x] **Step 3: Relatório final**
 
 Resumo: o que mudou, output real dos comandos acima, o que ficou por fazer (PDF/OCR, runtime de embeddings, alertas de revisão/sugestões — pendentes de ADR/tarefa seguinte), riscos novos, decisões pendentes de humano.
