@@ -33,9 +33,22 @@ export interface MessagingConfig {
   maxMessageChars: number;
 }
 
+export interface EmbeddingsConfig {
+  enabled: boolean;
+  cacheDir: string | undefined;
+}
+
 /** string vazia conta como ausente (convenção da Fase 0). */
 function optional(value: string | undefined): string | undefined {
   return value === undefined || value === '' ? undefined : value;
+}
+
+export function loadEmbeddingsConfig(env: NodeJS.ProcessEnv): EmbeddingsConfig {
+  const rawEnabled = optional(env.EMBEDDINGS_ENABLED);
+  if (rawEnabled !== undefined && rawEnabled !== 'true' && rawEnabled !== 'false') {
+    throw new ConfigError(['EMBEDDINGS_ENABLED: true ou false esperado']);
+  }
+  return { enabled: rawEnabled === 'true', cacheDir: optional(env.EMBEDDINGS_CACHE_DIR) };
 }
 
 /** Inteiro no intervalo [min, max]; fora ou não-numérico → issue `X: fora do intervalo min-max`. */
@@ -164,9 +177,10 @@ export function loadMessagingConfig(env: NodeJS.ProcessEnv): MessagingConfig {
 /** Config completa: base (Fase 0) + auth + messaging, lendo o env uma vez. */
 export function loadFullConfig(
   env: NodeJS.ProcessEnv,
-): AppConfig & { auth: AuthConfig; messaging: MessagingConfig } {
+): AppConfig & { auth: AuthConfig; messaging: MessagingConfig; embeddings: EmbeddingsConfig } {
   const base = loadConfig(env); // falha primeiro por DATABASE_URL no arranque
   const auth = loadAuthConfig(env);
   const messaging = loadMessagingConfig(env);
-  return { ...base, auth, messaging };
+  const embeddings = loadEmbeddingsConfig(env);
+  return { ...base, auth, messaging, embeddings };
 }

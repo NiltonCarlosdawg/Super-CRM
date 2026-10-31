@@ -35,3 +35,25 @@ test('loadFullConfig: compõe base + auth + messaging sem ler env duas vezes', (
   assert.equal(c.auth.sessionTtlHours, 72);
   assert.equal(c.messaging.waAkgBaseUrl, 'http://wa.local:3001');
 });
+
+test('loadFullConfig desactiva embeddings por omissão e aceita cache configurável', () => {
+  const common = { DATABASE_URL: 'postgres://u:p@h/db', REDIS_URL: 'redis://h:6379',
+    AUTH_SECRET: 'x'.repeat(32), AUTH_TOTP_ISSUER: 'MilVendas',
+    WA_AKG_BASE_URL: 'http://wa.local:3001', WA_AKG_API_KEY: 'k', WA_WEBHOOK_SECRET: 's'.repeat(32) };
+
+  assert.deepEqual(loadFullConfig(common).embeddings, { enabled: false, cacheDir: undefined });
+  assert.deepEqual(loadFullConfig({ ...common, EMBEDDINGS_ENABLED: 'true', EMBEDDINGS_CACHE_DIR: '/var/cache/mv' }).embeddings,
+    { enabled: true, cacheDir: '/var/cache/mv' });
+});
+
+test('loadFullConfig rejeita valor inválido de EMBEDDINGS_ENABLED sem ecoar valor', () => {
+  const common = { DATABASE_URL: 'postgres://u:p@h/db', REDIS_URL: 'redis://h:6379',
+    AUTH_SECRET: 'x'.repeat(32), AUTH_TOTP_ISSUER: 'MilVendas',
+    WA_AKG_BASE_URL: 'http://wa.local:3001', WA_AKG_API_KEY: 'k', WA_WEBHOOK_SECRET: 's'.repeat(32) };
+
+  assert.throws(() => loadFullConfig({ ...common, EMBEDDINGS_ENABLED: 'secret-value' }), (error: Error) => {
+    assert.match(error.message, /EMBEDDINGS_ENABLED/);
+    assert.ok(!error.message.includes('secret-value'));
+    return true;
+  });
+});

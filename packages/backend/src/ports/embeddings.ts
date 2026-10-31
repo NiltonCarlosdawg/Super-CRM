@@ -10,15 +10,14 @@ export interface EmbeddingsProvider {
   /** Dimensão dos vetores; tem de coincidir com a coluna vector do schema. */
   readonly dimensions: number;
 
-  /**
-   * Gera um vetor por cada texto, **pela mesma ordem da entrada**: o resultado
-   * `[i]` corresponde sempre a `texts[i]`. O comprimento do resultado é igual
-   * ao de `texts`.
-   *
-   * `signal` cancela o pedido ao fornecedor quando o job é abortado.
-   */
+  /** Gera vetores na mesma ordem. `kind` escolhe o prefixo do modelo E5. */
   embedTexts(
     texts: readonly string[],
-    signal?: AbortSignal,
+    options?: EmbeddingOptions,
   ): Promise<readonly number[][]>;
+}
+
+export interface EmbeddingOptions {
+  kind?: 'query' | 'passage';
+  signal?: AbortSignal;
 }

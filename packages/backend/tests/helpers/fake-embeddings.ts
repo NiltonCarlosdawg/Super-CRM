@@ -2,7 +2,7 @@
 // rede nem segredos. Mesmo texto → mesmo vetor; textos diferentes → vetores
 // diferentes. Os vetores são normalizados (norma 1) para o cosine da Task 8.
 
-import type { EmbeddingsProvider } from '../../src/ports/embeddings.js';
+import type { EmbeddingOptions, EmbeddingsProvider } from '../../src/ports/embeddings.js';
 
 const DEFAULT_DIMENSIONS = 384;
 
@@ -51,9 +51,9 @@ export function fakeEmbeddings(dimensions = DEFAULT_DIMENSIONS): EmbeddingsProvi
     dimensions,
     async embedTexts(
       texts: readonly string[],
-      signal?: AbortSignal,
+      options?: EmbeddingOptions,
     ): Promise<readonly number[][]> {
-      signal?.throwIfAborted();
+      options?.signal?.throwIfAborted();
       return texts.map((text) => embed(text, dimensions));
     },
   };
