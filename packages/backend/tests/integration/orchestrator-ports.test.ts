@@ -184,14 +184,19 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
   assert.equal(triggers.find((t) => t.code === 'HUMAN_REQUESTED')?.lineSlug, null);
   assert.equal(triggers.find((t) => t.code === 'PRICE_NEGOTIATION')?.lineSlug, 'software');
 
-  // retrieve: default []; injetado é usado
+  // retrieve: default []; injetado é usado E recebe o tenant do forTenant (§7.4)
   assert.deepEqual(await ports.retrieve('olá', 'software'), [], 'default [] (searchChunks é Fase 2/3)');
   const injected = [{ id: 'c1', source: 'doc' as const, sourceId: 'd1', content: 'texto', similarity: 0.9, version: 1 }];
+  let retrievedArgs: unknown[] = [];
   const pRet = createOrchestratorPorts({
     db, notifySink: noNotify, claimTtlMs: 60_000, now: () => new Date(T0),
-    retrieve: async () => injected,
+    retrieve: async (tenantId, query, line) => {
+      retrievedArgs = [tenantId, query, line];
+      return injected;
+    },
   }).forTenant(base.MILVENDAS_TENANT_ID);
   assert.deepEqual(await pRet.retrieve('olá', 'software'), injected);
+  assert.deepEqual(retrievedArgs, [base.MILVENDAS_TENANT_ID, 'olá', 'software'], 'retrieve é tenant-scoped');
 
   // lookupCatalog: só publicado e dentro da validade; line null → []
   const facts = await ports.lookupCatalog('crm', 'software');

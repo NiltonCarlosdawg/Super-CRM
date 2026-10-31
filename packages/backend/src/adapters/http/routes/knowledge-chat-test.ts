@@ -1,9 +1,11 @@
-// Treinar agente, Task 8: chat de teste (`POST /v1/knowledge/chat/test`).
-// editor|admin (o `agent` não escreve conhecimento — spec §9), tenant da sessão
-// em todas as queries, zod estrito na entrada. Compõe os ports do orquestrador
-// com um retrieve/lookup do ALVO pedido:
+// Treinar agente, Task 8 + Fase 2 Task 2: chat de teste
+// (`POST /v1/knowledge/chat/test`). editor|admin (o `agent` não escreve
+// conhecimento — spec §9), tenant da sessão em todas as queries, zod estrito na
+// entrada. Compõe os ports do orquestrador com um retrieve/lookup do ALVO pedido:
 //   • `draft`    → chunks e catálogo do staging do tenant (o que se está a treinar);
-//   • `published`→ vazio: o retrieve de produção (embeddings) é ADR pendente.
+//   • `published`→ `retrievePublished` (pgvector + FTS, §7.4) e o lookup de
+//     catálogo dos ports de produção; `lineSlug` (opcional) escolhe a linha —
+//     sem linha segue o comportamento real (catálogo=[], só docs globais).
 // A conversa é sintética (`is_test = true`, `line_id = null`) e reutilizada entre
 // chamadas; `createTestChat` corre o orquestrador com `isTest: true` e devolve
 // `{ reply, sources }` a partir do `answer_trace` (fonte única).
@@ -18,9 +20,14 @@ import {
   retrieveForTarget,
   type ChatTarget,
 } from '../../../modules/knowledge/draft-retrieval.js';
+import { retrievePublished } from '../../../modules/knowledge/published-retrieval.js';
 import { createTestChat } from '../../../modules/knowledge/test-chat.js';
 import { ensureTestConversation } from '../../../modules/knowledge/test-conversation.js';
-import type { TrainDeps } from '../../../modules/knowledge/train-service.js';
+import {
+  resolveLineId,
+  TrainServiceError,
+  type TrainDeps,
+} from '../../../modules/knowledge/train-service.js';
 import type { HttpDeps } from '../app.js';
 import { HttpError } from '../errors.js';
 import { authenticate, requireAnyRole, requireTenant } from '../guards.js';
@@ -29,6 +36,8 @@ const chatBodySchema = z
   .object({
     text: z.string().min(1).max(2000),
     target: z.enum(['draft', 'published']).default('published'),
+    /** Vocabulário do domínio (docs/01 §6): só no alvo published; nunca se adivinha. */
+    lineSlug: z.enum(['software', 'custom', 'telecom', 'cctv']).optional(),
   })
   .strict();
 
@@ -78,10 +87,34 @@ export async function knowledgeChatTestRoutes(
     }
 
     const trainDeps = mkDeps(request);
+    const base = factory.forTenant(trainDeps.scope.tenantId);
+    const line = body.lineSlug ?? null;
+    // Linha referenciada tem de existir (nunca se adivinha): 404 cedo, antes
+    // de correr o chat, para o utilizador ver o erro na fronteira HTTP.
+    if (target === 'published' && line !== null) {
+      try {
+        await resolveLineId(db, line);
+      } catch (error) {
+        if (error instanceof TrainServiceError) {
+          throw new HttpError(error.status, error.code, error.message);
+        }
+        throw error;
+      }
+    }
     const ports: Ports = {
-      ...factory.forTenant(trainDeps.scope.tenantId),
-      retrieve: (query) => retrieveForTarget(trainDeps, query, target),
-      lookupCatalog: (query) => lookupCatalogForTarget(trainDeps, query, target),
+      ...base,
+      retrieve:
+        target === 'published'
+          ? (query) =>
+              retrievePublished(trainDeps, query, line, {
+                topK: knowledge.aiCfg.retrievalTopK,
+                minSimilarity: knowledge.aiCfg.retrievalMinSimilarity,
+              })
+          : (query) => retrieveForTarget(trainDeps, query, target),
+      lookupCatalog:
+        target === 'published'
+          ? (query) => base.lookupCatalog(query, line)
+          : (query) => lookupCatalogForTarget(trainDeps, query, target),
     };
 
     const conversationId = await ensureTestConversation(db, trainDeps.scope.tenantId);

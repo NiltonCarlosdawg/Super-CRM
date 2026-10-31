@@ -19,6 +19,8 @@ import { conversations, contacts, whatsappAccounts } from '../../src/adapters/db
 import {
   businessLines,
   handoffs,
+  knowledgeChunks,
+  knowledgeDocs,
   knowledgeDraftItems,
   knowledgeGaps,
   type DraftEntityType,
@@ -320,6 +322,94 @@ test('published (default): o conteúdo do rascunho não entra no retrieve de pro
     assert.equal(res.statusCode, 200);
     const body = res.json() as { reply: string | null; sources: unknown[] };
     assert.deepEqual(body.sources, [], 'sem fontes: o rascunho não é conhecimento publicado');
+  } finally {
+    await app.close();
+  }
+});
+
+test('published: serve o conhecimento publicado com a linha pedida e 404 para linha não semeada', async () => {
+  const embedder = lexicalEmbeddings();
+  const publishedChunkId = randomUUID();
+  const app = await buildTestApp({
+    embedder,
+    llmSteps: [
+      submitStep([{ type: 'chunk', id: publishedChunkId }]),
+      submitStep([{ type: 'chunk', id: publishedChunkId }]),
+    ],
+  });
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    const [cctv] = await app.db
+      .select({ id: businessLines.id })
+      .from(businessLines)
+      .where(eq(businessLines.slug, 'cctv'));
+    assert.ok(cctv !== undefined, 'fixture: linha cctv');
+    const [vector] = await embedder.embedTexts([DOC_BODY]);
+    assert.ok(vector !== undefined, 'fixture: embedding');
+    const [doc] = await app.db
+      .insert(knowledgeDocs)
+      .values({
+        tenantId: base.MILVENDAS_TENANT_ID,
+        lineId: cctv.id,
+        type: 'faq',
+        title: 'Preços de CCTV (publicado)',
+        slug: 'precos-cctv-publicado',
+        body: DOC_BODY,
+        status: 'published',
+        ownerId: randomUUID(),
+        version: 1,
+      })
+      .returning({ id: knowledgeDocs.id });
+    assert.ok(doc !== undefined, 'fixture: doc publicado');
+    await app.db.insert(knowledgeChunks).values({
+      id: publishedChunkId,
+      tenantId: base.MILVENDAS_TENANT_ID,
+      source: 'doc',
+      docId: doc.id,
+      catalogItemId: null,
+      position: 0,
+      content: DOC_BODY,
+      embedding: [...vector],
+      embeddingModel: embedder.model,
+      active: true,
+    });
+
+    // linha correcta → o chunk publicado é servido e citado no trace (§7.4)
+    const withLine = await call(app, 'POST', '/v1/knowledge/chat/test', s, {
+      text: DOC_BODY,
+      target: 'published',
+      lineSlug: 'cctv',
+    });
+    assert.equal(withLine.statusCode, 200);
+    const body = withLine.json() as { sources: Array<{ id: string }> };
+    assert.deepEqual(
+      body.sources.map((source) => source.id),
+      [publishedChunkId],
+      'a fonte é o chunk PUBLICADO da linha cctv',
+    );
+
+    // linha errada → o chunk da linha cctv não entra (nunca se adivinha linha)
+    const wrongLine = await call(app, 'POST', '/v1/knowledge/chat/test', s, {
+      text: DOC_BODY,
+      target: 'published',
+      lineSlug: 'software',
+    });
+    assert.equal(wrongLine.statusCode, 200);
+    assert.deepEqual(
+      (wrongLine.json() as { sources: unknown[] }).sources,
+      [],
+      'doc da linha cctv não serve para software',
+    );
+
+    // enum válido mas linha fora do vocabulário semeado → 404 na fronteira
+    const missingLine = await call(app, 'POST', '/v1/knowledge/chat/test', s, {
+      text: DOC_BODY,
+      target: 'published',
+      lineSlug: 'telecom',
+    });
+    assert.equal(missingLine.statusCode, 404);
+    assert.equal((missingLine.json() as { title: string }).title, 'line_not_found');
   } finally {
     await app.close();
   }

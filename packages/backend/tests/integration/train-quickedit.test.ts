@@ -14,10 +14,14 @@ import * as base from '../../src/adapters/db/schema/index.js';
 import {
   businessLines,
   catalogItems,
+  knowledgeChunks,
+  knowledgeDocs,
   knowledgeDraftItems,
   knowledgePublications,
   knowledgeRevisions,
+  rules,
 } from '../../src/modules/knowledge/knowledge.schema.js';
+import type { EmbeddingsProvider } from '../../src/ports/embeddings.js';
 import { buildTestApp, type TestApp } from '../helpers/http.js';
 
 interface Sess {
@@ -529,6 +533,194 @@ test('listagem de publicações: 200 desc por createdAt, só do tenant, agent 40
       csrf: app.csrf.agent,
     });
     assert.equal(forbidden.statusCode, 403);
+  } finally {
+    await app.close();
+  }
+});
+
+// ─────────── Fase 2, Task 2 (§7.4 [call]): reconciliação de chunks ───────────
+//
+// Com a pesquisa semântica activa, servir texto antigo (p.ex. preço antigo) é
+// um BUG: edição rápida e reversão apagam e recriam os chunks da entidade a
+// partir do estado final, na mesma transacção. Regras nunca têm chunks; falha
+// do embedder não bloqueia a edição (chunks sem vector → FTS até reembed).
+
+/** Doc publicado por insert directo, com um chunk "antigo" activo. */
+async function insertPublishedDocWithStaleChunk(
+  app: TestApp,
+  input: { slug: string; body: string; staleContent: string },
+): Promise<string> {
+  const [doc] = await app.db
+    .insert(knowledgeDocs)
+    .values({
+      tenantId: base.MILVENDAS_TENANT_ID,
+      lineId: null,
+      type: 'policy',
+      title: 'Garantia da instalação',
+      slug: input.slug,
+      body: input.body,
+      status: 'published',
+      ownerId: app.users.editor.id,
+      version: 1,
+    })
+    .returning({ id: knowledgeDocs.id });
+  assert.ok(doc !== undefined, 'fixture: doc publicado');
+  const [chunk] = await app.db
+    .insert(knowledgeChunks)
+    .values({
+      tenantId: base.MILVENDAS_TENANT_ID,
+      source: 'doc',
+      docId: doc.id,
+      catalogItemId: null,
+      position: 0,
+      content: input.staleContent,
+      embedding: null,
+      embeddingModel: null,
+      active: true,
+    })
+    .returning({ id: knowledgeChunks.id });
+  assert.ok(chunk !== undefined, 'fixture: chunk antigo');
+  return doc.id;
+}
+
+const chunksOfDoc = (app: TestApp, docId: string) =>
+  app.db.select().from(knowledgeChunks).where(eq(knowledgeChunks.docId, docId));
+
+test('fase 2 (§7.4): edição rápida regenera os chunks do doc do estado final', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const docId = await insertPublishedDocWithStaleChunk(app, {
+      slug: 'garantia-instalacao',
+      body: 'A instalação tem garantia de 12 meses.',
+      staleContent: 'TEXTO ANTIGO QUE NÃO DEVE SER SERVIDO',
+    });
+
+    const res = await call(app, 'PATCH', `/v1/knowledge/items/${docId}`, editor(app), {
+      entityType: 'knowledge_doc',
+      patch: { body: 'A instalação tem garantia de 24 meses.' },
+    });
+    assert.equal(res.statusCode, 200);
+
+    const chunks = await chunksOfDoc(app, docId);
+    assert.equal(chunks.length, 1, 'chunks substituídos, não acrescentados');
+    assert.equal(
+      chunks[0]?.content,
+      'A instalação tem garantia de 24 meses.',
+      'conteúdo do estado final',
+    );
+    assert.ok(
+      !chunks[0]?.content.includes('TEXTO ANTIGO'),
+      'o texto antigo deixa de ser servido',
+    );
+    assert.ok(chunks[0]?.embedding, 'vector regenerado');
+    assert.equal(chunks[0]?.embeddingModel, 'fake-embeddings-384', 'modelo carimbado');
+    assert.equal(chunks[0]?.active, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('fase 2 (§7.4): reversão regenera os chunks do snapshot restaurado', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const docId = await insertPublishedDocWithStaleChunk(app, {
+      slug: 'garantia-instalacao',
+      body: 'A instalação tem garantia de 12 meses.',
+      staleContent: 'TEXTO ANTIGO QUE NÃO DEVE SER SERVIDO',
+    });
+
+    const edited = await call(app, 'PATCH', `/v1/knowledge/items/${docId}`, editor(app), {
+      entityType: 'knowledge_doc',
+      patch: { body: 'A instalação tem garantia de 24 meses.' },
+    });
+    assert.equal(edited.statusCode, 200);
+    const publicationId = (edited.json() as { publicationId: string }).publicationId;
+
+    const res = await call(app, 'POST', '/v1/knowledge/published/revert', admin(app), {
+      publicationId,
+    });
+    assert.equal(res.statusCode, 200);
+
+    const chunks = await chunksOfDoc(app, docId);
+    assert.equal(chunks.length, 1, 'chunks substituídos, não acrescentados');
+    assert.equal(
+      chunks[0]?.content,
+      'A instalação tem garantia de 12 meses.',
+      'chunks do snapshot restaurado (não reactivados velhos)',
+    );
+    assert.ok(chunks[0]?.embedding, 'vector regenerado na reversão');
+    assert.equal(chunks[0]?.active, true);
+  } finally {
+    await app.close();
+  }
+});
+
+test('fase 2 (§7.4): regras nunca têm chunks (edição rápida de regra não cria nenhum)', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const line = await lineId(app, 'cctv');
+    const [rule] = await app.db
+      .insert(rules)
+      .values({
+        tenantId: base.MILVENDAS_TENANT_ID,
+        lineId: line,
+        kind: 'discount_limit',
+        title: 'Desconto máximo',
+        slug: 'desconto-maximo',
+        instruction: 'Nunca dar mais de 10% de desconto.',
+        params: { maxDiscountPct: 10 },
+        status: 'published',
+        ownerId: app.users.editor.id,
+        version: 1,
+      })
+      .returning({ id: rules.id });
+    assert.ok(rule !== undefined, 'fixture: regra publicada');
+
+    const res = await call(app, 'PATCH', `/v1/knowledge/items/${rule.id}`, editor(app), {
+      entityType: 'rule',
+      patch: { instruction: 'Nunca dar mais de 5% de desconto.' },
+    });
+    assert.equal(res.statusCode, 200);
+
+    const chunks = await app.db.select().from(knowledgeChunks);
+    assert.deepEqual(chunks, [], 'regras ficam fora da pesquisa semântica (vão por rules())');
+  } finally {
+    await app.close();
+  }
+});
+
+test('fase 2 (§7.4): falha do embedder não bloqueia a edição — chunks sem vector (FTS)', async () => {
+  const failingEmbedder: EmbeddingsProvider = {
+    model: 'fake-falha-384',
+    dimensions: 384,
+    embedTexts: async () => {
+      throw new Error('inferência indisponível');
+    },
+  };
+  const app = await buildTestApp({ embedder: failingEmbedder });
+  try {
+    await seedLines(app);
+    const docId = await insertPublishedDocWithStaleChunk(app, {
+      slug: 'garantia-instalacao',
+      body: 'A instalação tem garantia de 12 meses.',
+      staleContent: 'TEXTO ANTIGO QUE NÃO DEVE SER SERVIDO',
+    });
+
+    const res = await call(app, 'PATCH', `/v1/knowledge/items/${docId}`, editor(app), {
+      entityType: 'knowledge_doc',
+      patch: { body: 'A instalação tem garantia de 24 meses.' },
+    });
+    assert.equal(res.statusCode, 200, 'a edição humana nunca fica bloqueada (§7.4)');
+
+    const chunks = await chunksOfDoc(app, docId);
+    assert.equal(chunks.length, 1, 'chunks regenerados mesmo sem vector');
+    assert.equal(chunks[0]?.content, 'A instalação tem garantia de 24 meses.');
+    assert.equal(chunks[0]?.embedding, null, 'sem vector: servido por FTS até ao reembed');
+    assert.equal(chunks[0]?.embeddingModel, 'fake-falha-384');
+    assert.equal(chunks[0]?.active, true);
   } finally {
     await app.close();
   }

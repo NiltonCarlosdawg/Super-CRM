@@ -122,4 +122,31 @@ export async function knowledgeItemsRoutes(app: FastifyInstance, deps: HttpDeps)
       }
     },
   );
+
+  // Fase 2 Task 2 (§7.3): backfill de embeddings do activo (chunks sem vetor
+  // ou de modelo antigo). Sem embedder o efeito é indispensável → 503 (ao
+  // contrário do retrieve, que cai em FTS e continua a servir).
+  app.post('/v1/knowledge/reembed', { preHandler: guard }, async (request, reply) => {
+    if (knowledge.embedder === undefined) {
+      throw new HttpError(
+        503,
+        'embeddings_unavailable',
+        'embeddings locais desligados (EMBEDDINGS_ENABLED=false)',
+      );
+    }
+    const { tenantId } = scope(request);
+    await knowledge.jobs.enqueue(
+      'knowledge.reembed',
+      { tenantId },
+      {
+        // Chave por pedido: uma chave fixa por tenant ficaria deduped para
+        // sempre pelo jobId determinístico do BullMQ (ex.: depois de trocar de
+        // modelo não havia como disparar novo reembed). O handler é idempotente
+        // por efeito — só preenche o que falta.
+        idempotencyKey: `knowledge.reembed:${tenantId}:${knowledge.now().getTime()}`,
+        correlationId: tenantId,
+      },
+    );
+    return reply.code(202).send({ queued: true });
+  });
 }

@@ -33,7 +33,10 @@ import {
   type DraftEntityType,
   type StagedItemRow,
 } from './knowledge.schema.js';
+import type { EmbeddingsProvider } from '../../ports/embeddings.js';
 import {
+  buildChunks,
+  chunkContentsFor,
   listDraftItems,
   resolveLineId,
   TrainServiceError,
@@ -504,6 +507,74 @@ async function replaceChunks(
   );
 }
 
+/**
+ * Estado final de um doc/catálogo no formato do payload staged (para o
+ * chunking reutilizar as regras do train-service).
+ */
+async function finalChunkPayload(
+  tx: TxClient,
+  tenantId: string,
+  entityType: 'knowledge_doc' | 'catalog_item',
+  entityId: string,
+): Promise<Record<string, unknown> | null> {
+  if (entityType === 'knowledge_doc') {
+    const [row] = await tx
+      .select({ body: knowledgeDocs.body })
+      .from(knowledgeDocs)
+      .where(and(eq(knowledgeDocs.tenantId, tenantId), eq(knowledgeDocs.id, entityId)));
+    return row === undefined ? null : { kind: 'knowledge_doc', body: row.body };
+  }
+  const [row] = await tx
+    .select({ name: catalogItems.name, summary: catalogItems.summary, details: catalogItems.details })
+    .from(catalogItems)
+    .where(and(eq(catalogItems.tenantId, tenantId), eq(catalogItems.id, entityId)));
+  return row === undefined
+    ? null
+    : { kind: 'catalog_item', name: row.name, summary: row.summary, details: row.details };
+}
+
+/**
+ * §7.4 [call]: reconcilia os chunks de um doc/catálogo com o estado FINAL da
+ * entidade — apaga e recria na mesma transacção (edição rápida e reversão, para
+ * a pesquisa semântica nunca servir texto antigo). Best-effort: se a inferência
+ * falhar, os chunks ficam sem vector e são servidos por FTS até ao job de
+ * reembed; a edição/reversão humana nunca fica bloqueada. Regras não têm chunks.
+ */
+async function reconcileChunks(
+  tx: TxClient,
+  input: {
+    tenantId: string;
+    entityType: 'knowledge_doc' | 'catalog_item';
+    entityId: string;
+    embedder: EmbeddingsProvider | undefined;
+  },
+): Promise<void> {
+  // Estado final lido DENTRO da transacção (o patch/restore já escreveu e o
+  // lock FOR UPDATE está tomado): a source of truth é a row, não a memória.
+  const payload = await finalChunkPayload(
+    tx,
+    input.tenantId,
+    input.entityType,
+    input.entityId,
+  );
+  if (payload === null) return; // não acontece: a row está carregada e travada
+
+  const contents = chunkContentsFor(payload);
+  let chunks: StagedChunk[];
+  try {
+    chunks = await buildChunks(contents, input.embedder);
+  } catch {
+    chunks = contents.map((content, position) => ({ position, content, embedding: null }));
+  }
+  await replaceChunks(tx, {
+    tenantId: input.tenantId,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    chunks,
+    embeddingModel: input.embedder?.model ?? null,
+  });
+}
+
 /** Arquivar um doc/catálogo tira os chunks da pesquisa sem apagar o histórico. */
 async function deactivateChunks(
   tx: TxClient,
@@ -969,6 +1040,30 @@ export async function validateDraft(
   }
 
   const now = deps.now();
+
+  // §7.3: chunks staged sem vetor (staging feito antes de o embedder existir)
+  // são vectorizados aqui, antes de materializar. Best-effort: se a inferência
+  // falhar, a publicação segue sem vetor — o retrieve serve FTS até ao job de
+  // reembed os preencher (a validação humana nunca fica bloqueada).
+  if (deps.embedder !== undefined) {
+    for (const write of plan) {
+      if (write.action === 'archive') continue;
+      const missing = write.chunks.filter((chunk) => chunk.embedding === null);
+      if (missing.length === 0) continue;
+      try {
+        const vectors = await deps.embedder.embedTexts(missing.map((chunk) => chunk.content));
+        if (vectors.length !== missing.length) {
+          throw new Error('embeddings: o número de vetores não coincide com o dos textos');
+        }
+        for (const [index, chunk] of missing.entries()) {
+          chunk.embedding = vectors[index] ?? null;
+        }
+      } catch {
+        // Best-effort por desenho (§7.3): sem log de conteúdo, sem bloqueio.
+      }
+    }
+  }
+
   let publicationId: string;
   try {
     publicationId = await deps.db.transaction(async (tx) => {
@@ -1400,10 +1495,10 @@ function changesFromApplied(applied: unknown): PublicationChange[] | null {
  * `quote_only` seguem a regra da extracção. Tudo numa transacção: publicação
  * `quick_edit` + revisão do estado actual + update com bump de versão.
  *
- * Os `knowledge_chunks` NÃO são regenerados aqui: a busca semântica está
- * inactiva por desenho até ao ADR dos embeddings e os chunks voltam a ser
- * materializados na próxima publicação que corra com embedder. Limitação
- * aceite no fix round 1 (ruling 2).
+ * §7.4 [call] (Fase 2): os `knowledge_chunks` de docs/catálogo são regenerados
+ * do estado final dentro da mesma transacção (após o ADR-0014 a busca
+ * semântica está activa e servir texto antigo seria um bug). Regras não têm
+ * chunks.
  */
 export async function quickEditItem(
   deps: TrainDeps,
@@ -1466,6 +1561,17 @@ export async function quickEditItem(
       tenantId: deps.scope.tenantId,
       now,
     });
+
+    // §7.4 [call]: os chunks passam a ser regenerados do estado final — a
+    // pesquisa semântica nunca serve texto antigo (regras não têm chunks).
+    if (current.entityType !== 'rule') {
+      await reconcileChunks(tx, {
+        tenantId: deps.scope.tenantId,
+        entityType: current.entityType,
+        entityId: current.row.id,
+        embedder: deps.embedder,
+      });
+    }
 
     return publication.id;
   });
@@ -1785,34 +1891,6 @@ async function restoreEntity(
   }
 }
 
-/** Reactiva os chunks de um item restaurado (a pesquisa volta a vê-lo). */
-async function reactivateChunks(
-  tx: TxClient,
-  input: { tenantId: string; entityType: 'knowledge_doc' | 'catalog_item'; entityId: string },
-): Promise<void> {
-  if (input.entityType === 'knowledge_doc') {
-    await tx
-      .update(knowledgeChunks)
-      .set({ active: true })
-      .where(
-        and(
-          eq(knowledgeChunks.tenantId, input.tenantId),
-          eq(knowledgeChunks.docId, input.entityId),
-        ),
-      );
-    return;
-  }
-  await tx
-    .update(knowledgeChunks)
-    .set({ active: true })
-    .where(
-      and(
-        eq(knowledgeChunks.tenantId, input.tenantId),
-        eq(knowledgeChunks.catalogItemId, input.entityId),
-      ),
-    );
-}
-
 /** Arquivar por reversão de uma criação (chunks saem da pesquisa). */
 async function archiveEntity(
   tx: TxClient,
@@ -1994,10 +2072,14 @@ export async function revertPublication(
 
       await restoreEntity(tx, plan.entity, plan.snapshot, { tenantId, now });
       if (plan.entity.entityType !== 'rule') {
-        await reactivateChunks(tx, {
+        // §7.4 [call] (Fase 2): o texto do snapshot pode diferir do que os
+        // chunks antigos serviam — apaga e recria a partir do estado
+        // restaurado (substitui a simples reactivação).
+        await reconcileChunks(tx, {
           tenantId,
           entityType: plan.entity.entityType,
           entityId: plan.entity.row.id,
+          embedder: deps.embedder,
         });
       }
     }

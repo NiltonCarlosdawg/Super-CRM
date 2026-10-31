@@ -88,7 +88,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Conteúdo dos chunks por tipo de payload (regras da T2). */
-function chunkContentsFor(payload: Record<string, unknown>): string[] {
+export function chunkContentsFor(payload: Record<string, unknown>): string[] {
   switch (payload.kind) {
     case 'knowledge_doc':
       return typeof payload.body === 'string' ? chunkText(payload.body) : [];
@@ -140,7 +140,7 @@ async function buildChunkGroups(
 }
 
 /** Vetoriza os chunks de UM item (usado pela correção de payload no PATCH). */
-async function buildChunks(
+export async function buildChunks(
   contents: readonly string[],
   embedder: EmbeddingsProvider | undefined,
 ): Promise<StagedChunk[]> {

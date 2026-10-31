@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import { z } from 'zod';
 import { buildHttpApp } from '../adapters/http/app.js';
 import { parseAIConfig, type AIConfig } from '../adapters/ai/config.js';
+import { createLocalEmbeddingsProvider } from '../adapters/ai/embeddings-provider.js';
 import { createLlmAIProvider } from '../adapters/ai/llm-ai-provider.js';
 import { createTransport } from '../adapters/ai/transports/index.js';
 import { createUnavailableAiProvider } from '../adapters/ai/unavailable.js';
@@ -35,6 +36,8 @@ import { createMessageSender } from '../application/messaging.js';
 import { handleInbound, type InboundMessage, type Outcome } from '../application/orchestrator.js';
 import { runOutboxTick } from '../application/outbox-worker.js';
 import { createExtractHandler } from '../modules/knowledge/extract-job.js';
+import { createReembedHandler } from '../modules/knowledge/reembed-job.js';
+import { retrievePublished } from '../modules/knowledge/published-retrieval.js';
 import {
   DEFAULT_SETTINGS,
   ensureSettingsSeed,
@@ -192,27 +195,52 @@ async function main(): Promise<void> {
     now,
   });
 
+  const unavailableAiProvider = createUnavailableAiProvider();
+
+  // Treinar agente (Task 9): bundle de conhecimento SEMPRE montado — as rotas
+  // `/v1/knowledge/*` respondem mesmo sem `AI_API_KEY`; nesse caso a extração
+  // falha e o upload fica `status='error'` (nunca se inventa conhecimento).
+  // O modelo local só carrega pesos no primeiro uso; a flag é opt-in até
+  // validar a RAM disponível no host cPanel.
+  const knowledgeAi = createKnowledgeAi(process.env, unavailableAiProvider);
+  const embedder = config.embeddings.enabled
+    ? createLocalEmbeddingsProvider(
+        config.embeddings.cacheDir === undefined ? {} : { cacheDir: config.embeddings.cacheDir },
+      )
+    : undefined;
+  const settings = await loadBootSettings(db, log);
+
   // Task 19+20 (docs/05 §3.1): orquestrador de inbound SEM IA configurada —
   // `createUnavailableAiProvider` rejeita sempre → o orquestrador cai no
   // failSafe (ai_active: mensagem fixa + passa a humano; ai_suggest: rascunho
   // por aprovar, D13) — e o job 'inbound.process' que despacha por tipo.
   // Onda 1 (Task 5, ruling R1): o job resolve o tenant pela conta do webhook e
   // cria os ports do orquestrador DESSE tenant (`forTenant`).
+  // Fase 2 Task 2 (§7.4): retrieve real do orquestrador — `retrievePublished`
+  // tenant-scoped, com pgvector e fallback FTS; a flag `EMBEDDINGS_ENABLED`
+  // não bloqueia a entrega (sem embedder serve-se lexical).
   const orchestratorPorts = createOrchestratorPorts({
     db,
     notifySink: socketNotify,
     claimTtlMs: config.messaging.claimTtlMs,
     now,
+    retrieve: (tenantId, query, line) =>
+      retrievePublished(
+        {
+          db,
+          scope: { tenantId },
+          audit,
+          now,
+          ...(embedder === undefined ? {} : { embedder }),
+        },
+        query,
+        line,
+        {
+          topK: knowledgeAi.aiCfg.retrievalTopK,
+          minSimilarity: knowledgeAi.aiCfg.retrievalMinSimilarity,
+        },
+      ),
   });
-  const unavailableAiProvider = createUnavailableAiProvider();
-
-  // Treinar agente (Task 9): bundle de conhecimento SEMPRE montado — as rotas
-  // `/v1/knowledge/*` respondem mesmo sem `AI_API_KEY`; nesse caso a extração
-  // falha e o upload fica `status='error'` (nunca se inventa conhecimento).
-  // `embedder` omitido de propósito: o runtime de embeddings é ADR pendente
-  // (ADR-0002/A4) e o código já lida com a ausência (chunks sem vetor).
-  const knowledgeAi = createKnowledgeAi(process.env, unavailableAiProvider);
-  const settings = await loadBootSettings(db, log);
 
   const app = buildHttpApp({
     cfg: config,
@@ -239,6 +267,7 @@ async function main(): Promise<void> {
       provider: knowledgeAi.provider,
       aiCfg: knowledgeAi.aiCfg,
       settings,
+      ...(embedder === undefined ? {} : { embedder }),
       jobs,
       audit,
       now,
@@ -301,11 +330,21 @@ async function main(): Promise<void> {
     createExtractHandler({
       db,
       provider: knowledgeAi.provider,
+      ...(embedder === undefined ? {} : { embedder }),
       audit,
       now,
       logger: log,
     }),
   );
+
+  // Fase 2 Task 2 (§7.3): backfill de embeddings. Sem embedder não há handler
+  // — a rota responde 503 e nada chega à fila.
+  if (embedder !== undefined) {
+    await jobs.register(
+      'knowledge.reembed',
+      createReembedHandler({ db, embedder, audit, now }),
+    );
+  }
 
   // Task 18 (docs/04 §7): o worker da outbox corre como job recorrente.
   // Payload SEMPRE vazio (validado com zod); erro do tick → log + rethrow

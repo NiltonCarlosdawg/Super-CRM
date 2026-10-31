@@ -26,6 +26,7 @@ import { createTenancyPort } from '../../src/adapters/db/tenancy.js';
 import { createTenantsRepository } from '../../src/adapters/db/tenants.js';
 import { createUsersRepository } from '../../src/adapters/db/users.js';
 import { createExtractHandler } from '../../src/modules/knowledge/extract-job.js';
+import { createReembedHandler } from '../../src/modules/knowledge/reembed-job.js';
 import { attachRealtime, type RealtimeHandle } from '../../src/adapters/realtime/socket.js';
 import { createLoginService } from '../../src/application/auth/login.js';
 import { createLoginLimiter } from '../../src/application/auth/login-limiter.js';
@@ -141,7 +142,8 @@ export interface TestApp extends FastifyInstance {
     provider: AIProvider;
     aiCfg: AIConfig;
     settings: Settings;
-    embedder: EmbeddingsProvider;
+    /** Fase 2 Task 2: `undefined` quando a app é montada com `omitEmbedder`. */
+    embedder: EmbeddingsProvider | undefined;
     jobs: CapturingJobQueue;
   };
   /** Fila capturadora dos jobs de conhecimento (enqueue/register em memória). */
@@ -178,6 +180,8 @@ export async function buildTestApp(
      * quando precisa de similaridade real entre a pergunta e o chunk.
      */
     embedder?: EmbeddingsProvider;
+    /** Fase 2 Task 2: monta a app SEM embedder (rota reembed → 503). */
+    omitEmbedder?: boolean;
     /** Treinar agente (Task 8): monta a app SEM a fábrica de ports (caso 503). */
     omitKnowledgePorts?: boolean;
   },
@@ -272,19 +276,33 @@ export async function buildTestApp(
     random: () => 0.5,
     now: () => Date.now(),
   });
-  const knowledgeEmbedder = overrides?.embedder ?? fakeEmbeddings();
+  const knowledgeEmbedder =
+    overrides?.omitEmbedder === true ? undefined : (overrides?.embedder ?? fakeEmbeddings());
   const knowledgeJobs = createCapturingJobQueue();
   await knowledgeJobs.register(
     'knowledge.extract',
     createExtractHandler({
       db,
       provider: knowledgeProvider,
-      embedder: knowledgeEmbedder,
+      ...(knowledgeEmbedder === undefined ? {} : { embedder: knowledgeEmbedder }),
       audit,
       now: () => new Date(),
       logger: knowledgelog,
     }),
   );
+  // Fase 2 Task 2: backfill de embeddings. Só registado com embedder — sem
+  // ele a rota responde 503 e nada chega à fila.
+  if (knowledgeEmbedder !== undefined) {
+    await knowledgeJobs.register(
+      'knowledge.reembed',
+      createReembedHandler({
+        db,
+        embedder: knowledgeEmbedder,
+        audit,
+        now: () => new Date(),
+      }),
+    );
+  }
 
   const app = buildHttpApp({
     cfg,
@@ -318,7 +336,7 @@ export async function buildTestApp(
       aiCfg: TEST_AI_CONFIG,
       settings: DEFAULT_SETTINGS,
       jobs: knowledgeJobs,
-      embedder: knowledgeEmbedder,
+      ...(knowledgeEmbedder === undefined ? {} : { embedder: knowledgeEmbedder }),
       audit,
       now: () => new Date(),
       ...(overrides?.omitKnowledgePorts === true ? {} : { portsFactory: knowledgePortsFactory }),

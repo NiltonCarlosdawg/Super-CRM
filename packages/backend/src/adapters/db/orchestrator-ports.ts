@@ -23,6 +23,7 @@ import type {
   Ports,
   Priority,
   QualificationQuestion,
+  RetrievedChunk,
   RuleDef,
   TraceInput,
   TriggerDef,
@@ -48,8 +49,12 @@ export interface OrchestratorPortsDeps {
   claimTtlMs: number;
   /** Usado como $now em TODO o SQL (relógio controlado nos testes). */
   now(): Date;
-  /** Fase 2/3 ligam searchChunks + embeddings; default nunca inventa fonte. */
-  retrieve?: Ports['retrieve'];
+  /**
+   * Fase 2/3 ligam `retrievePublished` (§7.4). Recebe o `tenantId` porque este
+   * factory é global (o tenant só existe dentro de `forTenant`) — sem isso o
+   * retrieve não seria tenant-scoped. Default nunca inventa fonte ([]).
+   */
+  retrieve?: (tenantId: string, query: string, line: LineSlug | null) => Promise<RetrievedChunk[]>;
   /** Default 20. */
   turnsLimit?: number;
 }
@@ -65,7 +70,7 @@ export interface OrchestratorPortsFactory {
 
 export function createOrchestratorPorts(deps: OrchestratorPortsDeps): OrchestratorPortsFactory {
   const { db, notifySink, claimTtlMs, now } = deps;
-  const retrieve: Ports['retrieve'] = deps.retrieve ?? (async () => []);
+  const retrieveFor = deps.retrieve;
   const turnsLimit = deps.turnsLimit ?? 20;
 
   /** Linha (slug) → id, para os upserts; slug desconhecido → null (contagem global).
@@ -157,7 +162,9 @@ export function createOrchestratorPorts(deps: OrchestratorPortsDeps): Orchestrat
           });
         },
 
-        retrieve,
+        /** Tenant-scoped: o retrieve recebe o tenant do `forTenant` (§7.4). */
+        retrieve: async (query, line) =>
+          retrieveFor === undefined ? [] : retrieveFor(tenantId, query, line),
 
         async lookupCatalog(query: string, line: LineSlug | null): Promise<CatalogFact[]> {
           if (line === null) return []; // catalog_items.line_id é NOT NULL: sem linha não há itens

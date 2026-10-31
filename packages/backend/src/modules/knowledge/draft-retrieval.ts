@@ -1,9 +1,9 @@
 // Treinar agente, Task 8: retrieve do chat de teste por alvo.
 // O alvo `draft` lê os chunks do STAGING (`knowledge_draft_items.chunks`) do
 // tenant e pontua-os: cosseno quando há embedder, sobreposição de tokens quando
-// não há. O alvo `published` devolve vazio: o retrieve de produção
-// (`searchChunks` sobre `knowledge_chunks`) depende do runtime de embeddings,
-// que é ADR pendente (ADR-0002/A4) — o chat de teste não inventa fontes do activo.
+// não há. O alvo `published` devolve vazio AQUI por defesa: a rota serve-o com
+// `retrievePublished` (pgvector+FTS, Fase 2 Task 2 §7.4) — este módulo trata
+// só do staging e nunca inventa fontes do activo.
 //
 // Os chunks do staging vivem num jsonb sem id próprio: o id citável é sintético
 // e estável (`staged:chunk:<slug>:<position>`), e o mesmo para o catálogo
@@ -102,7 +102,7 @@ export async function scoreChunks(
   const scored: ScoredChunk[] = [];
 
   if (embedder !== undefined) {
-    const [queryVector] = await embedder.embedTexts([query]);
+    const [queryVector] = await embedder.embedTexts([query], { kind: 'query' });
     if (queryVector === undefined) return [];
     for (const chunk of chunks) {
       if (chunk.embedding === null) continue;
@@ -237,7 +237,8 @@ function catalogFactFromRow(row: {
 /**
  * Lookup de catálogo do chat de teste. `draft` devolve os factos dos itens de
  * catálogo staged cujo texto (nome, resumo, detalhes) partilha tokens com a
- * query; `published` devolve vazio (mesma razão do retrieve).
+ * query; `published` devolve vazio AQUI por defesa (a rota usa o lookup dos
+ * ports de produção, §7.4).
  */
 export async function lookupCatalogForTarget(
   deps: TrainDeps,

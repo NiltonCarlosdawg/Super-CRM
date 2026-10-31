@@ -84,6 +84,7 @@ pelo `tenant_id` da sessão.
 | `GET /v1/knowledge/published?limit=50` | — | `200 {"items":[{"entityType":"catalog_item","slug":"camaras-cctv","name":"Câmaras CCTV","version":3,…}]}` |
 | `GET /v1/knowledge/publications?limit=50` | — | `200 {"publications":[{"id":"…","kind":"train","applied":{…},…}]}` |
 | `POST /v1/knowledge/published/revert` | `{"publicationId":"…"}` | `200 {"reverted":2}` |
+| `POST /v1/knowledge/reembed` | — | `202 {"queued":true}` (com `EMBEDDINGS_ENABLED=true`; senão `503 embeddings_unavailable`) |
 | `POST /v1/knowledge/chat/test` | `{"text":"Quanto custa a instalação de CCTV?","target":"draft"}` | `200 {"reply":"…","sources":[{"type":"chunk","id":"staged:chunk:camaras-cctv:0","score":0.82}]}` |
 
 Erros são `application/problem+json`. Códigos principais: `400
@@ -105,18 +106,16 @@ invalid_content_base64`/`invalid_patch`, `404 line_not_found`/`item_not_found`/
   `status='error'`, `error='llm_error'` (o provider indisponível lança
   `ai_unavailable`). Com `AI_API_KEY`, usa-se o LLM real e o gate
   `AI_LLM_DATA_APPROVED` continua a decidir se os dados podem sair.
-- `embedder` não é montado (ADR-0002/A4 pendente): os chunks guardam-se sem
-  vetor e o chat de teste usa pontuação lexical no alvo `draft`.
+- `embedder` montado só com `EMBEDDINGS_ENABLED=true` (ADR-0014, runtime
+  local `Xenova/multilingual-e5-small`): vectoriza os chunks no staging e na
+  validação. Sem a flag (ou com falha de inferência) os chunks guardam-se
+  sem vetor e a pesquisa cai em FTS português. Backfill: `POST
+  /v1/knowledge/reembed` (job `knowledge.reembed`, também só com a flag on).
 
 ## Limitações conhecidas da v1
 
-- Sem runtime de embeddings: `POST /v1/knowledge/chat/test` com
-  `target:'published'` devolve `sources: []` (o `lookup_catalog` do catálogo
-  publicado continua a funcionar). O alvo `draft` funciona por pontuação
-  lexical.
 - `catalog_item.kind` assume `'service'` quando o extractor não traz um
   `product|service|plan|package` válido.
-- A edição rápida (`PATCH /v1/knowledge/items/:id`) não regenera chunks.
 - Reverter uma reversão devolve `409 not_revertible`.
 - O chat de teste cria uma conta sintética `chat-de-teste` (e um contacto/
   conversa `is_test`) visível em `whatsapp_accounts`; fica `disconnected` e

@@ -944,3 +944,54 @@ test('fix round 1 (e): criar pela publicação A e actualizar pela publicação 
     await app.close();
   }
 });
+
+test('fase 2 (§7.3): chunks staged sem vetor são vectorizados na validação', async () => {
+  const app = await buildTestApp();
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    await insertStaged(app, {
+      slug: 'doc-sem-vector',
+      entityType: 'knowledge_doc',
+      op: 'create',
+      payload: DOC_PAYLOAD,
+      chunks: [{ position: 0, content: 'Garantia de 12 meses.', embedding: null }],
+    });
+
+    const res = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(res.statusCode, 200, 'a validação não fica bloqueada pela inferência');
+
+    const chunks = await app.db.select().from(knowledgeChunks);
+    assert.equal(chunks.length, 1);
+    assert.ok(chunks[0]?.embedding, 'chunk publicado COM vector (re-embed na validação)');
+    assert.equal(chunks[0]?.embeddingModel, 'fake-embeddings-384', 'modelo carimbado');
+    assert.equal(chunks[0]?.embedding?.length, 384);
+  } finally {
+    await app.close();
+  }
+});
+
+test('fase 2 (§7.3): sem embedder a validação publica chunks sem vector (retrieve cai em FTS)', async () => {
+  const app = await buildTestApp({ omitEmbedder: true });
+  try {
+    await seedLines(app);
+    const s = editor(app);
+    await insertStaged(app, {
+      slug: 'doc-sem-embedder',
+      entityType: 'knowledge_doc',
+      op: 'create',
+      payload: DOC_PAYLOAD,
+      chunks: [{ position: 0, content: 'Garantia de 12 meses.', embedding: null }],
+    });
+
+    const res = await call(app, 'POST', '/v1/knowledge/train/validate', s, {});
+    assert.equal(res.statusCode, 200, 'publicação funciona com a flag off (§7.3)');
+
+    const chunks = await app.db.select().from(knowledgeChunks);
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0]?.embedding, null, 'sem vector: servido por FTS até reembed');
+    assert.equal(chunks[0]?.embeddingModel, null);
+  } finally {
+    await app.close();
+  }
+});
