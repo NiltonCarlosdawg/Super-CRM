@@ -242,7 +242,7 @@ export const qualificationQuestions = pgTable(
     active: boolean('active').notNull().default(true),
     version: integer('version').notNull().default(1),
   },
-  (t) => [uniqueIndex('qualification_questions_line_key_uq').on(t.lineId, t.key)],
+  (t) => [uniqueIndex('qualification_questions_tenant_line_key_uq').on(t.tenantId, t.lineId, t.key)],
 );
 
 // ───────────── Handoff para humano ─────────────
@@ -265,7 +265,11 @@ export const handoffTriggers = pgTable(
     active: boolean('active').notNull().default(true),
     version: integer('version').notNull().default(1),
   },
-  (t) => [index('handoff_triggers_line_active_idx').on(t.lineId, t.active)],
+  (t) => [
+    uniqueIndex('handoff_triggers_tenant_line_code_uq').on(t.tenantId, t.lineId, t.code).where(sql`${t.lineId} is not null`),
+    uniqueIndex('handoff_triggers_tenant_global_code_uq').on(t.tenantId, t.code).where(sql`${t.lineId} is null`),
+    index('handoff_triggers_line_active_idx').on(t.lineId, t.active),
+  ],
 );
 
 export const handoffs = pgTable(
