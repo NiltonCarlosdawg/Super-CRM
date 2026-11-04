@@ -17,14 +17,17 @@ import {
   type TrainDeps,
 } from '../../../modules/knowledge/train-service.js';
 import { diffDraft, validateDraft } from '../../../modules/knowledge/publish-service.js';
-import { parseUpload, UnsupportedFormatError } from '../../../modules/knowledge/parsers.js';
+import { UnsupportedFormatError } from '../../../modules/knowledge/parsers.js';
 import type { TenantScope } from '../../../ports/tenancy.js';
 import type { HttpDeps } from '../app.js';
 import { HttpError } from '../errors.js';
 import { authenticate, requireAnyRole, requireTenant } from '../guards.js';
 
 /** Limite da rota: 8 MiB de corpo JSON (o conteúdo vai em base64). */
-const MAX_UPLOAD_BODY_BYTES = 8 * 1024 * 1024;
+const MAX_UPLOAD_BODY_BYTES = 36 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES = Number(process.env.DOCUMENT_MAX_BYTES ?? 10 * 1024 * 1024);
+const MAX_TOTAL_BYTES = Number(process.env.DOCUMENT_MAX_TOTAL_BYTES ?? 25 * 1024 * 1024);
+const SUPPORTED_MEDIA = new Set(['text/plain', 'text/markdown', 'application/pdf', 'image/png', 'image/jpeg', 'image/webp']);
 
 /** Base64 padrão com padding opcional (sem dependência nova). */
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -41,7 +44,7 @@ const documentSchema = z
 
 const uploadBodySchema = z
   .object({
-    documents: z.array(documentSchema).min(1).max(20),
+    documents: z.array(documentSchema).min(1).max(10),
     lineSlug: lineSlugSchema.optional(),
   })
   .strict();
@@ -129,7 +132,9 @@ export async function knowledgeTrainRoutes(app: FastifyInstance, deps: HttpDeps)
 
       // Duas fases: descodificar/validar TODOS os documentos antes de criar o
       // primeiro upload (um documento inválido não deixa uploads parciais).
+      let totalBytes = 0;
       const prepared = body.documents.map((doc) => {
+        if (!SUPPORTED_MEDIA.has(doc.mediaType)) throw new HttpError(415, 'unsupported_format', `formato não suportado: ${doc.mediaType}`);
         if (!BASE64_PATTERN.test(doc.contentBase64)) {
           throw new HttpError(
             400,
@@ -139,7 +144,10 @@ export async function knowledgeTrainRoutes(app: FastifyInstance, deps: HttpDeps)
         }
         try {
           const content = Buffer.from(doc.contentBase64, 'base64');
-          return { doc, text: parseUpload(doc.mediaType, content).text };
+          if (content.length > MAX_DOCUMENT_BYTES) throw new HttpError(413, 'document_too_large', 'documento excede 10 MiB');
+          totalBytes += content.length;
+          if (totalBytes > MAX_TOTAL_BYTES) throw new HttpError(413, 'document_too_large', 'pedido excede 25 MiB');
+          return { doc, content };
         } catch (error) {
           return mapTrainError(error);
         }
@@ -156,7 +164,7 @@ export async function knowledgeTrainRoutes(app: FastifyInstance, deps: HttpDeps)
               {
                 filename: preparedDoc.doc.filename,
                 mediaType: preparedDoc.doc.mediaType,
-                text: preparedDoc.text,
+                content: preparedDoc.content,
                 lineSlug: body.lineSlug ?? null,
                 lineConfirmed: body.lineSlug !== undefined,
                 changedById,

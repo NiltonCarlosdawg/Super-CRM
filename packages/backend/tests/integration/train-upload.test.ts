@@ -257,7 +257,7 @@ test('upload com lineSlug pré-selecionado → itens lineConfirmed true (linha h
   }
 });
 
-test('fronteira do upload: PDF → 415 (ADR pendente), base64 inválido → 400, >8 MiB → 413', async () => {
+test('fronteira do upload: PDF → 202 assíncrono, base64 inválido → 400, >10 MiB → 413', async () => {
   const app = await buildTestApp();
   try {
     const s = editor(app);
@@ -267,9 +267,8 @@ test('fronteira do upload: PDF → 415 (ADR pendente), base64 inválido → 400,
         { filename: 'manual.pdf', mediaType: 'application/pdf', contentBase64: b64('%PDF-1.7 sintetico') },
       ],
     });
-    assert.equal(pdf.statusCode, 415);
-    assert.equal(pdf.json().title, 'unsupported_media_type');
-    assert.match(String(pdf.json().detail), /ADR/, 'mensagem aponta o ADR pendente');
+    assert.equal(pdf.statusCode, 202);
+    assert.equal((pdf.json() as { uploadIds: string[] }).uploadIds.length, 1);
 
     const badBase64 = await call(app, 'POST', '/v1/knowledge/train/documents', s, {
       documents: [{ filename: 'x.txt', mediaType: 'text/plain', contentBase64: '!!!' }],
@@ -279,14 +278,14 @@ test('fronteira do upload: PDF → 415 (ADR pendente), base64 inválido → 400,
 
     const tooBig = await call(app, 'POST', '/v1/knowledge/train/documents', s, {
       documents: [
-        { filename: 'grande.txt', mediaType: 'text/plain', contentBase64: 'A'.repeat(8 * 1024 * 1024 + 1024) },
+        { filename: 'grande.txt', mediaType: 'text/plain', contentBase64: b64('A'.repeat(10 * 1024 * 1024 + 1)) },
       ],
     });
-    assert.equal(tooBig.statusCode, 413, 'body limit da rota é 8 MiB');
+    assert.equal(tooBig.statusCode, 413, 'limite por documento é 10 MiB');
 
     // Nada foi criado em nenhuma das tentativas.
     const uploads = await app.db.select({ id: knowledgeTrainUploads.id }).from(knowledgeTrainUploads);
-    assert.equal(uploads.length, 0);
+    assert.equal(uploads.length, 1, 'o PDF válido foi aceite e ficou pendente');
   } finally {
     await app.close();
   }

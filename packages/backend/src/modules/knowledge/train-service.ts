@@ -70,7 +70,8 @@ export interface DraftItemPatch {
 export interface NewUploadInput {
   filename: string;
   mediaType: string;
-  text: string;
+  text?: string;
+  content?: Buffer;
   lineSlug: LineSlug | null;
   lineConfirmed: boolean;
   changedById: string;
@@ -419,7 +420,8 @@ export async function queueExtraction(
       tenantId: deps.scope.tenantId,
       filename: input.filename,
       mediaType: input.mediaType,
-      text: input.text,
+      text: input.text ?? null,
+      content: input.content ?? null,
       status: 'pending',
       lineSlug: input.lineSlug,
       lineConfirmed: input.lineConfirmed,

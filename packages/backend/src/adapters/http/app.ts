@@ -29,6 +29,8 @@ import { draftsRoutes } from './routes/drafts.js';
 import { handoffsRoutes } from './routes/handoffs.js';
 import { knowledgeChatTestRoutes } from './routes/knowledge-chat-test.js';
 import { knowledgeItemsRoutes } from './routes/knowledge-items.js';
+import { knowledgeConfigRoutes } from './routes/knowledge-config.js';
+import { knowledgeGapsRoutes } from './routes/knowledge-gaps.js';
 import { knowledgeTrainRoutes } from './routes/knowledge-train.js';
 import { platformRoutes } from './routes/platform.js';
 import { usersRoutes } from './routes/users.js';
@@ -224,6 +226,8 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
         await knowledgeTrainRoutes(instance, deps);
         // Task 7: edição rápida, listagem do activo e reversão de publicações.
         await knowledgeItemsRoutes(instance, deps);
+        await knowledgeConfigRoutes(instance, deps);
+        await knowledgeGapsRoutes(instance, deps);
         // Task 8: chat de teste (substrato sintético + retrieve por alvo).
         await knowledgeChatTestRoutes(instance, deps);
       }

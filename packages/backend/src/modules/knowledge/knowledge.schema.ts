@@ -19,6 +19,7 @@ import {
   uniqueIndex,
   uuid,
   vector,
+  customType,
 } from 'drizzle-orm/pg-core';
 import type { AnyPgColumn, PgDatabase } from 'drizzle-orm/pg-core';
 import { tenants } from '../../adapters/db/schema/tenants.schema.js';
@@ -33,6 +34,7 @@ export const updatedAt = () =>
     .defaultNow()
     .notNull()
     .$onUpdate(() => new Date());
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => 'bytea' });
 
 // ───────────── Enums ─────────────
 
@@ -238,6 +240,7 @@ export const qualificationQuestions = pgTable(
     required: boolean('required').notNull().default(false),
     position: integer('position').notNull().default(0),
     active: boolean('active').notNull().default(true),
+    version: integer('version').notNull().default(1),
   },
   (t) => [uniqueIndex('qualification_questions_line_key_uq').on(t.lineId, t.key)],
 );
@@ -260,6 +263,7 @@ export const handoffTriggers = pgTable(
     action: handoffActionEnum('action').notNull().default('handoff_now'),
     priority: handoffPriorityEnum('priority').notNull().default('normal'),
     active: boolean('active').notNull().default(true),
+    version: integer('version').notNull().default(1),
   },
   (t) => [index('handoff_triggers_line_active_idx').on(t.lineId, t.active)],
 );
@@ -337,6 +341,10 @@ export const knowledgeSuggestions = pgTable(
     proposedTitle: text('proposed_title').notNull(),
     proposedBody: text('proposed_body').notNull(),
     targetDocId: uuid('target_doc_id').references(() => knowledgeDocs.id), // atualização de documento existente
+    createdById: uuid('created_by_id'),
+    proposedLineSlug: text('proposed_line_slug'),
+    proposedDocType: docTypeEnum('proposed_doc_type'),
+    stagedItemId: uuid('staged_item_id').references(() => knowledgeDraftItems.id),
     status: suggestionStatusEnum('status').notNull().default('pending'),
     reviewedById: uuid('reviewed_by_id'),
     reviewedAt: ts('reviewed_at'),
@@ -416,7 +424,8 @@ export const knowledgeTrainUploads = pgTable(
       .references(() => tenants.id), // Onda 1: scoping por tenant (spec §4.2)
     filename: text('filename').notNull(),
     mediaType: text('media_type').notNull(),
-    text: text('text').notNull(),
+    content: bytea('content'),
+    text: text('text'),
     status: uploadStatusEnum('status').notNull().default('pending'),
     error: text('error'), // falha visível ao utilizador; nada staged
     lineSlug: text('line_slug'), // linha proposta pelo extractor

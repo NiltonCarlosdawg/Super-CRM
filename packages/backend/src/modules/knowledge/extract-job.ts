@@ -15,6 +15,7 @@ import type { Audit } from '../../ports/audit.js';
 import type { EmbeddingsProvider } from '../../ports/embeddings.js';
 import { knowledgeTrainUploads } from './knowledge.schema.js';
 import { parseUpload, UnsupportedFormatError } from './parsers.js';
+import { DocumentExtractError, extractDocument } from './document-extractor.js';
 import { stageExtracted, TrainServiceError } from './train-service.js';
 
 const payloadSchema = z.object({ uploadId: z.uuid() }).strict();
@@ -35,6 +36,7 @@ export interface ExtractJobDeps {
  */
 function shortError(error: unknown): string {
   if (error instanceof UnsupportedFormatError) return 'unsupported_format';
+  if (error instanceof DocumentExtractError) return error.code;
   if (error instanceof TrainServiceError) return error.code;
   const name = error instanceof Error ? error.name : '';
   if (name === 'AIValidationError') return 'extraction_invalid';
@@ -76,8 +78,10 @@ export function createExtractHandler(
     }
 
     try {
-      // O texto já foi extraído na rota; re-parse valida o formato guardado.
-      const { text } = parseUpload(claimed.mediaType, Buffer.from(claimed.text, 'utf8'));
+      const extracted = claimed.content !== null
+        ? await extractDocument(Buffer.from(claimed.content), claimed.mediaType)
+        : parseUpload(claimed.mediaType, Buffer.from(claimed.text ?? '', 'utf8'));
+      const { text } = extracted;
       const { items } = await deps.provider.extractKnowledge({ text });
       const staged = await stageExtracted(
         {
@@ -92,7 +96,7 @@ export function createExtractHandler(
 
       await deps.db
         .update(knowledgeTrainUploads)
-        .set({ status: 'done', error: null, updatedAt: deps.now() })
+        .set({ status: 'done', error: null, content: null, text, updatedAt: deps.now() })
         .where(
           and(
             eq(knowledgeTrainUploads.id, uploadId),
@@ -112,7 +116,7 @@ export function createExtractHandler(
       const reason = shortError(error);
       await deps.db
         .update(knowledgeTrainUploads)
-        .set({ status: 'error', error: reason, updatedAt: deps.now() })
+        .set({ status: 'error', error: reason, content: null, updatedAt: deps.now() })
         .where(
           and(
             eq(knowledgeTrainUploads.id, uploadId),
