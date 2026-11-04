@@ -13,6 +13,7 @@ import {
   quickEditItem,
   revertPublication,
 } from '../../../modules/knowledge/publish-service.js';
+import { listOverdueReviews, markReviewed } from '../../../modules/knowledge/reviews.js';
 import { TrainServiceError, type TrainDeps } from '../../../modules/knowledge/train-service.js';
 import type { TenantScope } from '../../../ports/tenancy.js';
 import type { HttpDeps } from '../app.js';
@@ -32,6 +33,8 @@ const quickEditBodySchema = z
   .strict();
 
 const revertBodySchema = z.object({ publicationId: z.uuid() }).strict();
+
+const reviewParamsSchema = z.object({ entityType: entityTypeSchema, id: z.uuid() });
 
 /** Paginação simples por `limit` (default 50, máximo 200). */
 const listQuerySchema = z.object({
@@ -120,6 +123,29 @@ export async function knowledgeItemsRoutes(app: FastifyInstance, deps: HttpDeps)
       } catch (error) {
         return mapTrainError(error);
       }
+    },
+  );
+
+  // Fase 2 Task 3 (§5.3): alertas de revisão — só itens vencidos dos três
+  // tipos, do mais atrasado para o menos (o painel decide a cadência de polling).
+  app.get('/v1/knowledge/reviews', { preHandler: guard }, async (request, reply) => {
+    const query = listQuerySchema.parse(request.query);
+    const items = await listOverdueReviews(mkDeps(request), query.limit);
+    return reply.send({ items });
+  });
+
+  // Marcação manual de revisão; publicar/editar/reverter já carimbam sozinhos.
+  app.post(
+    '/v1/knowledge/reviews/:entityType/:id',
+    { preHandler: guard },
+    async (request, reply) => {
+      const params = reviewParamsSchema.parse(request.params);
+      const item = await markReviewed(mkDeps(request), {
+        entityType: params.entityType,
+        id: params.id,
+        actorId: request.auth!.userId,
+      });
+      return reply.send(item);
     },
   );
 

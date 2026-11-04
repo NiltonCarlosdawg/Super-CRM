@@ -199,16 +199,24 @@ export const rules = pgTable(
     params: jsonb('params'), // ex.: { "maxDiscountPct": 10 }
     priority: integer('priority').notNull().default(0),
     status: knowledgeStatusEnum('status').notNull().default('draft'),
+    // Fase 2 Task 3 (design §5.1): regras alinham-se com catálogo/docs —
+    // validade e cadência de revisão; `orchestrator-ports.rules()` filtra
+    // validade e o endpoint de revisões inclui as regras.
+    validFrom: ts('valid_from'),
+    validUntil: ts('valid_until'),
     // Versão publicada, como em `knowledge_docs` e `catalog_items`: é o
     // `baseVersion` que a validação usa para detetar corridas (spec §6).
     version: integer('version').notNull().default(1),
     ownerId: uuid('owner_id').notNull(),
+    reviewedAt: ts('reviewed_at'),
+    reviewEveryDays: integer('review_every_days').notNull().default(90),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     uniqueIndex('rules_tenant_slug_uq').on(t.tenantId, t.slug),
     index('rules_status_line_idx').on(t.status, t.lineId),
+    index('rules_status_valid_idx').on(t.status, t.validUntil),
   ],
 );
 

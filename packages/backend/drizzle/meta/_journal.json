@@ -85,6 +85,13 @@
       "when": 1793045572621,
       "tag": "0011_powerful_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793448220085,
+      "tag": "0012_brown_veda",
+      "breakpoints": true
     }
   ]
 }

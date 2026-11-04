@@ -687,6 +687,7 @@ async function applyWrite(
             priceNote: values.priceNote,
             availability: values.availability,
             status: 'published',
+            reviewedAt: now, // publicar é validação humana (§5.2)
             ownerId: changedById,
             version: 1,
           })
@@ -723,6 +724,7 @@ async function applyWrite(
             slug: write.entry.slug,
             body: values.body,
             status: 'published',
+            reviewedAt: now, // publicar é validação humana (§5.2)
             ownerId: changedById,
             version: 1,
           })
@@ -760,6 +762,7 @@ async function applyWrite(
             instruction: values.instruction,
             params: values.params,
             status: 'published',
+            reviewedAt: now, // publicar é validação humana (§5.2)
             ownerId: changedById,
             version: 1,
           })
@@ -812,6 +815,7 @@ async function applyWrite(
           currency: values.currency,
           priceNote: values.priceNote,
           availability: values.availability,
+          reviewedAt: now, // §5.2
           version: nextVersion,
           updatedAt: now,
         })
@@ -840,6 +844,7 @@ async function applyWrite(
           type: values.type,
           title: values.title,
           body: values.body,
+          reviewedAt: now, // §5.2
           version: nextVersion,
           updatedAt: now,
         })
@@ -868,6 +873,7 @@ async function applyWrite(
           title: values.title,
           instruction: values.instruction,
           params: values.params,
+          reviewedAt: now, // §5.2
           version: nextVersion,
           updatedAt: now,
         })
@@ -1145,6 +1151,15 @@ const pricePatchSchema = z.union([
 
 // Patch PARCIAL por tipo: só os campos editáveis do dia-a-dia (o `kind`, o
 // `slug` e a identidade nunca mudam por aqui).
+
+// Revisão periódica (Fase 2 Task 3, §5): cadência 1..3650 dias e janela de
+// validade em ISO 8601 ou null. Qualquer edição carimba `reviewed_at`.
+const reviewPatchFields = {
+  reviewEveryDays: z.coerce.number().int().min(1).max(3650),
+  validFrom: z.coerce.date().nullable(),
+  validUntil: z.coerce.date().nullable(),
+};
+
 const catalogPatchSchema = z
   .object({
     name: z.string().min(1),
@@ -1156,6 +1171,7 @@ const catalogPatchSchema = z
     priceNote: z.string().nullable(),
     availability: z.enum(['available', 'limited', 'unavailable']),
     lineSlug: LINE_SLUGS.nullable(),
+    ...reviewPatchFields,
   })
   .partial()
   .strict();
@@ -1167,6 +1183,7 @@ const docPatchSchema = z
     type: z.enum(DOC_TYPES),
     // Doc pode ser global (null); catálogo e regra exigem linha.
     lineSlug: LINE_SLUGS.nullable(),
+    ...reviewPatchFields,
   })
   .partial()
   .strict();
@@ -1177,6 +1194,7 @@ const rulePatchSchema = z
     instruction: z.string(),
     params: z.record(z.string(), z.unknown()).nullable(),
     lineSlug: LINE_SLUGS.nullable(),
+    ...reviewPatchFields,
   })
   .partial()
   .strict();
@@ -1410,6 +1428,11 @@ async function applyQuickPatch(
           ...(value.currency !== undefined ? { currency: value.currency } : {}),
           ...(value.priceNote !== undefined ? { priceNote: value.priceNote } : {}),
           ...(value.availability !== undefined ? { availability: value.availability } : {}),
+          ...(value.reviewEveryDays !== undefined ? { reviewEveryDays: value.reviewEveryDays } : {}),
+          ...(value.validFrom !== undefined ? { validFrom: value.validFrom } : {}),
+          ...(value.validUntil !== undefined ? { validUntil: value.validUntil } : {}),
+          // §5.2: editar é uma validação humana → carimbo de revisão.
+          reviewedAt: now,
           lineId,
           version: current.row.version + 1,
           updatedAt: now,
@@ -1430,6 +1453,10 @@ async function applyQuickPatch(
           ...(value.title !== undefined ? { title: value.title } : {}),
           ...(value.body !== undefined ? { body: value.body } : {}),
           ...(value.type !== undefined ? { type: value.type } : {}),
+          ...(value.reviewEveryDays !== undefined ? { reviewEveryDays: value.reviewEveryDays } : {}),
+          ...(value.validFrom !== undefined ? { validFrom: value.validFrom } : {}),
+          ...(value.validUntil !== undefined ? { validUntil: value.validUntil } : {}),
+          reviewedAt: now, // §5.2: editar é uma validação humana
           lineId,
           version: current.row.version + 1,
           updatedAt: now,
@@ -1450,6 +1477,10 @@ async function applyQuickPatch(
           ...(value.title !== undefined ? { title: value.title } : {}),
           ...(value.instruction !== undefined ? { instruction: value.instruction } : {}),
           ...(value.params !== undefined ? { params: value.params } : {}),
+          ...(value.reviewEveryDays !== undefined ? { reviewEveryDays: value.reviewEveryDays } : {}),
+          ...(value.validFrom !== undefined ? { validFrom: value.validFrom } : {}),
+          ...(value.validUntil !== undefined ? { validUntil: value.validUntil } : {}),
+          reviewedAt: now, // §5.2: editar é uma validação humana
           lineId,
           version: current.row.version + 1,
           updatedAt: now,
@@ -1838,6 +1869,7 @@ async function restoreEntity(
           availability: value.availability ?? entity.row.availability,
           lineId,
           status: 'published',
+          reviewedAt: now, // reverter volta a validar o conteúdo (§5.2)
           version: entity.row.version + 1,
           updatedAt: now,
         })
@@ -1860,6 +1892,7 @@ async function restoreEntity(
           type: value.type ?? entity.row.type,
           lineId,
           status: 'published',
+          reviewedAt: now, // reverter volta a validar o conteúdo (§5.2)
           version: entity.row.version + 1,
           updatedAt: now,
         })
@@ -1882,6 +1915,7 @@ async function restoreEntity(
           params: value.params === undefined ? entity.row.params : value.params,
           lineId,
           status: 'published',
+          reviewedAt: now, // reverter volta a validar o conteúdo (§5.2)
           version: entity.row.version + 1,
           updatedAt: now,
         })

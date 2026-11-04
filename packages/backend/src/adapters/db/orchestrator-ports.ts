@@ -196,6 +196,8 @@ export function createOrchestratorPorts(deps: OrchestratorPortsDeps): Orchestrat
             FROM rules
             WHERE status = 'published'
               AND tenant_id = ${tenantId}
+              AND (valid_from IS NULL OR valid_from <= ${now()})
+              AND (valid_until IS NULL OR valid_until >= ${now()})
               AND (line_id IS NULL
                    OR line_id = (SELECT id FROM business_lines WHERE slug = ${line}))
             ORDER BY priority DESC, id`);

@@ -255,3 +255,28 @@ test('conhecimento: só itens publicados e válidos; gatilhos globais + da linha
   // intacto (pass-through da Fase 3) + o tenant dono para as salas realtime.
   assert.deepEqual(seen[0], { ...payload, tenantId: base.MILVENDAS_TENANT_ID });
 });
+
+// Fase 2 Task 3 (design §5.1): regras alinham-se com catálogo/docs — fora da
+// validade não entram na instrução do orquestrador.
+test('rules(): filtra validade (valid_from/valid_until) como catálogo e docs', async () => {
+  const db = await migratedDb();
+  const { line } = await seedConversation(db);
+  const ports = portsFor(db);
+  const owner = '00000000-0000-4000-8000-000000000001';
+  const past = new Date(T0 - 86_400_000);
+  const future = new Date(T0 + 86_400_000);
+
+  const valid = (await db.insert(k.rules).values({
+    tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, kind: 'tone', title: 'Tom formal',
+    slug: 'tom-formal', instruction: 'Tratar por Você.', status: 'published', ownerId: owner,
+  }).returning())[0]!;
+  await db.insert(k.rules).values([
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, kind: 'tone', title: 'Promoção velha',
+      slug: 'promocao-velha', instruction: 'Dar 20%.', status: 'published', ownerId: owner, validUntil: past },
+    { tenantId: base.MILVENDAS_TENANT_ID, lineId: line.id, kind: 'tone', title: 'Promoção futura',
+      slug: 'promocao-futura', instruction: 'Dar 30%.', status: 'published', ownerId: owner, validFrom: future },
+  ]);
+
+  assert.deepEqual((await ports.rules('software')).map((r) => r.id), [valid.id],
+    'só a regra dentro da validade');
+});
