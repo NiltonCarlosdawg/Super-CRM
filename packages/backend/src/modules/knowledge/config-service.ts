@@ -335,6 +335,8 @@ export async function revertConfigRevision(deps: TrainDeps, revisionId: string, 
   return row;
 }
 
+type TxClient = Parameters<Parameters<TrainDeps['db']['transaction']>[0]>[0];
+
 export async function createSuggestionDraft(
   deps: TrainDeps,
   input: {
@@ -345,9 +347,12 @@ export async function createSuggestionDraft(
     proposedDocType?: 'faq' | 'policy' | 'process' | 'company_info' | 'objection';
   },
   actorId: string,
+  /** Transacção do aprovador: falhar o staging não deixa a sugestão aprovada. */
+  tx?: TxClient,
 ): Promise<{ slug: string; draftId: string }> {
+  const db = (tx ?? deps.db) as typeof deps.db;
   if (input.targetDocId !== undefined && input.targetDocId !== null) {
-    const [doc] = await deps.db
+    const [doc] = await db
       .select({ doc: knowledgeDocs, lineSlug: businessLines.slug })
       .from(knowledgeDocs)
       .leftJoin(businessLines, eq(knowledgeDocs.lineId, businessLines.id))
@@ -363,7 +368,7 @@ export async function createSuggestionDraft(
       type: doc.doc.type,
     };
     const chunks = await buildChunks(chunkContentsFor(payload), deps.embedder);
-    const [draft] = await deps.db
+    const [draft] = await db
       .insert(knowledgeDraftItems)
       .values({
         tenantId: deps.scope.tenantId,
@@ -387,12 +392,10 @@ export async function createSuggestionDraft(
   }
 
   const slug = input.proposedTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || `sugestao-${Math.random().toString(16).slice(2, 10)}`;
-  const [existingDraft] = await deps.db.select({ id: knowledgeDraftItems.id }).from(knowledgeDraftItems).where(and(eq(knowledgeDraftItems.tenantId, deps.scope.tenantId), eq(knowledgeDraftItems.slug, slug))).limit(1);
+  const [existingDraft] = await db.select({ id: knowledgeDraftItems.id }).from(knowledgeDraftItems).where(and(eq(knowledgeDraftItems.tenantId, deps.scope.tenantId), eq(knowledgeDraftItems.slug, slug))).limit(1);
   if (existingDraft !== undefined) throw new HttpError(409, 'slug_conflict', 'slug já existe em rascunho');
-  const [existingDoc] = await deps.db.select({ id: knowledgeDocs.id }).from(knowledgeDocs).where(and(eq(knowledgeDocs.tenantId, deps.scope.tenantId), eq(knowledgeDocs.slug, slug))).limit(1);
+  const [existingDoc] = await db.select({ id: knowledgeDocs.id }).from(knowledgeDocs).where(and(eq(knowledgeDocs.tenantId, deps.scope.tenantId), eq(knowledgeDocs.slug, slug))).limit(1);
   if (existingDoc !== undefined) throw new HttpError(409, 'slug_conflict', 'slug já existe em publicado');
-  const [existingCatalog] = await deps.db.select({ id: knowledgeDraftItems.id }).from(knowledgeDraftItems).where(and(eq(knowledgeDraftItems.tenantId, deps.scope.tenantId), eq(knowledgeDraftItems.slug, slug))).limit(1);
-  if (existingCatalog !== undefined) throw new HttpError(409, 'slug_conflict', 'slug já existe em rascunho');
   const payload = {
     kind: 'knowledge_doc' as const,
     title: input.proposedTitle,
@@ -400,7 +403,7 @@ export async function createSuggestionDraft(
     type: input.proposedDocType ?? 'faq',
   };
   const chunks = await buildChunks(chunkContentsFor(payload), deps.embedder);
-  const [draft] = await deps.db
+  const [draft] = await db
     .insert(knowledgeDraftItems)
     .values({
       tenantId: deps.scope.tenantId,

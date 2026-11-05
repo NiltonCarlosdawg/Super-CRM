@@ -7,7 +7,7 @@ import { createSessionStore } from '../../src/adapters/db/auth.js';
 import * as base from '../../src/adapters/db/schema/index.js';
 import { businessLines, handoffTriggers, knowledgeDocs, knowledgeDraftItems, knowledgeSuggestions } from '../../src/modules/knowledge/knowledge.schema.js';
 import { seedHandoffTriggers } from '../../src/modules/knowledge/handoff-triggers.seed.js';
-import { resetDb } from '../helpers/db.js';
+import { migrateFromEmptyDb, resetDb } from '../helpers/db.js';
 import { buildTestApp, type TestApp } from '../helpers/http.js';
 
 interface Sess { session: string; csrf: string }
@@ -37,6 +37,7 @@ const call = (app: TestApp, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: st
   app.inject({ method, url, cookies: { session: s.session, csrf: s.csrf }, headers: { 'x-csrf-token': s.csrf }, ...(payload !== undefined ? { payload } : {}) });
 
 test('knowledge config CRUD', async () => {
+  await migrateFromEmptyDb();
   await resetDb();
   const app = await buildTestApp();
   try {
@@ -150,6 +151,18 @@ test('knowledge config CRUD', async () => {
     const rejectedId = (rejected.json() as { id: string }).id;
     const reject = await call(app, 'POST', `/v1/knowledge/suggestions/${rejectedId}/reject`, a);
     assert.equal(reject.statusCode, 200);
+
+    // Staging que falha não pode deixar a sugestão aprovada.
+    const conflicting = await call(app, 'POST', '/v1/knowledge/suggestions', a, {
+      humanAnswer: 'Tenta duplicar o rascunho existente.',
+      proposedTitle: 'FAQ CCTV',
+      proposedBody: 'Texto sintético.',
+    });
+    const conflictingId = (conflicting.json() as { id: string }).id;
+    const conflictingApprove = await call(app, 'POST', `/v1/knowledge/suggestions/${conflictingId}/approve`, a);
+    assert.equal(conflictingApprove.statusCode, 409);
+    const [afterFailedApprove] = await app.db.select().from(knowledgeSuggestions).where(eq(knowledgeSuggestions.id, conflictingId)).limit(1);
+    assert.equal(afterFailedApprove?.status, 'pending');
 
     const tenantBList = await call(app, 'GET', '/v1/knowledge/suggestions?status=pending', tenantB);
     assert.equal(tenantBList.statusCode, 200);

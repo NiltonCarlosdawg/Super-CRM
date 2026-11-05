@@ -62,12 +62,26 @@ export async function decideSuggestion(deps: TrainDeps, id: string, status: 'app
   const [suggestion] = await deps.db.select().from(knowledgeSuggestions).where(and(eq(knowledgeSuggestions.id, id), eq(knowledgeSuggestions.tenantId, deps.scope.tenantId)));
   if (suggestion === undefined) throw new HttpError(404, 'suggestion_not_found', 'sugestão inexistente');
   if (suggestion.status !== 'pending') throw new HttpError(409, 'suggestion_already_decided', 'sugestão já decidida');
-  const [row] = await deps.db.update(knowledgeSuggestions).set({ status, reviewedById: actorId, reviewedAt: deps.now() }).where(and(eq(knowledgeSuggestions.id, id), eq(knowledgeSuggestions.tenantId, deps.scope.tenantId), eq(knowledgeSuggestions.status, 'pending'))).returning();
-  if (row === undefined) throw new HttpError(409, 'suggestion_already_decided', 'sugestão já decidida');
-  if (status === 'approved') {
-    const staged = await createSuggestionDraft(deps, { targetDocId: suggestion.targetDocId, proposedTitle: suggestion.proposedTitle, proposedBody: suggestion.proposedBody, proposedLineSlug: suggestion.proposedLineSlug, proposedDocType: suggestion.proposedDocType ?? 'faq' }, actorId);
-    await deps.db.update(knowledgeSuggestions).set({ stagedItemId: staged.draftId }).where(eq(knowledgeSuggestions.id, id));
-  }
+  // Uma só transacção: se o staging falhar, a sugestão continua pendente.
+  const row = await deps.db.transaction(async (tx) => {
+    const [decided] = await tx
+      .update(knowledgeSuggestions)
+      .set({ status, reviewedById: actorId, reviewedAt: deps.now() })
+      .where(and(eq(knowledgeSuggestions.id, id), eq(knowledgeSuggestions.tenantId, deps.scope.tenantId), eq(knowledgeSuggestions.status, 'pending')))
+      .returning();
+    if (decided === undefined) throw new HttpError(409, 'suggestion_already_decided', 'sugestão já decidida');
+    if (status === 'approved') {
+      const staged = await createSuggestionDraft(
+        deps,
+        { targetDocId: suggestion.targetDocId, proposedTitle: suggestion.proposedTitle, proposedBody: suggestion.proposedBody, proposedLineSlug: suggestion.proposedLineSlug, proposedDocType: suggestion.proposedDocType ?? 'faq' },
+        actorId,
+        tx,
+      );
+      const [withDraft] = await tx.update(knowledgeSuggestions).set({ stagedItemId: staged.draftId }).where(eq(knowledgeSuggestions.id, id)).returning();
+      return withDraft ?? decided;
+    }
+    return decided;
+  });
   await deps.audit.record({ tenantId: deps.scope.tenantId, actorId, action: `knowledge.suggestion_${status}`, entity: 'knowledge_suggestion', entityId: id, detail: {}, at: deps.now() });
   return row;
 }
