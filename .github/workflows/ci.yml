@@ -81,7 +81,39 @@ jobs:
   deploy:
     needs: [backend, secret-scan]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Só push para main: nunca PR, nem o cron diário (schedule), nem dispatch manual.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+      DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+      DEPLOY_FRONTEND_DOCROOT: ${{ vars.DEPLOY_FRONTEND_DOCROOT }}
+      DEPLOY_BACKEND_ROOT: ${{ vars.DEPLOY_BACKEND_ROOT }}
+      DEPLOY_RESTART_CMD: ${{ vars.DEPLOY_RESTART_CMD }}
     steps:
-      - name: Deploy placeholder
-        run: echo "Deploy não configurado (produção é cPanel, A5)"
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: packages/frontend/package-lock.json
+      - name: Build frontend
+        working-directory: packages/frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan "$DEPLOY_SSH_HOST" >> ~/.ssh/known_hosts
+          eval "$(ssh-agent -s)"
+          echo "$SSH_PRIVATE_KEY" | ssh-add -
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Deploy to cPanel
+        run: bash .github/scripts/deploy.sh
+      - name: Verify
+        run: |
+          curl -fsS --retry 10 --retry-delay 5 --retry-connrefused "https://supcrm.milvendas.ao/" > /dev/null
+          curl -fsS --retry 10 --retry-delay 5 "https://supcrm.milvendas.ao/v1/health/live" | grep -q '"status":"ok"'
+          curl -fsS --retry 10 --retry-delay 5 "https://api.supercrm.milvendas.ao/health/live" | grep -q '"status":"ok"'
