@@ -14,13 +14,6 @@ export async function listGaps(deps: TrainDeps, status: 'open' | 'resolved' | 'i
   return deps.db.select().from(knowledgeGaps).where(and(eq(knowledgeGaps.tenantId, deps.scope.tenantId), eq(knowledgeGaps.status, status))).orderBy(desc(knowledgeGaps.occurrences), desc(knowledgeGaps.lastSeenAt)).limit(limit);
 }
 
-export async function createGap(deps: TrainDeps, input: { question: string; lineSlug?: string | null }, actorId: string): Promise<unknown> {
-  const [row] = await deps.db.insert(knowledgeGaps).values({ tenantId: deps.scope.tenantId, question: input.question, normalizedQuestion: input.question.trim().toLowerCase(), lineId: null, occurrences: 1, createdAt: deps.now(), lastSeenAt: deps.now(), status: 'open' }).returning();
-  if (row === undefined) throw new Error('gap insert');
-  await deps.audit.record({ tenantId: deps.scope.tenantId, actorId, action: 'knowledge.gap_created', entity: 'knowledge_gap', entityId: row.id, detail: {}, at: deps.now() });
-  return row;
-}
-
 export async function decideGap(deps: TrainDeps, id: string, status: 'resolved' | 'ignored', actorId: string): Promise<unknown> {
   const [gap] = await deps.db.select().from(knowledgeGaps).where(and(eq(knowledgeGaps.id, id), eq(knowledgeGaps.tenantId, deps.scope.tenantId)));
   if (gap === undefined) throw new HttpError(404, 'gap_not_found', 'lacuna inexistente');

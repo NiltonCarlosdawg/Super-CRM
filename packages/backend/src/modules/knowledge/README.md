@@ -86,6 +86,24 @@ pelo `tenant_id` da sessão.
 | `POST /v1/knowledge/published/revert` | `{"publicationId":"…"}` | `200 {"reverted":2}` |
 | `POST /v1/knowledge/reembed` | — | `202 {"queued":true}` (com `EMBEDDINGS_ENABLED=true`; senão `503 embeddings_unavailable`) |
 | `POST /v1/knowledge/chat/test` | `{"text":"Quanto custa a instalação de CCTV?","target":"draft"}` | `200 {"reply":"…","sources":[{"type":"chunk","id":"staged:chunk:camaras-cctv:0","score":0.82}]}` |
+| `GET /v1/knowledge/reviews?limit=50` | — | `200 {"items":[{"entityType":"rule","id":"…","daysOverdue":12,…}]}` |
+| `POST /v1/knowledge/reviews/:entityType/:id` | — | `200 {"entityType":"rule","reviewedAt":"…"}` (`entityType` = `catalog_item`/`knowledge_doc`/`rule`) |
+| `GET /v1/knowledge/qualification-questions?lineSlug=cctv` | — | `200 {"items":[{"key":"camera_count","question":"…","version":1,…}]}` |
+| `POST /v1/knowledge/qualification-questions` | `{"lineSlug":"cctv","key":"camera_count","question":"Quantas câmaras?","answerType":"number"}` | `201 {…}`; duplicado no mesmo tenant/linha → `409 duplicate_key` |
+| `PATCH /v1/knowledge/qualification-questions/:id` | `{"question":"…","expectedVersion":1}` | `200 {…,"version":2}`; versão antiga → `409 stale_version` |
+| `DELETE /v1/knowledge/qualification-questions/:id?expectedVersion=2` | — | `204` (soft-delete: `active=false`) |
+| `GET /v1/knowledge/triggers?lineSlug=software&includeInactive=false` | — | `200 {"items":[…]}` — globais + da linha |
+| `POST /v1/knowledge/triggers` | `{"lineSlug":"software","code":"demo_request","description":"…","detectionHint":"…"}` | `201 {…}`; `lineSlug` omitido = gatilho global |
+| `PATCH /v1/knowledge/triggers/:id` | `{"priority":"high","expectedVersion":1}` | `200 {…}`; `code`/`lineSlug` imutáveis |
+| `DELETE /v1/knowledge/triggers/:id?expectedVersion=1` | — | `204` (soft-delete) |
+| `GET /v1/knowledge/config-revisions?entityType=qualification_question&entityId=…` | — | `200 {"items":[{"version":1,"snapshot":{…}}]}` |
+| `POST /v1/knowledge/config-revisions/:revisionId/revert` | `{"expectedVersion":2}` | `200 {…,"version":3}` |
+| `GET /v1/knowledge/gaps?status=open` | — | `200 {"items":[{"question":"…","occurrences":3,…}]}` (criadas pelo orquestrador; a API só lista e decide) |
+| `POST /v1/knowledge/gaps/:id/resolve` / `.../ignore` | — | `200 {…,"status":"resolved"\|"ignored"}` |
+| `GET /v1/knowledge/suggestions?status=pending` | — | `200 {"items":[{"proposedTitle":"…","status":"pending",…}]}` |
+| `POST /v1/knowledge/suggestions` | `{"humanAnswer":"…","proposedTitle":"FAQ CCTV","proposedBody":"…","targetDocId":"…"}` | `201 {…}` |
+| `POST /v1/knowledge/suggestions/:id/approve` | — | `200 {…,"status":"approved","stagedItemId":"…"}` — cria rascunho, nunca publica |
+| `POST /v1/knowledge/suggestions/:id/reject` | — | `200 {…,"status":"rejected"}` |
 
 Erros são `application/problem+json`. Códigos principais: `400
 invalid_content_base64`/`invalid_patch`, `404 line_not_found`/`item_not_found`/
@@ -95,10 +113,14 @@ invalid_content_base64`/`invalid_patch`, `404 line_not_found`/`item_not_found`/
 
 ## Limites e formatos
 
-- Upload: corpo JSON até **8 MiB**, até 20 documentos por pedido.
-- Formatos v1: `text/plain` e `text/markdown` (UTF-8). PDF (texto ou
-  digitalizado/OCR) e DOCX → `415 unsupported_media_type`; entram com o ADR
-  pendente de OCR.
+- Upload: corpo JSON até **36 MiB**, até **10 documentos** por pedido, **10 MiB**
+  por documento e **25 MiB** no total (configurável por `DOCUMENT_MAX_BYTES` e
+  `DOCUMENT_MAX_TOTAL_BYTES`).
+- Formatos: `text/plain`, `text/markdown` (UTF-8), PDF (texto ou digitalizado,
+  até 20 páginas) e imagens (`image/png`, `image/jpeg`) por OCR local. DOCX →
+  `415 unsupported_media_type`. Os bytes são validados por magic bytes, não pelo
+  MIME declarado. OCR desliga-se com `OCR_ENABLED=false`; aí imagens e PDF sem
+  texto falham de forma explícita.
 - Preços/prazos/cobertura saem sempre do catálogo publicado — a extração só
   aceita valor explícito (`fixed`/`from`) ou `quote_only` com `null`.
 - O bundle é montado no arranque (`src/infra/main.ts`) **mesmo sem
@@ -124,9 +146,11 @@ invalid_content_base64`/`invalid_patch`, `404 line_not_found`/`item_not_found`/
 - Sem cursor de paginação: `GET /v1/knowledge/published` e
   `/v1/knowledge/publications` paginam só por `limit` (máx. 200).
 
-## Fora de âmbito (continuação da Fase 2 — decisão do dono, 2026-10-25)
+## Fase 2 — o que entrou depois do "Treinar agente"
 
-`qualification_questions` no guiado, alertas de itens por rever
-(`reviewed_at`/`review_every_days`) e a fila de sugestões
-(`knowledge_suggestions`) ficam para a tarefa seguinte. O painel/frontend
-também não faz parte deste repositório.
+Guião de qualificação e gatilhos de handoff editáveis (`/v1/knowledge/qualification-questions`,
+`/v1/knowledge/triggers`, com histórico e reversão em `/v1/knowledge/config-revisions`),
+alertas de itens por rever (`/v1/knowledge/reviews`) e a fila de lacunas/sugestões
+(`/v1/knowledge/gaps`, `/v1/knowledge/suggestions`). Aprovar uma sugestão escreve em
+`knowledge_draft_items`; publicar continua a exigir `/v1/knowledge/train/validate`.
+O painel/frontend não faz parte deste repositório.
