@@ -391,7 +391,7 @@ git commit -m "feat: add campaign pacing rules (delay, ramp, quiet hours, caps)"
 
 ---
 
-### Task 4: Template de mensagem com variáveis e rodapé de opt-out
+### Task 4: [x] Template de mensagem com variáveis e rodapé de opt-out
 
 **Files:**
 - Create: `src/domain/campaigns/template.ts`
