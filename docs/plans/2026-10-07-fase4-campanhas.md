@@ -263,7 +263,7 @@ git commit -m "feat: add campaign entities schema and migration"
 
 ---
 
-### Task 3: Regras de ritmo (atrasos, ramp, janela silenciosa, caps)
+### Task 3: [x] Regras de ritmo (atrasos, ramp, janela silenciosa, caps)
 
 **Files:**
 - Create: `src/domain/campaigns/rhythm.ts`
