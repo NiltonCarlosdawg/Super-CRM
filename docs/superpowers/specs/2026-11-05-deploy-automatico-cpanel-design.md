@@ -132,6 +132,22 @@ cPanel outra vez (a sessão expirou a 2026-11-05) ou activar SSH **[dono]**.
 
 **G8 e G9 são bloqueadores das migrations automáticas** — ver §9.
 
+### 7.1 Evidência do Gate 0 — verificada via SSH a 2026-11-07
+
+| # | Estado | Evidência real |
+|---|---|---|
+| G1 SSH | **Confirmado** | `ssh -i ~/.ssh/supercrm_deploy milvendas@135.181.34.42` → `SSH-OK`; chave `super-crm-deploy` importada e *authorized* no painel (2026-11-07) |
+| G2 Node ≥ 24 | **Refutado** | `/opt/alt/` tem `alt-nodejs10…22` — **máximo 22** (`/opt/alt/alt-nodejs22/root/usr/bin/node` → `v22.23.4`); apps existentes usam 20 (`nodevenv/…/20/bin/node` → `v20.20.2`). **Sem Node 24** |
+| G3 docroot | **Pendente (padrão conhecido)** | Apps vivem em `/mnt/homer2/milvendas/<dominio>/` (ex.: `api.milvendas.ao/`); docroot do `supcrm` será `/mnt/homer2/milvendas/supcrm.milvendas.ao/` após criação do subdomínio |
+| G4 mecanismo de arranque | **Confirmado** | `.htaccess` da app existente: bloco `CLOUDLINUX PASSENGER CONFIGURATION` com `PassengerAppRoot`, `PassengerNodejs …/nodevenv/<app>/20/bin/node`, `PassengerAppType node`, **`PassengerStartupFile src/server.js`**; processos correm como `lsnode:/mnt/homer2/milvendas/api.milvendas.ao/` |
+| G5 endereço local estável | **Confirmado** | app existente: `app.listen(PORT, '0.0.0.0')` com `PORT=3001` no `.env` — porta **fixa por app**; o nosso backend usa `127.0.0.1:PORT` (`main.ts:417`) — a validar no primeiro arranque se o webserver alcança `127.0.0.1` (se não, alinhar com `0.0.0.0` como a existente) |
+| G6/G7 módulos de proxy | **Pendente** | `<IfModule Litespeed>` no `.htaccess` existente + processo `lsnode` → webserver LiteSpeed; suporte a `RewriteRule [P]` **só por teste real** após criar os subdomínios |
+| G8 pgvector | **Refutado (definitivo)** | `SELECT … FROM pg_available_extensions WHERE name='vector'` → vazio; `CREATE EXTENSION vector` → `ERROR: could not open extension control file "/usr/share/pgsql/extension/vector.control"`. Servidor: **PostgreSQL 13.23** em `127.0.0.1:5432`. O "Refutado" antigo de `docs/cpanel-capacidades.md:36` era só falha de auth (`pg_hba`) — este é o teste real |
+| G9 estado das migrations | **N/A — greenfield** | O Super-CRM **ainda não está publicado** no host (`api-crm.milvendas.ao` é Laravel; `crm.milvendas.ao` é um build React estático). A base do CRM não existe — será criada no Task 6 |
+| G10 toolchain nativos | **Confirmado (parcial)** | `gcc`, `g++`, `make`, `python3` presentes em `/usr/bin`; teste real de `npm ci` (argon2, `@napi-rs/canvas`) fica para o primeiro arranque. Disco: 141G livres |
+| Extra — Redis | **Confirmado** | `redis-cli ping` → `PONG` |
+| Extra — PostgreSQL | **Confirmado** | `SHOW server_version` → `13.23`; única instância (`5432`; `postgresql11` em `/opt/alt` é outro pacote) |
+
 ## 8. Decisões em aberto (só o dono decide)
 
 1. **SSH ou sessão do cPanel?** O deploy precisa de SSH (G1). Activar em cPanel → *Acesso
