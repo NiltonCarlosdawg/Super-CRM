@@ -7,4 +7,4 @@ Restrições/review focus: TDD em cada mudança; `tenant_id` em toda query, vali
 ### Task 4: [x] CRUD de perguntas, unicidade tenant/linha, snapshots/reversão optimista e testes RBAC/isolamento.
 ### Task 5: [x] CRUD de gatilhos, unicidade por âmbito, snapshots/reversão, seed não sobrescreve alterações e testes do orquestrador.
 ### Task 6: [x] API de lacunas/sugestões; aprovar cria/actualiza rascunho, rejeitar mantém histórico; provar fluxo até publicação e isolamento.
-### Task 7: [ ] Por último: ADR-0015 + PDF/OCR local, ingestão assíncrona limitada, bytes apagados, testes com fakes, smoke sintético, docs e relatório.
+### Task 7: [x] Por último: ADR-0015 + PDF/OCR local, ingestão assíncrona limitada, bytes apagados, testes com fakes, smoke sintético, docs e relatório.
