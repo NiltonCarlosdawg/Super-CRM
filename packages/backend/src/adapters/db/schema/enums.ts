@@ -86,6 +86,14 @@ export const campaignRecipientStatusEnum = pgEnum('campaign_recipient_status', [
   'opted_out',
 ]);
 
+// Fase 4, Task 2: motivo da pausa (null = não pausada; paused_by null = automática).
+export const campaignPauseReasonEnum = pgEnum('pause_reason', [
+  'failure_rate',
+  'session_down',
+  'opt_out_spike',
+  'human',
+]);
+
 // Onda 1, multitenancy (spec docs/superpowers/specs/2026-10-16-multitenant-design.md §4.1):
 // estado do tenant — 'suspended' = sem logins/envios até o platform admin reativar.
 export const tenantStatusEnum = pgEnum('tenant_status', ['active', 'suspended']);

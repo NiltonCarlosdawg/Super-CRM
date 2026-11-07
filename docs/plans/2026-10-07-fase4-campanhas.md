@@ -134,7 +134,7 @@ git commit -m "feat: add campaign configuration with pacing and opt-out env keys
 
 ---
 
-### Task 2: Entidades `campaigns` e `campaign_recipients`
+### Task 2: [x] Entidades `campaigns` e `campaign_recipients`
 
 **Files:**
 - Create: `src/domain/campaigns/types.ts`

@@ -2,8 +2,9 @@
 // limites, estado por destinatário. As contas permitidas são a junção
 // campaign_accounts (decisão de design, docs/schema-base.md).
 
+import { sql } from 'drizzle-orm';
 import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
-import { campaignRecipientStatusEnum, campaignStatusEnum } from './enums.js';
+import { campaignPauseReasonEnum, campaignRecipientStatusEnum, campaignStatusEnum } from './enums.js';
 import { contacts } from './contacts.schema.js';
 import { tenants } from './tenants.schema.js';
 import { users } from './users.schema.js';
@@ -35,13 +36,32 @@ export const campaigns = pgTable(
     // PERGUNTA DO GATE: colunas de limites em campaigns (docs/schema-base.md).
     dailyLimit: integer('daily_limit'), // por conta, por dia; null = só a config global/ramp
     scheduledAt: ts('scheduled_at'),
+    // Fase 4, Task 2: pausa automática/humana e retoma (retoma reinicia a janela).
+    pauseReason: campaignPauseReasonEnum('pause_reason'),
+    pausedAt: ts('paused_at'),
+    pausedBy: uuid('paused_by_id').references(() => users.id), // null = automática
+    resumedBy: uuid('resumed_by_id').references(() => users.id),
+    resumedAt: ts('resumed_at'),
+    // Fase 4, Task 2: idempotência da API (parcial único só quando preenchido).
+    createIdempotencyKey: text('create_idempotency_key'),
+    createRequestHash: text('create_request_hash'),
+    startIdempotencyKey: text('start_idempotency_key'),
+    startRequestHash: text('start_request_hash'),
     createdBy: uuid('created_by_id')
       .notNull()
       .references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index('campaigns_status_idx').on(t.status)],
+  (t) => [
+    index('campaigns_status_idx').on(t.status),
+    uniqueIndex('campaigns_create_idempotency_key_uq')
+      .on(t.createIdempotencyKey)
+      .where(sql`${t.createIdempotencyKey} is not null`),
+    uniqueIndex('campaigns_start_idempotency_key_uq')
+      .on(t.startIdempotencyKey)
+      .where(sql`${t.startIdempotencyKey} is not null`),
+  ],
 );
 
 // ───────────── campaign_recipients ─────────────
