@@ -29,7 +29,16 @@ export async function postJson(
 
   if (res.status === 429) throw new LLMError('rate limit', 'rate_limit', 429);
   if (res.status >= 500) throw new LLMError(`server ${res.status}`, 'server', res.status);
-  if (res.status >= 400) throw new LLMError(`client ${res.status}`, 'client', res.status);
+  if (res.status >= 400) {
+    // Sem o corpo, um 400 do fornecedor fica inexplicável (ex.: tool call inválido).
+    let detail = '';
+    try {
+      detail = (await res.text()).replace(/\s+/g, ' ').trim().slice(0, 500);
+    } catch {
+      // corpo ilegível não deve esconder o erro HTTP
+    }
+    throw new LLMError(detail === '' ? `client ${res.status}` : `client ${res.status}: ${detail}`, 'client', res.status);
+  }
 
   try {
     return await res.json();

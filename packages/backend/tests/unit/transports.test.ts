@@ -233,6 +233,26 @@ test('anthropic: assistant ecoa tool_use com o id recebido e tool_result usa ess
   assert.equal(toolResultMsg.content[0]?.tool_use_id, 'toolu_abc123');
 });
 
+test('4xx: o corpo do erro entra no LLMError (limite de tamanho)', async () => {
+  const body = JSON.stringify({ error: { message: 'Tools should have a name!' } });
+  const t = createOpenAITransport({
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-test',
+    fetch: (async () =>
+      new Response(body, { status: 400, headers: { 'content-type': 'application/json' } })) as typeof globalThis.fetch,
+  });
+  await assert.rejects(
+    t.call(
+      { model: 'm', messages: [{ role: 'user', content: 'oi' }], tools: [], maxTokens: 10 },
+      new AbortController().signal,
+    ),
+    (e: LLMError) =>
+      e.kind === 'client' &&
+      e.status === 400 &&
+      e.message.includes('Tools should have a name!'),
+  );
+});
+
 test('temperature só vai no corpo quando definida (eval fixa 0 — decisão 2026-10-25)', async () => {
   const sig = new AbortController().signal;
   const reqBase: Omit<LLMCallRequest, 'temperature'> = {
