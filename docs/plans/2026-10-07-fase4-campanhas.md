@@ -35,7 +35,7 @@
 
 ---
 
-### Task 1: Config de campanhas
+### Task 1: [x] Config de campanhas
 
 **Files:**
 - Create: `src/modules/campaigns/config.ts`

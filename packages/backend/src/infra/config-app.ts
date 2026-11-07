@@ -2,6 +2,7 @@
 // mecânica de issues da Fase 0 (`config.ts`): ordem fixa, mensagens em português,
 // nunca ecoar valores recebidos (segredos nunca em logs, AGENTS.md §4).
 
+import { loadCampaignConfig, type CampaignConfig } from '../modules/campaigns/config.js';
 import { ConfigError, loadConfig, type AppConfig } from './config.js';
 
 export interface AuthConfig {
@@ -177,10 +178,11 @@ export function loadMessagingConfig(env: NodeJS.ProcessEnv): MessagingConfig {
 /** Config completa: base (Fase 0) + auth + messaging, lendo o env uma vez. */
 export function loadFullConfig(
   env: NodeJS.ProcessEnv,
-): AppConfig & { auth: AuthConfig; messaging: MessagingConfig; embeddings: EmbeddingsConfig } {
+): AppConfig & { auth: AuthConfig; messaging: MessagingConfig; embeddings: EmbeddingsConfig; campaigns: CampaignConfig } {
   const base = loadConfig(env); // falha primeiro por DATABASE_URL no arranque
   const auth = loadAuthConfig(env);
   const messaging = loadMessagingConfig(env);
   const embeddings = loadEmbeddingsConfig(env);
-  return { ...base, auth, messaging, embeddings };
+  const campaigns = loadCampaignConfig(env);
+  return { ...base, auth, messaging, embeddings, campaigns };
 }
