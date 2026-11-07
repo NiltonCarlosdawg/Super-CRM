@@ -1,7 +1,8 @@
 # Desenho — Deploy automático do CRM no cPanel (frontend + backend + migrations)
 
 - **Data:** 2026-11-05 · **Estado:** aprovado pelo dono a 2026-11-05 — construir.
-- **Decisões do dono (2026-11-05):** SSH será ativado no cPanel **[dono]**; segredos do servidor em ficheiro `.env` na raiz da app Node **[dono]**; **primeiro deploy automático desde já**, sem passo manual supervisionado — migrations correm desde o primeiro deploy **[dono]** (nota do agente: G8/G9 continuam a ser verificação obrigatória antes do primeiro deploy, porque sem pgvector a migration `0000` falha e a cadeia toda para).
+- **Decisões do dono (2026-11-07):** (a) **migrations automáticas ADIADAS** — o deploy passa a publicar só código; o schema é tratado manualmente até o alojamento instalar pgvector **[dono]**; (b) `engines` do backend desce para `>=22` após prova da suite sob Node 22 **[dono]**; (c) Gate 0 executado via SSH a 2026-11-07 — evidência em §7.1 (G2 e G8 **Refutados**).
+- **Decisões do dono (2026-11-05):** SSH será ativado no cPanel **[dono]**; segredos do servidor em ficheiro `.env` na raiz da app Node **[dono]**; ~~primeiro deploy automático desde já com migrations~~ — superado pela decisão de 2026-11-07 acima; G8/G9 continuam verificação obrigatória (nota do agente).
 - **Origem:** brainstorming com o dono (2026-11-05). Decisões do dono marcadas **[dono]**; chamadas minhas marcadas **[call]**.
 - **Decisão de arquitetura:** `docs/adr/0016-deploy-automatico-cpanel-github-actions.md` (Estado: proposto).
 - **Repo:** `NiltonCarlosdawg/Super-CRM` · branch `main` · worktree `deploy-cpanel-auto`.
@@ -19,7 +20,7 @@ Sem isto, cada versão do CRM sai manualmente para o cPanel: copy-paste de `dist
 
 - `push` para `main` → **frontend** publicado em `supcrm.milvendas.ao` **[dono]**.
 - `push` para `main` → **backend** publicado em `api.supercrm.milvendas.ao` (nome escolhido por mim **[call]**; o dono deixou a escolha a meu cargo **[dono]**).
-- `push` para `main` → **`npm run db:migrate`** corre no servidor antes do backend reiniciar **[dono]**.
+- ~~`push` para `main` → **`npm run db:migrate`** corre no servidor antes do backend reiniciar **[dono]**~~ — **ADIADO (2026-11-07)**: sem pgvector no servidor (G8) a migration `0000` falharia e pararia a cadeia; deploy publica só código, schema manual **[dono]**.
 - Deploy **só** depois de a CI (lint, typecheck, testes, secret scan) passar.
 - Nada de segredos no repositório; nada da configuração do servidor versionada por engano.
 - O frontend continua a funcionar **sem mudar uma linha do código do frontend** (os seus
@@ -77,14 +78,14 @@ push → main ─► GitHub Actions (ci.yml)
                  ├─ secret-scan (gitleaks)
                  └─ deploy  [só se os dois acima passarem]
                       ├─ build do frontend no runner (vite build)
-                      ├─ rsync packages/frontend/dist  → docroot de supcrm.milvendas.ao
-                      ├─ rsync packages/backend/*      → raiz da app Node de api.supercrm.milvendas.ao
+                      ├─ tar packages/frontend/dist  → docroot de supcrm.milvendas.ao
+                      ├─ tar packages/backend/*      → raiz da app Node de api.supercrm.milvendas.ao
                       ├─ SSH: npm ci (no servidor)
-                      ├─ SSH: npm run db:migrate       ← ANTES do restart
                       └─ SSH: restart da app Node
+                         (db:migrate ADIADO — 2026-11-07, sem pgvector)
 
-supcrm.milvendas.ao      → Apache: estático (dist/) + reverse proxy de /v1 e /socket.io
-api.supercrm.milvendas.ao→ Passenger: packages/backend (Node ≥ 24, escuta 127.0.0.1:PORT)
+supcrm.milvendas.ao      → LiteSpeed: estático (dist/) + reverse proxy de /v1 e /socket.io
+api.supercrm.milvendas.ao→ Passenger/lsnode: packages/backend (Node 22, escuta 127.0.0.1:PORT)
 ```
 
 **Porque é que o frontend precisa de proxy:** o frontend chama `/v1/...` e liga o
@@ -100,10 +101,12 @@ por isso **não** é a escolha **[call]**.
 3. Runner: `npm ci && npm run build` em `packages/frontend` → `packages/frontend/dist/`.
 4. Runner: autentica SSH com chave dedicada (`ssh-agent` + `ssh-keyscan` — **sem actions de
    terceiros**, só `actions/checkout` e `actions/setup-node`, os já usados em `ci.yml`).
-5. `rsync` do `dist/` para o docroot do frontend, e de `packages/backend/` para a raiz da
-   app Node. **`--exclude='.env'`** e **`--exclude='node_modules/'`** são obrigatórios.
+5. `tar` do `dist/` para o docroot do frontend, e de `packages/backend/` para a raiz da
+   app Node, **sobre ssh** (o servidor não tem rsync — Gate 0). **`--exclude='.env'`** e
+   **`--exclude='node_modules'`** são obrigatórios.
 6. SSH: `npm ci` na raiz da app Node (inclui dev deps — `tsx` é devDep **[call]**).
-7. SSH: `npm run db:migrate`.
+7. ~~SSH: `npm run db:migrate`~~ — **ADIADO (2026-11-07)**: sem pgvector (G8) a migration
+   `0000` falha; schema tratado manualmente até o alojamento instalar a extensão **[dono]**.
 8. SSH: restart da app Node.
 9. Verificação: `curl https://supcrm.milvendas.ao/` → 200;
    `curl https://api.supercrm.milvendas.ao/health/live` → `{"status":"ok"}`.
@@ -201,7 +204,7 @@ cPanel outra vez (a sessão expirou a 2026-11-05) ou activar SSH **[dono]**.
 4. `https://api.supercrm.milvendas.ao/health/live` devolve `{"status":"ok"}`.
 5. Socket.IO liga a partir do frontend publicado (5 eventos do painel). Prova: browser com
    a sessão aberta, sem erros de consola.
-6. `npm run db:migrate` corre no servidor e é **idempotente** (segunda execução sem mudanças).
+6. ~~`npm run db:migrate` corre no servidor e é **idempotente**~~ — **ADIADO (2026-11-07)**: critério reativado quando pgvector existir e as migrations correrem em base vazia.
    Prova: output real do comando.
 7. Nenhum segredo no repo: `gitleaks` verde + `grep` por `DATABASE_URL=` com valor real.
 8. `.env` do servidor **sobrevive** a um deploy. Prova: `ls -l` antes/depois.

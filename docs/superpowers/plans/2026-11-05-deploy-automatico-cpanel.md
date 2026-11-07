@@ -1,5 +1,7 @@
 # Deploy automático no cPanel (GitHub Actions → SSH) — Implementation Plan
 
+> **Emenda 2026-11-07 (dono):** (a) migrations automáticas **ADIADAS** — sem pgvector no servidor a migration `0000` falha; deploy publica só código, `db:migrate` sai do `deploy.sh` e o guardião proíbe-o; (b) o servidor **não tem rsync** — transporte é `tar` sobre ssh; (c) `engines` desce para `>=22` após prova da suite sob Node 22. Evidência do Gate 0 na spec §7.1.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** um `push` para `main` publica o frontend em `supcrm.milvendas.ao`, o backend em `api.supercrm.milvendas.ao` e corre `npm run db:migrate` no servidor antes de reiniciar a app.
