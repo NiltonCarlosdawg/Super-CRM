@@ -1000,7 +1000,7 @@ git commit -m "feat: apply campaign opt-out and reply state on inbound messages"
 
 ---
 
-### Task 9: Job de envio da campanha (tick)
+### Task 9: [x] Job de envio da campanha (tick)
 
 **Files:**
 - Create: `src/ports/campaign-dispatch.ts`

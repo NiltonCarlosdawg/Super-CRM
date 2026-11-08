@@ -272,3 +272,256 @@ export function makeStartDeps(opts: StartDepsOptions): StartDeps {
 
   return { start, audit, campaigns, recipients, audience };
 }
+
+// ───────────── Task 9: tick e ensure ─────────────
+
+import { loadCampaignConfig } from '../../../src/modules/campaigns/config.js';
+import type {
+  CampaignDispatchStore,
+  CampaignOutbox,
+  ConversationFinder,
+  PauseApplier,
+  PauseGuard,
+  TickScheduler,
+} from '../../../src/ports/campaign-dispatch.js';
+
+const CAMP_TICK = '00000000-0000-0000-0000-0000000000d1';
+const ACC_TICK = '00000000-0000-0000-0000-0000000000a1';
+const REC_TICK = '00000000-0000-0000-0000-0000000000e1';
+const CT_TICK = '00000000-0000-0000-0000-0000000000c1';
+
+export interface TickOptions {
+  now: string;
+  rng?: number;
+  campaignStatus?: CampaignStatus;
+  accountCreatedAt?: string;
+  accountPurpose?: AccountPurpose;
+  accountStatus?: WhatsAppAccountStub['status'];
+  contactName?: string | null;
+  template?: string;
+  scheduledAt?: string | null;
+  campaignDailyLimit?: number | null;
+  enqueuedToday?: number;
+  pendingConversationCount?: number;
+  nextPending?: { id: string; contactId: string; step: number } | null;
+  pendingCount?: number;
+  guardReason?: PauseReason | null;
+  logger?: (line: string) => void;
+}
+
+export interface FakeDispatch extends CampaignDispatchStore {
+  skipCalls: Array<[string, Date]>;
+}
+
+export interface FakeCampaigns extends CampaignRepository {
+  casCalls: Array<[string, readonly CampaignStatus[], StatusPatch]>;
+}
+
+export function makeTickDeps(opts: TickOptions) {
+  const at = new Date(opts.now);
+  const campaign: Campaign = {
+    id: CAMP_TICK,
+    tenantId: FAKE_TENANT,
+    name: 'Campanha',
+    status: opts.campaignStatus ?? 'running',
+    messageTemplate: opts.template ?? 'Olá {{nome}}!',
+    allowedAccountIds: [ACC_TICK],
+    dailyLimit: opts.campaignDailyLimit ?? null,
+    scheduledAt: opts.scheduledAt !== undefined && opts.scheduledAt !== null ? new Date(opts.scheduledAt) : null,
+    pauseReason: null,
+    pausedAt: null,
+    pausedBy: null,
+    resumedBy: null,
+    resumedAt: null,
+    createIdempotencyKey: 'create-key',
+    createRequestHash: 'create-hash',
+    startIdempotencyKey: 'start-key',
+    startRequestHash: 'start-hash',
+    createdBy: FAKE_U1,
+    createdAt: at,
+    updatedAt: at,
+  };
+  const base = makeCampaignRepository();
+  base.rows.push(campaign);
+  const casCalls: FakeCampaigns['casCalls'] = [];
+  const campaigns: FakeCampaigns = {
+    ...base,
+    casCalls,
+    async compareAndSetStatus(scope, id, expected, patch) {
+      casCalls.push([id, expected, patch]);
+      return base.compareAndSetStatus(scope, id, expected, patch);
+    },
+  };
+
+  const skipCalls: FakeDispatch['skipCalls'] = [];
+  const dispatch: FakeDispatch = {
+    skipCalls,
+    async nextPending() {
+      return opts.nextPending === undefined
+        ? { id: REC_TICK, contactId: CT_TICK, step: 1 }
+        : opts.nextPending;
+    },
+    async skipIneligibleContacts(_scope, campaignId, when) {
+      skipCalls.push([campaignId, when]);
+      return 0;
+    },
+    async pendingCountForAccount() {
+      return opts.pendingCount ?? 1;
+    },
+    async pendingCount() {
+      return opts.pendingCount ?? 1;
+    },
+    async countEnqueuedSince() {
+      return opts.enqueuedToday ?? 0;
+    },
+  };
+
+  const outboxCalls: Array<Parameters<CampaignOutbox['enqueue']>[0]> = [];
+  const outbox: CampaignOutbox = {
+    async enqueue(input) {
+      outboxCalls.push(input);
+      return { outboxId: 'out-1', duplicate: false };
+    },
+    async pendingConversationCount() {
+      return opts.pendingConversationCount ?? 0;
+    },
+  };
+
+  const conversations: ConversationFinder = {
+    async findOrCreateForCampaign() {
+      return { id: 'conv-1' };
+    },
+  };
+
+  const contacts = {
+    async displayName() {
+      return opts.contactName === undefined ? 'Ana Souza' : opts.contactName;
+    },
+  };
+
+  const accounts = makeAccountGate({
+    accounts: [
+      {
+        id: ACC_TICK,
+        purpose: opts.accountPurpose ?? 'campaigns',
+        status: opts.accountStatus ?? 'connected',
+        createdAt: new Date(opts.accountCreatedAt ?? '2026-10-04T10:00:00Z'),
+      },
+    ],
+  });
+
+  const pauseGuards: PauseGuard[] =
+    opts.guardReason === undefined || opts.guardReason === null
+      ? []
+      : [
+          async () => ({ reason: opts.guardReason! }),
+        ];
+
+  const applyCalls: Array<Parameters<PauseApplier['apply']>[0]> = [];
+  const applyPause: PauseApplier = {
+    async apply(input) {
+      applyCalls.push(input);
+      return true;
+    },
+  };
+
+  const loggerLines: string[] = [];
+  const logger = (line: string): void => {
+    loggerLines.push(line);
+    opts.logger?.(line);
+  };
+
+  return {
+    scope: { tenantId: FAKE_TENANT },
+    campaigns,
+    dispatch,
+    recipients: makeRecipientStore(),
+    contacts,
+    accounts,
+    outbox: Object.assign(outbox, { calls: outboxCalls }),
+    conversations,
+    pauseGuards,
+    applyPause: Object.assign(applyPause, { calls: applyCalls }),
+    now: () => new Date(opts.now),
+    rng: () => opts.rng ?? 0.5,
+    cfg: loadCampaignConfig({}),
+    logger,
+    loggerLines,
+  };
+}
+
+export interface EnsureCampaignSpec {
+  id: string;
+  status: CampaignStatus;
+  allowedAccountIds: string[];
+  pending: Record<string, number>;
+}
+
+export function makeEnsureDeps(opts: { campaigns: EnsureCampaignSpec[] }) {
+  const at = new Date('2026-10-07T10:00:00Z');
+  const base = makeCampaignRepository();
+  for (const spec of opts.campaigns) {
+    base.rows.push({
+      id: spec.id,
+      tenantId: FAKE_TENANT,
+      name: spec.id,
+      status: spec.status,
+      messageTemplate: 'Olá {{nome}}',
+      allowedAccountIds: spec.allowedAccountIds,
+      dailyLimit: null,
+      scheduledAt: null,
+      pauseReason: null,
+      pausedAt: null,
+      pausedBy: null,
+      resumedBy: null,
+      resumedAt: null,
+      createIdempotencyKey: `create-${spec.id}`,
+      createRequestHash: `hash-${spec.id}`,
+      startIdempotencyKey: null,
+      startRequestHash: null,
+      createdBy: FAKE_U1,
+      createdAt: at,
+      updatedAt: at,
+    });
+  }
+  const casCalls: FakeCampaigns['casCalls'] = [];
+  const campaigns: FakeCampaigns = {
+    ...base,
+    casCalls,
+    async compareAndSetStatus(scope, id, expected, patch) {
+      casCalls.push([id, expected, patch]);
+      return base.compareAndSetStatus(scope, id, expected, patch);
+    },
+  };
+  const pending = new Map(opts.campaigns.map((c) => [c.id, c.pending]));
+  const dispatch: CampaignDispatchStore = {
+    async nextPending() {
+      return null;
+    },
+    async skipIneligibleContacts() {
+      return 0;
+    },
+    async pendingCountForAccount(_scope, campaignId, accountId) {
+      return pending.get(campaignId)?.[accountId] ?? 0;
+    },
+    async pendingCount() {
+      return 0;
+    },
+    async countEnqueuedSince() {
+      return 0;
+    },
+  };
+  const ensureCalls: Array<Parameters<TickScheduler['ensureTick']>[0]> = [];
+  const scheduler: TickScheduler = {
+    async ensureTick(input) {
+      ensureCalls.push(input);
+    },
+  };
+  return {
+    scope: { tenantId: FAKE_TENANT },
+    campaigns,
+    dispatch,
+    scheduler: Object.assign(scheduler, { calls: ensureCalls }),
+    now: () => at,
+  };
+}

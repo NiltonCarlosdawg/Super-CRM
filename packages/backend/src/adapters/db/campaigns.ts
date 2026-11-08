@@ -1,7 +1,7 @@
 // Fase 4, Task 5: adaptador Drizzle das campanhas. Toda a query é scoped por
 // tenant; as contas permitidas vivem na junção `campaign_accounts` (Onda 1).
 
-import { and, asc, count, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm';
 
 import type { Campaign, CampaignStatus, NewCampaign } from '../../domain/campaigns/types.js';
 import type {
@@ -12,11 +12,17 @@ import type {
 } from '../../ports/campaigns.js';
 import type { ContactAudience } from '../../ports/campaign-audience.js';
 import type { CampaignRecipientStore, NewRecipient } from '../../ports/campaign-recipients.js';
+import type {
+  CampaignDispatchStore,
+  ContactNameSource,
+  ConversationFinder,
+} from '../../ports/campaign-dispatch.js';
 import type { TenantScope } from '../../ports/tenancy.js';
 import type { DbClient } from './index.js';
 import { campaignAccounts, campaignRecipients, campaigns } from './schema/campaigns.schema.js';
 import { contacts } from './schema/contacts.schema.js';
 import { whatsappAccounts } from './schema/whatsapp-accounts.schema.js';
+import { findOrCreateConversation } from './inbound.js';
 
 type CampaignRow = typeof campaigns.$inferSelect;
 
@@ -329,6 +335,127 @@ export function buildRecipientStore(db: DbClient): CampaignRecipientStore {
         )
         .returning({ id: campaignRecipients.id });
       return updated.length;
+    },
+  };
+}
+
+// Fase 4, Task 9: stores do tick, nome do contacto e conversa de campanha.
+
+export function buildDispatchStore(db: DbClient): CampaignDispatchStore {
+  return {
+    async nextPending(scope, campaignId, accountId) {
+      const [row] = await db
+        .select({
+          id: campaignRecipients.id,
+          contactId: campaignRecipients.contactId,
+          step: campaignRecipients.step,
+        })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.campaignId, campaignId),
+            eq(campaignRecipients.accountId, accountId),
+            eq(campaignRecipients.status, 'pending'),
+          ),
+        )
+        .orderBy(asc(campaignRecipients.createdAt), asc(campaignRecipients.id))
+        .limit(1);
+      return row ?? null;
+    },
+
+    async skipIneligibleContacts(scope, campaignId, at): Promise<number> {
+      const ineligible = db
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.tenantId, scope.tenantId),
+            or(eq(contacts.marketingConsent, false), isNotNull(contacts.optedOutAt)),
+          ),
+        );
+      const updated = await db
+        .update(campaignRecipients)
+        .set({ status: 'opted_out', optedOutAt: at })
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.campaignId, campaignId),
+            eq(campaignRecipients.status, 'pending'),
+            inArray(campaignRecipients.contactId, ineligible),
+          ),
+        )
+        .returning({ id: campaignRecipients.id });
+      return updated.length;
+    },
+
+    async pendingCountForAccount(scope, campaignId, accountId): Promise<number> {
+      const [row] = await db
+        .select({ n: count() })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.campaignId, campaignId),
+            eq(campaignRecipients.accountId, accountId),
+            eq(campaignRecipients.status, 'pending'),
+          ),
+        );
+      return row?.n ?? 0;
+    },
+
+    async pendingCount(scope, campaignId): Promise<number> {
+      const [row] = await db
+        .select({ n: count() })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.campaignId, campaignId),
+            eq(campaignRecipients.status, 'pending'),
+          ),
+        );
+      return row?.n ?? 0;
+    },
+
+    async countEnqueuedSince(scope, accountId, since): Promise<number> {
+      const [row] = await db
+        .select({ n: count() })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.accountId, accountId),
+            gte(campaignRecipients.enqueuedAt, since),
+          ),
+        );
+      return row?.n ?? 0;
+    },
+  };
+}
+
+export function buildContactNameSource(db: DbClient): ContactNameSource {
+  return {
+    async displayName(scope, contactId) {
+      const [row] = await db
+        .select({ name: contacts.name })
+        .from(contacts)
+        .where(and(eq(contacts.tenantId, scope.tenantId), eq(contacts.id, contactId)))
+        .limit(1);
+      return row?.name ?? null;
+    },
+  };
+}
+
+export function buildConversationFinder(db: DbClient, now: () => Date): ConversationFinder {
+  return {
+    async findOrCreateForCampaign(scope, input) {
+      return findOrCreateConversation(db, {
+        tenantId: scope.tenantId,
+        accountId: input.accountId,
+        contactId: input.contactId,
+        at: now(),
+      });
     },
   };
 }
