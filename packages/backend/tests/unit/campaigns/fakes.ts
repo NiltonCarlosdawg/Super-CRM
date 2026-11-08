@@ -2,10 +2,18 @@
 // controlados. Só implementam o que os casos de uso exercitam.
 
 import type { Campaign, CampaignStatus, NewCampaign, PauseReason } from '../../../src/domain/campaigns/types.js';
-import type { CampaignRepository, StatusPatch, WhatsAppAccountStub } from '../../../src/ports/campaigns.js';
+import type {
+  AccountPurpose,
+  CampaignRepository,
+  StatusPatch,
+  WhatsAppAccountStub,
+} from '../../../src/ports/campaigns.js';
+import type { ContactAudience } from '../../../src/ports/campaign-audience.js';
+import type { CampaignRecipientStore, NewRecipient } from '../../../src/ports/campaign-recipients.js';
 import type { Audit } from '../../../src/ports/audit.js';
 import type { TenantScope } from '../../../src/ports/tenancy.js';
 import { createCampaign, type CreateCampaign } from '../../../src/application/campaigns/create-campaign.js';
+import { startCampaign, type StartCampaign } from '../../../src/application/campaigns/start-campaign.js';
 
 export const FAKE_TENANT = '00000000-0000-0000-0000-0000000000f0';
 export const FAKE_U1 = '00000000-0000-0000-0000-0000000000f1';
@@ -131,3 +139,124 @@ export function makeCreateDeps(opts: FakeAccountsOptions = {}): {
 }
 
 export type { CampaignStatus, PauseReason };
+
+export interface FakeRecipientStore extends CampaignRecipientStore {
+  calls: string[];
+  lastRows: NewRecipient[];
+  rows: NewRecipient[];
+}
+
+export function makeRecipientStore(calls: string[] = []): FakeRecipientStore {
+  const rows: NewRecipient[] = [];
+  const store: FakeRecipientStore = {
+    calls,
+    lastRows: [],
+    rows,
+    async insertBatch(_scope, batch) {
+      calls.push('insertBatch');
+      store.lastRows = [...batch];
+      let created = 0;
+      for (const r of batch) {
+        const dup = rows.some(
+          (x) => x.campaignId === r.campaignId && x.contactId === r.contactId && x.step === r.step,
+        );
+        if (dup) continue;
+        rows.push(r);
+        created += 1;
+      }
+      return created;
+    },
+    async countByCampaign(_scope, campaignId) {
+      return rows.filter((r) => r.campaignId === campaignId).length;
+    },
+    async markEnqueued(recipientId) {
+      return rows.some((r) => r.id === recipientId);
+    },
+  };
+  return store;
+}
+
+export interface StartDepsOptions {
+  campaignId: string;
+  allowedAccountIds: readonly string[];
+  eligible?: readonly string[];
+  purposeNow?: AccountPurpose;
+  accounts?: WhatsAppAccountStub[];
+}
+
+export interface StartDeps {
+  start: StartCampaign;
+  audit: FakeAudit;
+  campaigns: FakeCampaignRepository;
+  recipients: FakeRecipientStore;
+  audience: ContactAudience;
+}
+
+export function makeStartDeps(opts: StartDepsOptions): StartDeps {
+  const audit = makeAudit();
+  const calls: string[] = [];
+  const recipients = makeRecipientStore(calls);
+  const base = makeCampaignRepository();
+  const at = new Date('2026-10-01T00:00:00Z');
+  base.rows.push({
+    id: opts.campaignId,
+    tenantId: FAKE_TENANT,
+    name: 'Campanha',
+    status: 'draft',
+    messageTemplate: 'Olá {{nome}}, temos novidades!',
+    allowedAccountIds: [...opts.allowedAccountIds],
+    dailyLimit: null,
+    scheduledAt: null,
+    pauseReason: null,
+    pausedAt: null,
+    pausedBy: null,
+    resumedBy: null,
+    resumedAt: null,
+    createIdempotencyKey: 'create-key',
+    createRequestHash: 'create-hash',
+    startIdempotencyKey: null,
+    startRequestHash: null,
+    createdBy: FAKE_U1,
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  const campaigns: FakeCampaignRepository = {
+    ...base,
+    async compareAndSetStatus(scope, id, expected, patch) {
+      calls.push('compareAndSetStatus');
+      return base.compareAndSetStatus(scope, id, expected, patch);
+    },
+  };
+
+  const accounts =
+    opts.accounts !== undefined
+      ? makeAccountGate({ accounts: opts.accounts })
+      : makeAccountGate({
+          accounts: opts.allowedAccountIds.map((id) => ({
+            id,
+            purpose: opts.purposeNow ?? 'campaigns',
+            status: 'connected',
+            createdAt: at,
+          })),
+        });
+
+  const audience: ContactAudience = {
+    async eligibleContactIds() {
+      return [...(opts.eligible ?? [])];
+    },
+  };
+
+  let ids = 0;
+  const start = startCampaign({
+    scope: { tenantId: FAKE_TENANT },
+    accounts,
+    campaigns,
+    audience,
+    recipients,
+    audit,
+    newId: () => `00000000-0000-0000-0000-0000000000e${String(++ids).padStart(2, '0')}`,
+  });
+
+  return { start, audit, campaigns, recipients, audience };
+}

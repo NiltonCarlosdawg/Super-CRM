@@ -616,7 +616,7 @@ git commit -m "feat: create campaign use case with account purpose validation"
 
 ---
 
-### Task 6: Iniciar campanha (segmentação por consentimento e agendamento)
+### Task 6: [x] Iniciar campanha (segmentação por consentimento e agendamento)
 
 **Files:**
 - Create: `src/ports/campaign-audience.ts`

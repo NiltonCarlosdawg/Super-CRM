@@ -26,7 +26,9 @@ export type CampaignErrorCode =
   | 'duplicate_account'
   | 'unknown_account'
   | 'unsupported_account_purpose'
-  | 'idempotency_conflict';
+  | 'idempotency_conflict'
+  | 'invalid_status'
+  | 'campaign_already_running';
 
 export class CampaignError extends Error {
   readonly code: CampaignErrorCode;

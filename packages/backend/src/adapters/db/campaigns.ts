@@ -1,7 +1,7 @@
 // Fase 4, Task 5: adaptador Drizzle das campanhas. Toda a query é scoped por
 // tenant; as contas permitidas vivem na junção `campaign_accounts` (Onda 1).
 
-import { and, desc, eq, inArray, lt, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 
 import type { Campaign, CampaignStatus, NewCampaign } from '../../domain/campaigns/types.js';
 import type {
@@ -10,9 +10,12 @@ import type {
   StatusPatch,
   WhatsAppAccountStub,
 } from '../../ports/campaigns.js';
+import type { ContactAudience } from '../../ports/campaign-audience.js';
+import type { CampaignRecipientStore, NewRecipient } from '../../ports/campaign-recipients.js';
 import type { TenantScope } from '../../ports/tenancy.js';
 import type { DbClient } from './index.js';
-import { campaignAccounts, campaigns } from './schema/campaigns.schema.js';
+import { campaignAccounts, campaignRecipients, campaigns } from './schema/campaigns.schema.js';
+import { contacts } from './schema/contacts.schema.js';
 import { whatsappAccounts } from './schema/whatsapp-accounts.schema.js';
 
 type CampaignRow = typeof campaigns.$inferSelect;
@@ -191,6 +194,80 @@ export function createCampaignRepositories(deps: { db: DbClient }): {
           return toCampaign(row, allowed);
         });
       },
+    },
+  };
+}
+
+// Fase 4, Task 6: audiência elegível e destinatários materializados.
+
+export function buildAudience(db: DbClient): ContactAudience {
+  return {
+    async eligibleContactIds(scope: TenantScope): Promise<readonly string[]> {
+      const rows = await db
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.tenantId, scope.tenantId),
+            eq(contacts.marketingConsent, true),
+            isNull(contacts.optedOutAt),
+          ),
+        )
+        .orderBy(asc(contacts.id));
+      return rows.map((r) => r.id);
+    },
+  };
+}
+
+export function buildRecipientStore(db: DbClient): CampaignRecipientStore {
+  return {
+    async insertBatch(scope: TenantScope, rows: readonly NewRecipient[]): Promise<number> {
+      if (rows.length === 0) return 0;
+      const inserted = await db
+        .insert(campaignRecipients)
+        .values(
+          rows.map((r) => ({
+            id: r.id,
+            tenantId: scope.tenantId,
+            campaignId: r.campaignId,
+            contactId: r.contactId,
+            accountId: r.accountId,
+            step: r.step,
+          })),
+        )
+        .onConflictDoNothing({
+          target: [campaignRecipients.campaignId, campaignRecipients.contactId, campaignRecipients.step],
+        })
+        .returning({ id: campaignRecipients.id });
+      return inserted.length;
+    },
+
+    async countByCampaign(scope: TenantScope, campaignId: string): Promise<number> {
+      const [row] = await db
+        .select({ n: count() })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.campaignId, campaignId),
+          ),
+        );
+      return row?.n ?? 0;
+    },
+
+    async markEnqueued(scope, recipientId, outboxKey, at): Promise<boolean> {
+      const updated = await db
+        .update(campaignRecipients)
+        .set({ status: 'sent', outboxKey, enqueuedAt: at })
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.id, recipientId),
+            eq(campaignRecipients.status, 'pending'),
+          ),
+        )
+        .returning({ id: campaignRecipients.id });
+      return updated.length > 0;
     },
   };
 }
