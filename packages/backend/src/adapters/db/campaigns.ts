@@ -17,10 +17,16 @@ import type {
   ContactNameSource,
   ConversationFinder,
 } from '../../ports/campaign-dispatch.js';
+import type {
+  DeliveryProbe,
+  RecipientStatsStore,
+} from '../../ports/campaign-stats.js';
+import type { VolumeWindow } from '../../domain/campaigns/auto-pause.js';
 import type { TenantScope } from '../../ports/tenancy.js';
 import type { DbClient } from './index.js';
 import { campaignAccounts, campaignRecipients, campaigns } from './schema/campaigns.schema.js';
 import { contacts } from './schema/contacts.schema.js';
+import { outboxMessages } from './schema/outbox.schema.js';
 import { whatsappAccounts } from './schema/whatsapp-accounts.schema.js';
 import { findOrCreateConversation } from './inbound.js';
 
@@ -456,6 +462,106 @@ export function buildConversationFinder(db: DbClient, now: () => Date): Conversa
         contactId: input.contactId,
         at: now(),
       });
+    },
+  };
+}
+
+// Fase 4, Task 10: estatísticas de entrega e sonda da outbox.
+
+export function buildRecipientStatsStore(db: DbClient): RecipientStatsStore {
+  return {
+    async sentOutboxKeys(scope, accountId, limit) {
+      const rows = await db
+        .select({ id: campaignRecipients.id, outboxKey: campaignRecipients.outboxKey })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.accountId, accountId),
+            eq(campaignRecipients.status, 'sent'),
+            isNotNull(campaignRecipients.outboxKey),
+          ),
+        )
+        .orderBy(desc(campaignRecipients.enqueuedAt), desc(campaignRecipients.id))
+        .limit(limit);
+      return rows.map((r) => ({ id: r.id, outboxKey: r.outboxKey ?? '' }));
+    },
+
+    async markFailed(scope, recipientId, at): Promise<void> {
+      await db
+        .update(campaignRecipients)
+        .set({ status: 'failed', updatedAt: at })
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.id, recipientId),
+            eq(campaignRecipients.status, 'sent'),
+          ),
+        );
+    },
+
+    async volumeWindow(scope, accountId, since, input): Promise<VolumeWindow> {
+      const outcomes = await db
+        .select({ status: campaignRecipients.status })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.accountId, accountId),
+            inArray(campaignRecipients.status, ['sent', 'failed']),
+            isNotNull(campaignRecipients.enqueuedAt),
+            gte(campaignRecipients.enqueuedAt, since),
+          ),
+        )
+        .orderBy(desc(campaignRecipients.enqueuedAt), desc(campaignRecipients.id))
+        .limit(input.failWindow);
+      const recent = await db
+        .select({ optedOutAt: campaignRecipients.optedOutAt })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.accountId, accountId),
+            isNotNull(campaignRecipients.enqueuedAt),
+            gte(campaignRecipients.enqueuedAt, since),
+          ),
+        )
+        .orderBy(desc(campaignRecipients.enqueuedAt), desc(campaignRecipients.id))
+        .limit(input.optOutWindow);
+      return {
+        knownOutcomes: outcomes.map((r) => (r.status === 'failed' ? 'failed' : 'sent')),
+        optOutsInWindow: recent.filter((r) => r.optedOutAt !== null).length,
+      };
+    },
+  };
+}
+
+export function buildDeliveryProbe(db: DbClient): DeliveryProbe {
+  return {
+    async outboxStates(scope, keys) {
+      const states = new Map<string, 'pending' | 'sent' | 'failed' | 'unknown'>();
+      if (keys.length === 0) return states;
+      const rows = await db
+        .select({ key: outboxMessages.idempotencyKey, status: outboxMessages.status })
+        .from(outboxMessages)
+        .where(
+          and(eq(outboxMessages.tenantId, scope.tenantId), inArray(outboxMessages.idempotencyKey, [...keys])),
+        );
+      for (const row of rows) {
+        states.set(
+          row.key,
+          row.status === 'queued' || row.status === 'sending'
+            ? 'pending'
+            : row.status === 'sent'
+              ? 'sent'
+              : row.status === 'failed'
+                ? 'failed'
+                : 'unknown',
+        );
+      }
+      // Chave sem linha (ou 'unknown_delivery') → 'unknown', nunca falha.
+      for (const key of keys) if (!states.has(key)) states.set(key, 'unknown');
+      return states;
     },
   };
 }

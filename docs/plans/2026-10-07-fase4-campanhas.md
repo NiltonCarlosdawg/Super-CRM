@@ -1249,7 +1249,7 @@ git commit -m "feat: campaign send tick with pacing gates and idempotent enqueue
 
 ---
 
-### Task 10: Pausa automática e retoma só humana
+### Task 10: [x] Pausa automática e retoma só humana
 
 **Files:**
 - Create: `src/domain/campaigns/auto-pause.ts`

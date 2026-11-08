@@ -28,7 +28,8 @@ export type CampaignErrorCode =
   | 'unsupported_account_purpose'
   | 'idempotency_conflict'
   | 'invalid_status'
-  | 'campaign_already_running';
+  | 'campaign_already_running'
+  | 'human_required';
 
 export class CampaignError extends Error {
   readonly code: CampaignErrorCode;

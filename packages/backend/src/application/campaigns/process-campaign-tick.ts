@@ -76,10 +76,12 @@ export async function processCampaignTick(
 
   const accounts = await deps.accounts.find(deps.scope, [input.accountId]);
   const account = accounts[0];
-  if (account === undefined || account.purpose !== 'campaigns' || account.status !== 'connected') {
+  if (account === undefined) {
     return { outcome: 'waiting', reason: 'account_unavailable', retryAt: delay() };
   }
 
+  // As guardas correm ANTES do gate de disponibilidade: uma sessão caída tem de
+  // PAUSAR a campanha (Task 10), não apenas esperar.
   for (const guard of deps.pauseGuards) {
     const hit = await guard({ campaign, account, now });
     if (hit !== null) {
@@ -91,6 +93,10 @@ export async function processCampaignTick(
       });
       return { outcome: 'idle', reason: 'paused' };
     }
+  }
+
+  if (account.purpose !== 'campaigns' || account.status !== 'connected') {
+    return { outcome: 'waiting', reason: 'account_unavailable', retryAt: delay() };
   }
 
   if (campaign.status === 'scheduled') {
