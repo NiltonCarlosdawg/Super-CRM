@@ -314,5 +314,21 @@ export function buildRecipientStore(db: DbClient): CampaignRecipientStore {
         return pending.length;
       });
     },
+
+    async markRepliedByContact(scope, contactId, at): Promise<number> {
+      const updated = await db
+        .update(campaignRecipients)
+        .set({ status: 'replied', repliedAt: at })
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.contactId, contactId),
+            eq(campaignRecipients.status, 'sent'),
+            isNull(campaignRecipients.repliedAt),
+          ),
+        )
+        .returning({ id: campaignRecipients.id });
+      return updated.length;
+    },
   };
 }

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { eq } from 'drizzle-orm';
 import { createAccountsRepository } from '../../src/adapters/db/accounts.js';
+import { buildAudience, buildRecipientStore } from '../../src/adapters/db/campaigns.js';
 import { createOrchestratorPorts } from '../../src/adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../../src/adapters/db/outbox.js';
 import * as base from '../../src/adapters/db/schema/index.js';
@@ -17,6 +18,8 @@ import {
   handleInboundEvent,
   type HandleInboundDeps,
 } from '../../src/application/handle-inbound.js';
+import { makeApplyOptOut } from '../../src/application/campaigns/apply-opt-out.js';
+import { makeInboundEffects } from '../../src/application/campaigns/inbound-effects.js';
 import { handleInbound } from '../../src/application/orchestrator.js';
 import { normalizePhoneE164 } from '../../src/domain/phone.js';
 import { handoffs } from '../../src/modules/knowledge/knowledge.schema.js';
@@ -293,4 +296,37 @@ test('inboundEffects corre DEPOIS da mensagem guardada e ANTES do orquestrador',
   const ev = await h.insertEvent({ text: 'olá' });
   await handleInboundEvent(deps, ev.id);
   assert.deepEqual(order, ['message_stored', 'effects', 'orchestrate']);
+});
+
+test('mensagem SAIR no pipeline real preenche contacts.opted_out_at (wiring Fase 4)', async () => {
+  const h = await createInboundHarness();
+  const audience = buildAudience(h.db);
+  const recipients = buildRecipientStore(h.db);
+  const effects = makeInboundEffects({
+    applyOptOutFor: (tenantId) =>
+      makeApplyOptOut({
+        scope: { tenantId },
+        audience,
+        recipients,
+        audit: { async record() {} },
+      }),
+    recipients,
+    keywords: ['sair'],
+  });
+  const ev = await h.insertEvent({ text: 'SAIR' });
+  const res = await handleInboundEvent(
+    {
+      ...h.deps,
+      inboundEffects: async (input) => {
+        await effects(input);
+      },
+    },
+    ev.id,
+  );
+  assert.equal(res.outcome, 'processed');
+  const [row] = await h.db
+    .select({ optedOutAt: base.contacts.optedOutAt })
+    .from(base.contacts)
+    .where(eq(base.contacts.tenantId, base.MILVENDAS_TENANT_ID));
+  assert.ok(row?.optedOutAt instanceof Date, 'o opt-out tem de ficar gravado no pipeline real');
 });

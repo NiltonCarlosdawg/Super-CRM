@@ -178,6 +178,9 @@ export function makeRecipientStore(calls: string[] = []): FakeRecipientStore {
       optedOutContacts.add(contactId);
       return rows.filter((r) => r.contactId === contactId).length;
     },
+    async markRepliedByContact(_scope, contactId) {
+      return rows.filter((r) => r.contactId === contactId).length;
+    },
   };
   return store;
 }

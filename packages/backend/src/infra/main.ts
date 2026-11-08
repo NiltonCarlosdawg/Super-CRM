@@ -16,6 +16,7 @@ import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb, type DbClient } from '../adapters/db/index.js';
+import { buildAudience, buildRecipientStore } from '../adapters/db/campaigns.js';
 import { createConversationsRepository } from '../adapters/db/conversations.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
@@ -26,6 +27,8 @@ import { createJobQueue } from '../adapters/queue/index.js';
 import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
 import { createWaAkgAdapter } from '../adapters/wa-akg/index.js';
 import { createAccountLifecycle } from '../application/account-lifecycle.js';
+import { makeApplyOptOut } from '../application/campaigns/apply-opt-out.js';
+import { makeInboundEffects } from '../application/campaigns/inbound-effects.js';
 import { createLoginService } from '../application/auth/login.js';
 import { createLoginLimiter } from '../application/auth/login-limiter.js';
 import { createMfaService } from '../application/auth/mfa.js';
@@ -195,6 +198,22 @@ async function main(): Promise<void> {
     now,
   });
 
+  // Fase 4, Task 8: efeitos de campanha na entrada — opt-out imediato e
+  // "respondeu". O mesmo seam serve todos os tenants; o scope vem por chamada.
+  const campaignAudience = buildAudience(db);
+  const campaignRecipients = buildRecipientStore(db);
+  const inboundEffects = makeInboundEffects({
+    applyOptOutFor: (tenantId) =>
+      makeApplyOptOut({
+        scope: { tenantId },
+        audience: campaignAudience,
+        recipients: campaignRecipients,
+        audit,
+      }),
+    recipients: campaignRecipients,
+    keywords: config.campaigns.optOutKeywords,
+  });
+
   const unavailableAiProvider = createUnavailableAiProvider();
 
   // Treinar agente (Task 9): bundle de conhecimento SEMPRE montado — as rotas
@@ -314,6 +333,9 @@ async function main(): Promise<void> {
             cfg: { claimTtlMs: config.messaging.claimTtlMs },
             now,
             logger: log,
+            inboundEffects: async (input) => {
+              await inboundEffects(input);
+            },
           },
           eventId,
         ),

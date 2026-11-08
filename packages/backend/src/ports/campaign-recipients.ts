@@ -19,4 +19,6 @@ export interface CampaignRecipientStore {
   markEnqueued(scope: TenantScope, recipientId: string, outboxKey: string, at: Date): Promise<boolean>;
   /** pending → opted_out; sent/replied/failed só levam opted_out_at. Devolve o nº de pendentes que mudaram. Idempotente. */
   markOptedOutByContact(scope: TenantScope, contactId: string, at: Date): Promise<number>;
+  /** sent → replied (só se replied_at for null). Devolve nº de linhas. */
+  markRepliedByContact(scope: TenantScope, contactId: string, at: Date): Promise<number>;
 }

@@ -64,6 +64,7 @@ export interface HandleInboundDeps {
   /** Seam Fase 4 (opt-out/markReplied): depois da mensagem guardada, antes do
    *  orquestrador. Default no-op. Erro propaga — nunca `catch {}`. */
   inboundEffects?: (input: {
+    tenantId: string;
     contactId: string;
     conversationId: string;
     text: string;
@@ -178,6 +179,7 @@ export async function handleInboundEvent(
 
     // 5. Seam de efeitos (Fase 4): sempre com o texto real; erro propaga.
     await deps.inboundEffects?.({
+      tenantId: account.tenantId,
       contactId: contact.id,
       conversationId: conversation.id,
       text: text ?? '',

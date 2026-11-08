@@ -905,7 +905,7 @@ git commit -m "feat: immediate contact opt-out across all campaigns"
 
 ---
 
-### Task 8: Efeitos da mensagem de entrada (opt-out e "respondeu")
+### Task 8: [x] Efeitos da mensagem de entrada (opt-out e "respondeu")
 
 **Files:**
 - Create: `src/application/campaigns/inbound-effects.ts`
