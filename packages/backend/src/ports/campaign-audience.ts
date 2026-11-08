@@ -6,4 +6,6 @@ import type { TenantScope } from './tenancy.js';
 export interface ContactAudience {
   /** Contactos com marketing_consent = true E opted_out_at IS NULL, ordenados por id. Só uuids. */
   eligibleContactIds(scope: TenantScope): Promise<readonly string[]>;
+  /** Idempotente: true só se opted_out_at passou de null para preenchido. */
+  markOptedOut(scope: TenantScope, contactId: string, at: Date): Promise<boolean>;
 }

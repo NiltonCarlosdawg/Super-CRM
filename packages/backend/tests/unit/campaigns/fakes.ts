@@ -148,6 +148,7 @@ export interface FakeRecipientStore extends CampaignRecipientStore {
 
 export function makeRecipientStore(calls: string[] = []): FakeRecipientStore {
   const rows: NewRecipient[] = [];
+  const optedOutContacts = new Set<string>();
   const store: FakeRecipientStore = {
     calls,
     lastRows: [],
@@ -171,6 +172,11 @@ export function makeRecipientStore(calls: string[] = []): FakeRecipientStore {
     },
     async markEnqueued(recipientId) {
       return rows.some((r) => r.id === recipientId);
+    },
+    async markOptedOutByContact(_scope, contactId) {
+      if (optedOutContacts.has(contactId)) return 0;
+      optedOutContacts.add(contactId);
+      return rows.filter((r) => r.contactId === contactId).length;
     },
   };
   return store;
@@ -244,6 +250,9 @@ export function makeStartDeps(opts: StartDepsOptions): StartDeps {
   const audience: ContactAudience = {
     async eligibleContactIds() {
       return [...(opts.eligible ?? [])];
+    },
+    async markOptedOut() {
+      return false;
     },
   };
 

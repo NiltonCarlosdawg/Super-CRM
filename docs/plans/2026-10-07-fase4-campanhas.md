@@ -786,7 +786,7 @@ git commit -m "feat: start campaign with consent-based segmentation"
 
 ---
 
-### Task 7: Opt-out imediato em todas as campanhas
+### Task 7: [x] Opt-out imediato em todas as campanhas
 
 **Files:**
 - Create: `src/domain/campaigns/opt-out.ts`

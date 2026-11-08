@@ -216,6 +216,21 @@ export function buildAudience(db: DbClient): ContactAudience {
         .orderBy(asc(contacts.id));
       return rows.map((r) => r.id);
     },
+
+    async markOptedOut(scope, contactId, at): Promise<boolean> {
+      const updated = await db
+        .update(contacts)
+        .set({ optedOutAt: at })
+        .where(
+          and(
+            eq(contacts.tenantId, scope.tenantId),
+            eq(contacts.id, contactId),
+            isNull(contacts.optedOutAt),
+          ),
+        )
+        .returning({ id: contacts.id });
+      return updated.length > 0;
+    },
   };
 }
 
@@ -268,6 +283,36 @@ export function buildRecipientStore(db: DbClient): CampaignRecipientStore {
         )
         .returning({ id: campaignRecipients.id });
       return updated.length > 0;
+    },
+
+    async markOptedOutByContact(scope, contactId, at): Promise<number> {
+      return db.transaction(async (tx) => {
+        const pending = await tx
+          .update(campaignRecipients)
+          .set({ status: 'opted_out', optedOutAt: at })
+          .where(
+            and(
+              eq(campaignRecipients.tenantId, scope.tenantId),
+              eq(campaignRecipients.contactId, contactId),
+              eq(campaignRecipients.status, 'pending'),
+              isNull(campaignRecipients.optedOutAt),
+            ),
+          )
+          .returning({ id: campaignRecipients.id });
+        // Já enviadas/falhadas mantêm o estado; só ganham a marca de opt-out.
+        await tx
+          .update(campaignRecipients)
+          .set({ optedOutAt: at })
+          .where(
+            and(
+              eq(campaignRecipients.tenantId, scope.tenantId),
+              eq(campaignRecipients.contactId, contactId),
+              isNull(campaignRecipients.optedOutAt),
+            ),
+          )
+          .returning({ id: campaignRecipients.id });
+        return pending.length;
+      });
     },
   };
 }

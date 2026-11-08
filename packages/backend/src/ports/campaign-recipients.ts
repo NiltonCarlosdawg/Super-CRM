@@ -17,4 +17,6 @@ export interface CampaignRecipientStore {
   countByCampaign(scope: TenantScope, campaignId: string): Promise<number>;
   /** pendente → sent: preenche outboxKey e enqueuedAt. Devolve true só se mudou (idempotente). */
   markEnqueued(scope: TenantScope, recipientId: string, outboxKey: string, at: Date): Promise<boolean>;
+  /** pending → opted_out; sent/replied/failed só levam opted_out_at. Devolve o nº de pendentes que mudaram. Idempotente. */
+  markOptedOutByContact(scope: TenantScope, contactId: string, at: Date): Promise<number>;
 }
