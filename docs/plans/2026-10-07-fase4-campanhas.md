@@ -472,7 +472,7 @@ git commit -m "feat: validate and render campaign message templates"
 
 ---
 
-### Task 5: Criar campanha (validação de contas e idempotência)
+### Task 5: [x] Criar campanha (validação de contas e idempotência)
 
 **Files:**
 - Create: `src/ports/campaigns.ts`
