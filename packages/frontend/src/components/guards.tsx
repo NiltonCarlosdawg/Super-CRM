@@ -4,6 +4,7 @@
 import { useEffect, type ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import { useSession } from "../lib/auth";
+import type { Role } from "../lib/types";
 import { useOptionalToast } from "./ui/Toast";
 import { Spinner } from "./ui/Spinner";
 
@@ -46,6 +47,30 @@ export function RequireAdmin({
   const { status, user } = useSession();
   if (status === "loading") return <Loading />;
   if (user?.role !== "admin") {
+    return (
+      <>
+        {notice !== undefined && <NoticeOnMount message={notice} />}
+        <Navigate to="/" replace />
+      </>
+    );
+  }
+  return <>{children}</>;
+}
+
+/** Exige um dos papéis — a rota vive dentro do RequireAuth. Serve o módulo de
+ * conhecimento (editor|admin); o backend continua a ser a autoridade. */
+export function RequireRole({
+  roles,
+  children,
+  notice,
+}: {
+  roles: Role[];
+  children: ReactNode;
+  notice?: string;
+}) {
+  const { status, user } = useSession();
+  if (status === "loading") return <Loading />;
+  if (user === null || !roles.includes(user.role)) {
     return (
       <>
         {notice !== undefined && <NoticeOnMount message={notice} />}

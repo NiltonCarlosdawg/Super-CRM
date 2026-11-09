@@ -10,7 +10,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { SessionProvider } from "./lib/auth";
 import { AppShell } from "./components/AppShell";
-import { RequireAdmin, RequireAuth, RequirePlatform } from "./components/guards";
+import { RequireAdmin, RequireAuth, RequirePlatform, RequireRole } from "./components/guards";
 import { ToastProvider } from "./components/ui/Toast";
 
 import LoginPage from "./pages/login";
@@ -20,11 +20,16 @@ import AccountsPage from "./pages/accounts";
 import ConversationsPage from "./pages/conversations";
 import CampaignsPage from "./pages/campaigns";
 import HandoffsPage from "./pages/handoffs";
+import KnowledgePage from "./pages/knowledge";
 import UsersPage from "./pages/users";
 import PlatformPage from "./pages/platform";
 import SettingsPage from "./pages/settings";
 
-import { ACCOUNTS_FORBIDDEN_NOTICE } from "./lib/labels";
+import {
+  ACCOUNTS_FORBIDDEN_NOTICE,
+  CAMPAIGNS_FORBIDDEN_NOTICE,
+  KNOWLEDGE_FORBIDDEN_NOTICE,
+} from "./lib/labels";
 
 import "./globals.css";
 
@@ -50,8 +55,23 @@ createRoot(document.getElementById("root")!).render(
               />
               <Route path="/conversations" element={<ConversationsPage />} />
               <Route path="/conversations/:id" element={<ConversationsPage />} />
-              <Route path="/campaigns" element={<CampaignsPage />} />
+              <Route
+                path="/campaigns"
+                element={
+                  <RequireAdmin notice={CAMPAIGNS_FORBIDDEN_NOTICE}>
+                    <CampaignsPage />
+                  </RequireAdmin>
+                }
+              />
               <Route path="/handoffs" element={<HandoffsPage />} />
+              <Route
+                path="/knowledge"
+                element={
+                  <RequireRole roles={["editor", "admin"]} notice={KNOWLEDGE_FORBIDDEN_NOTICE}>
+                    <KnowledgePage />
+                  </RequireRole>
+                }
+              />
               {/* Definições: qualquer sessão completa muda a sua própria password. */}
               <Route path="/settings" element={<SettingsPage />} />
               <Route

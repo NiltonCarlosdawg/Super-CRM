@@ -141,6 +141,12 @@ export const TOTP_ENABLED_MESSAGE = "TOTP activado";
 export const ACCOUNTS_FORBIDDEN_NOTICE =
   "Acesso restrito: só administradores podem abrir as Contas.";
 
+export const CAMPAIGNS_FORBIDDEN_NOTICE =
+  "Acesso restrito: só administradores podem abrir as Campanhas.";
+
+export const KNOWLEDGE_FORBIDDEN_NOTICE =
+  "Acesso restrito: só editores e administradores podem abrir o Conhecimento.";
+
 /** Códigos do problem+json de POST /v1/auth/password → copy PT-AO. */
 const PASSWORD_CHANGE_ERRORS: Record<string, string> = {
   invalid_credentials: "A palavra-passe actual está incorrecta",

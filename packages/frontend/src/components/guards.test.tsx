@@ -7,7 +7,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "./ui/Toast";
 import { useSession } from "../lib/auth";
-import { RequireAdmin, RequireAuth } from "./guards";
+import { RequireAdmin, RequireAuth, RequireRole } from "./guards";
 
 vi.mock("../lib/auth", () => ({ useSession: vi.fn() }));
 
@@ -145,5 +145,35 @@ describe("RequireAdmin", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Acesso restrito: só administradores podem abrir as Contas.",
     );
+  });
+});
+
+describe("RequireRole", () => {
+  it("deixa passar editor e admin", () => {
+    for (const role of ["editor", "admin"] as const) {
+      mockUseSession.mockReturnValue(
+        session({ user: { id: "u1", name: "A", email: "a@b.c", role, scope: "tenant" } }),
+      );
+      renderRoutes(
+        <RequireRole roles={["editor", "admin"]}>
+          <div>knowledge-page</div>
+        </RequireRole>,
+      );
+      expect(screen.getByText("knowledge-page")).toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it("agent é redirecionado para /", () => {
+    mockUseSession.mockReturnValue(
+      session({ user: { id: "u1", name: "A", email: "a@b.c", role: "agent", scope: "tenant" } }),
+    );
+    renderRoutes(
+      <RequireRole roles={["editor", "admin"]}>
+        <div>knowledge-page</div>
+      </RequireRole>,
+    );
+    expect(screen.getByText("home-page")).toBeInTheDocument();
+    expect(screen.queryByText("knowledge-page")).toBeNull();
   });
 });

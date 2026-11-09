@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useSession } from "../lib/auth";
+import type { Role } from "../lib/types";
 
 interface NavItem {
   to: string;
@@ -7,6 +8,8 @@ interface NavItem {
   end?: boolean;
   /** Onda 1, Task 11: /accounts é admin-only no cliente (RequireAdmin). */
   adminOnly?: boolean;
+  /** Fase 2–4: /knowledge é editor|admin (o `agent` não escreve conhecimento). */
+  roles?: Role[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -15,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/conversations", label: "Conversas" },
   { to: "/handoffs", label: "Handoffs" },
   { to: "/campaigns", label: "Campanhas" },
+  { to: "/knowledge", label: "Conhecimento", roles: ["editor", "admin"] },
   { to: "/settings", label: "Definições" },
 ];
 
@@ -33,7 +37,9 @@ export function Sidebar() {
   const isPlatform = user?.scope === "platform";
   const isAdmin = user?.role === "admin";
   const items = (isPlatform ? PLATFORM_NAV_ITEMS : NAV_ITEMS).filter(
-    (item) => item.adminOnly !== true || isAdmin,
+    (item) =>
+      (item.adminOnly !== true || isAdmin) &&
+      (item.roles === undefined || (user !== null && item.roles.includes(user.role))),
   );
   return (
     <aside

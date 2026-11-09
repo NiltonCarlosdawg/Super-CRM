@@ -30,12 +30,14 @@ nunca guarda tokens em `localStorage`.
 ```
 src/
   main.tsx            # rotas + providers (Session, Toast, Socket no AppShell)
-  lib/                # api.ts (cliente único), auth.tsx, socket.tsx, labels.ts, time.ts, types.ts
+  lib/                # api.ts (cliente único), auth.tsx, socket.tsx, labels.ts, campaigns.ts,
+                      # knowledge.ts, time.ts, types.ts
   components/
     ui/               # primitivas: Button, Field, Badge, Modal, Spinner, Toast, EmptyState, Card, TotpSetup
-    AppShell, Sidebar, TopBar, guards
-  pages/              # login, register, dashboard, accounts, conversations (+ thread/composer),
-                      # users, campaigns (placeholder), settings, platform
+    AppShell, Sidebar, TopBar, guards (RequireAuth/Admin/Role/Platform)
+  pages/              # login, register, dashboard, accounts, conversations (+ thread/composer/rascunhos),
+                      # handoffs, campaigns, knowledge (treino/publicado/lacunas/configuração/teste),
+                      # users, settings, platform
 ```
 
 Notas:
@@ -51,6 +53,22 @@ Notas:
   TOTP já estiver ativo — sem desativação em v1, nota honesta no UI).
 - **Tempo real**: eventos `account.status`, `message.created`, `message.status`,
   `handoff.created`, `handoff.updated` (Socket.IO autenticado por cookie).
-- **Vocabulário PT-AO** vive em `lib/labels.ts` — acrescentar rótulos novos aí, com teste.
-- **Campanhas** é um placeholder honesto (fase seguinte); os restos da landing
+- **Permissões**: `/accounts` e `/campaigns` são `RequireAdmin`; `/handoffs` é
+  `RequireAuth` (agent/admin no servidor); `/knowledge` é `RequireRole(['editor','admin'])`.
+  A sidebar esconde o que o papel não pode usar — a autoridade continua a ser o backend.
+- **Conversas**: além da thread e do composer, mostra rascunhos pendentes da IA
+  (aprovar/rejeitar com motivo) e “Devolver à IA” quando `aiMode === 'human_only'`.
+- **Campanhas** (Fase 4): lista paginada, criação com contas `purpose=campaigns`,
+  detalhe com contagens e iniciar/agendar, pausar e retomar (admin).
+- **Handoffs** (Fase 3): fila por prioridade, aceitar (409 recarrega), resolver e
+  abrir a conversa; recarrega por Socket.IO.
+- **Conhecimento** (Fases 2–4): cinco separadores — Treino (documentos texto/markdown,
+  passo-a-passo, rascunho, diff, publicação atómica), Publicado (edição rápida,
+  publicações/reverter, revisões, reembed), Lacunas (resolver/ignorar, sugestões),
+  Configuração (perguntas e gatilhos versionados + revisões) e Teste (chat real
+  contra rascunho ou publicado).
+- **Vocabulário PT-AO** vive em `lib/labels.ts` (conhecimento em `lib/knowledge.ts`)
+  — acrescentar rótulos novos aí, com teste.
+- **Campanhas reais** substituíram o placeholder antigo; os restos da landing
   antiga (dados falsos) foram removidos na Task 13.
+
