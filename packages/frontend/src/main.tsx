@@ -19,6 +19,7 @@ import DashboardPage from "./pages/dashboard";
 import AccountsPage from "./pages/accounts";
 import ConversationsPage from "./pages/conversations";
 import CampaignsPage from "./pages/campaigns";
+import HandoffsPage from "./pages/handoffs";
 import UsersPage from "./pages/users";
 import PlatformPage from "./pages/platform";
 import SettingsPage from "./pages/settings";
@@ -50,6 +51,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/conversations" element={<ConversationsPage />} />
               <Route path="/conversations/:id" element={<ConversationsPage />} />
               <Route path="/campaigns" element={<CampaignsPage />} />
+              <Route path="/handoffs" element={<HandoffsPage />} />
               {/* Definições: qualquer sessão completa muda a sua própria password. */}
               <Route path="/settings" element={<SettingsPage />} />
               <Route

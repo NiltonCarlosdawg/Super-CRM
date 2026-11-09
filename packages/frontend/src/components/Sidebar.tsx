@@ -13,6 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/accounts", label: "Contas", adminOnly: true },
   { to: "/conversations", label: "Conversas" },
+  { to: "/handoffs", label: "Handoffs" },
   { to: "/campaigns", label: "Campanhas" },
   { to: "/settings", label: "Definições" },
 ];

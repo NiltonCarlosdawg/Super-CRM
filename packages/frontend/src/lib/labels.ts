@@ -5,6 +5,7 @@ import type {
   AccountPurpose,
   AccountStatus,
   AiMode,
+  HandoffStatus,
   MessageStatus,
   Role,
   TenantStatus,
@@ -104,6 +105,17 @@ const HANDOFF_PRIORITY_LABELS: Record<HandoffPriority, string> = {
 
 export function handoffPriorityLabel(priority: HandoffPriority): string {
   return HANDOFF_PRIORITY_LABELS[priority];
+}
+
+const HANDOFF_STATUS_LABELS: Record<HandoffStatus, string> = {
+  pending: "Pendente",
+  accepted: "Aceite",
+  resolved: "Resolvido",
+  dismissed: "Descartado",
+};
+
+export function handoffStatusLabel(status: HandoffStatus): string {
+  return HANDOFF_STATUS_LABELS[status];
 }
 
 // --- Definições e reposição de password (Onda 1, Task 11) ---

@@ -168,3 +168,25 @@ export interface CampaignDetail {
   campaign: Campaign;
   counts: CampaignCounts;
 }
+
+// --- Handoffs (Fase 3) ---
+
+export type HandoffStatus = "pending" | "accepted" | "resolved" | "dismissed";
+
+/** Linha de GET /v1/handoffs (datas ISO; resumo e motivo vêm da IA). */
+export interface HandoffRow {
+  id: string;
+  conversationId: string;
+  status: HandoffStatus;
+  priority: "urgent" | "high" | "normal";
+  createdAt: string;
+  openingAlertedAt: string | null;
+  slaAlertedAt: string | null;
+  summary: string;
+  reason: string;
+  leadSnapshot: unknown;
+}
+
+export interface HandoffList {
+  handoffs: HandoffRow[];
+}
