@@ -4,7 +4,7 @@
 // O api é mockado por path — envelopes reais: {conversation, lastMessage} e
 // {messages, nextCursor}.
 
-import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/ui/Toast";
@@ -420,5 +420,76 @@ describe("Thread (painel da direita)", () => {
 
     expect(await screen.findByText("Não foi possível abrir a conversa")).toBeInTheDocument();
     expect(screen.queryByRole("status")).toBeNull(); // sem spinner eterno
+  });
+});
+
+describe("rascunhos e regresso à IA", () => {
+  const DRAFT = {
+    id: "d1",
+    conversationId: "c1",
+    text: "Rascunho da IA",
+    status: "pending" as const,
+    firedTriggers: null,
+    outboxId: null,
+    approvedBy: null,
+    approvedAt: null,
+    rejectedReason: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  function mockThread(aiMode: "ai_active" | "human_only" = "ai_active") {
+    mockGet.mockImplementation((async (path: string) => {
+      if (path === "/v1/conversations")
+        return { conversations: [], nextCursor: null } satisfies ConversationsList;
+      if (path.endsWith("/drafts")) return { drafts: [DRAFT] };
+      if (path.endsWith("/messages"))
+        return { messages: [msg("m1")], nextCursor: null } satisfies MessagesList;
+      return {
+        conversation: conv("c1", { aiMode }),
+        lastMessage: null,
+      } satisfies ConversationDetail;
+    }) as never);
+  }
+
+  it("aprova um rascunho pendente e recarrega a lista", async () => {
+    mockThread();
+    const mockPost = vi.mocked(api.post);
+    mockPost.mockResolvedValue({ status: "approved", outboxId: "o1" });
+    renderPage("/conversations/c1");
+
+    expect(await screen.findByText("Rascunho da IA")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar" }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/v1/drafts/d1/approve", {}));
+  });
+
+  it("rejeitar envia o motivo do modal", async () => {
+    mockThread();
+    const mockPost = vi.mocked(api.post);
+    mockPost.mockResolvedValue({ status: "rejected" });
+    renderPage("/conversations/c1");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Rejeitar" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText(/Motivo/), {
+      target: { value: "Tom errado" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Rejeitar" }));
+
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith("/v1/drafts/d1/reject", { reason: "Tom errado" }),
+    );
+  });
+
+  it("devolve à IA uma conversa em human_only", async () => {
+    mockThread("human_only");
+    const mockPost = vi.mocked(api.post);
+    mockPost.mockResolvedValue({ aiMode: "ai_active" });
+    renderPage("/conversations/c1");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Devolver à IA" }));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith("/v1/conversations/c1/return-to-ai", {}),
+    );
+    expect(await screen.findByText("IA activa")).toBeInTheDocument();
   });
 });

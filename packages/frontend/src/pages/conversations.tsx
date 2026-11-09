@@ -24,6 +24,8 @@ import type {
   ConversationDetail,
   ConversationView,
   ConversationsList,
+  Draft,
+  DraftsList,
   MessageView,
   MessagesList,
   SendMessageResponse,
@@ -31,6 +33,7 @@ import type {
 import { Badge, type BadgeTone } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
+import { Modal } from "../components/ui/Modal";
 import { Spinner } from "../components/ui/Spinner";
 import { useToast } from "../components/ui/Toast";
 
@@ -158,7 +161,7 @@ function MessageBubble({ message }: { message: MessageView }) {
 }
 
 function Thread({ conversationId }: { conversationId: string }) {
-  const { error: toastError } = useToast();
+  const { show, error: toastError } = useToast();
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [thread, setThread] = useState<ThreadState>({
     conversationId,
@@ -168,9 +171,24 @@ function Thread({ conversationId }: { conversationId: string }) {
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [rejectTarget, setRejectTarget] = useState<Draft | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const messagesPath = `/v1/conversations/${conversationId}/messages`;
+  const draftsPath = `/v1/conversations/${conversationId}/drafts`;
+
+  const loadDrafts = useCallback(() => {
+    return api
+      .get<DraftsList>(draftsPath)
+      .then((result) => setDrafts(result.drafts ?? []))
+      .catch((error: unknown) => toastError(errorText(error)));
+  }, [draftsPath, toastError]);
+
+  useEffect(() => {
+    void loadDrafts();
+  }, [loadDrafts]);
 
   // Abertura: detalhe + janela inicial (promessas em paralelo; erro ⇒ toast + estado).
   useEffect(() => {
@@ -201,6 +219,50 @@ function Thread({ conversationId }: { conversationId: string }) {
   const absorbSent = useCallback((message: MessageView) => {
     setThread((prev) => applySentMessage(prev, message));
   }, []);
+
+  // Rascunhos da IA (Fase 3): aprovar enfileira na outbox; rejeitar só audita.
+  const approveDraft = async (draft: Draft) => {
+    try {
+      await api.post(`/v1/drafts/${draft.id}/approve`, {});
+      await loadDrafts();
+      show("Rascunho aprovado");
+    } catch (error) {
+      toastError(errorText(error));
+    }
+  };
+
+  const rejectDraft = async () => {
+    if (rejectTarget === null || rejectReason.trim() === "") return;
+    try {
+      await api.post(`/v1/drafts/${rejectTarget.id}/reject`, {
+        reason: rejectReason.trim(),
+      });
+      setRejectTarget(null);
+      setRejectReason("");
+      await loadDrafts();
+      show("Rascunho rejeitado");
+    } catch (error) {
+      toastError(errorText(error));
+    }
+  };
+
+  /** Devolve a conversa à IA (só quando está em human_only). */
+  const returnToAi = async () => {
+    try {
+      const result = await api.post<{ aiMode: AiMode }>(
+        `/v1/conversations/${conversationId}/return-to-ai`,
+        {},
+      );
+      setConversation((prev) =>
+        prev === null
+          ? prev
+          : { ...prev, conversation: { ...prev.conversation, aiMode: result.aiMode } },
+      );
+      show("Conversa devolvida à IA");
+    } catch (error) {
+      toastError(errorText(error));
+    }
+  };
 
   const loadOlder = useCallback(() => {
     if (olderCursor === null) return;
@@ -262,6 +324,11 @@ function Thread({ conversationId }: { conversationId: string }) {
           <h2 className="font-display text-lg text-fg">{contactPhone}</h2>
           <Badge tone={aiModeTone(aiMode)}>{aiModeLabel(aiMode)}</Badge>
         </div>
+        {aiMode === "human_only" && (
+          <Button variant="outline" onClick={() => void returnToAi()}>
+            Devolver à IA
+          </Button>
+        )}
       </div>
 
       {thread.handoff !== null && (
@@ -285,6 +352,40 @@ function Thread({ conversationId }: { conversationId: string }) {
         </div>
       )}
 
+      {drafts.some((draft) => draft.status === "pending") && (
+        <div className="flex flex-col gap-2 border-b border-border bg-surface px-6 py-3">
+          <span className="text-xs uppercase text-muted">Rascunhos da IA</span>
+          {drafts
+            .filter((draft) => draft.status === "pending")
+            .map((draft) => (
+              <div
+                key={draft.id}
+                className="flex flex-wrap items-start justify-between gap-3 border border-border bg-background px-3 py-2"
+              >
+                <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-fg">
+                  {draft.text}
+                </p>
+                <span className="flex gap-2">
+                  <Button
+                    variant="solid"
+                    className="px-2 py-1 text-xs"
+                    onClick={() => void approveDraft(draft)}
+                  >
+                    Aprovar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="px-2 py-1 text-xs"
+                    onClick={() => setRejectTarget(draft)}
+                  >
+                    Rejeitar
+                  </Button>
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
+
       <div ref={scrollerRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-6 py-4">
         {thread.messages.length === 0 ? (
           <EmptyState title="Sem mensagens ainda" description="As mensagens desta conversa aparecem aqui." />
@@ -294,6 +395,47 @@ function Thread({ conversationId }: { conversationId: string }) {
       </div>
 
       <Composer conversationId={conversationId} onSent={absorbSent} />
+
+      <Modal
+        open={rejectTarget !== null}
+        title="Rejeitar rascunho"
+        onClose={() => {
+          setRejectTarget(null);
+          setRejectReason("");
+        }}
+      >
+        <div className="flex flex-col gap-3">
+          <p className="whitespace-pre-wrap text-sm text-muted">{rejectTarget?.text}</p>
+          <label htmlFor="reject-reason" className="text-sm text-muted">
+            Motivo (fica no registo de auditoria)
+          </label>
+          <textarea
+            id="reject-reason"
+            rows={3}
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+            className="border border-border bg-background px-3 py-2 text-sm text-fg"
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRejectTarget(null);
+                setRejectReason("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="solid"
+              disabled={rejectReason.trim() === ""}
+              onClick={() => void rejectDraft()}
+            >
+              Rejeitar
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

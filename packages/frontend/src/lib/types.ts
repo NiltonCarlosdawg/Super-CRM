@@ -190,3 +190,24 @@ export interface HandoffRow {
 export interface HandoffList {
   handoffs: HandoffRow[];
 }
+
+// --- Rascunhos da IA (Fase 3) ---
+
+export type DraftStatus = "pending" | "approved" | "rejected";
+
+export interface Draft {
+  id: string;
+  conversationId: string;
+  text: string;
+  status: DraftStatus;
+  firedTriggers: unknown;
+  outboxId: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  rejectedReason: string | null;
+  createdAt: string;
+}
+
+export interface DraftsList {
+  drafts: Draft[];
+}
