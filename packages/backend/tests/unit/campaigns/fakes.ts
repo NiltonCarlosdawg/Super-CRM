@@ -181,6 +181,10 @@ export function makeRecipientStore(calls: string[] = []): FakeRecipientStore {
     async markRepliedByContact(_scope, contactId) {
       return rows.filter((r) => r.contactId === contactId).length;
     },
+    async counts(_scope, campaignId) {
+      const total = rows.filter((r) => r.campaignId === campaignId).length;
+      return { pending: total, sent: 0, failed: 0, replied: 0, optedOut: 0 };
+    },
   };
   return store;
 }

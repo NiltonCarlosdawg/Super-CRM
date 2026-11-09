@@ -105,7 +105,7 @@ export function createCampaign(deps: CreateCampaignDeps): CreateCampaign {
       throw new CampaignError('unknown_account', 400, 'conta inexistente');
     }
     if (accounts.some((a) => a.purpose !== 'campaigns')) {
-      throw new CampaignError('unsupported_account_purpose', 400, 'conta não serve para campanhas');
+      throw new CampaignError('unsupported_account_purpose', 400, "conta com purpose diferente de 'campaigns'");
     }
 
     const hash = requestHash(body);

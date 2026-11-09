@@ -1,7 +1,7 @@
 // Fase 4, Task 5: adaptador Drizzle das campanhas. Toda a query é scoped por
 // tenant; as contas permitidas vivem na junção `campaign_accounts` (Onda 1).
 
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 
 import type { Campaign, CampaignStatus, NewCampaign } from '../../domain/campaigns/types.js';
 import type {
@@ -341,6 +341,31 @@ export function buildRecipientStore(db: DbClient): CampaignRecipientStore {
         )
         .returning({ id: campaignRecipients.id });
       return updated.length;
+    },
+
+    async counts(scope, campaignId) {
+      const [row] = await db
+        .select({
+          pending: sql<number>`count(*) filter (where ${campaignRecipients.status} = 'pending')::int`,
+          sent: sql<number>`count(*) filter (where ${campaignRecipients.status} = 'sent')::int`,
+          failed: sql<number>`count(*) filter (where ${campaignRecipients.status} = 'failed')::int`,
+          replied: sql<number>`count(*) filter (where ${campaignRecipients.status} = 'replied')::int`,
+          optedOut: sql<number>`count(*) filter (where ${campaignRecipients.optedOutAt} is not null)::int`,
+        })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.tenantId, scope.tenantId),
+            eq(campaignRecipients.campaignId, campaignId),
+          ),
+        );
+      return {
+        pending: row?.pending ?? 0,
+        sent: row?.sent ?? 0,
+        failed: row?.failed ?? 0,
+        replied: row?.replied ?? 0,
+        optedOut: row?.optedOut ?? 0,
+      };
     },
   };
 }

@@ -12,6 +12,12 @@ import { createAccountsRepository } from '../../src/adapters/db/accounts.js';
 import { createAuditAdapter } from '../../src/adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../../src/adapters/db/auth.js';
 import { createConversationsRepository } from '../../src/adapters/db/conversations.js';
+import { buildAudience, buildRecipientStore, createCampaignRepositories } from '../../src/adapters/db/campaigns.js';
+import { createCampaignAlertSink } from '../../src/adapters/realtime/campaign-alerts.js';
+import { createCampaign } from '../../src/application/campaigns/create-campaign.js';
+import { startCampaign } from '../../src/application/campaigns/start-campaign.js';
+import { makePauseCampaign } from '../../src/application/campaigns/pause-campaign.js';
+import { makeResumeCampaign } from '../../src/application/campaigns/resume-campaign.js';
 import { createHandoffConversations, createHandoffQueueRepository } from '../../src/adapters/db/handoff-queue.js';
 import { createOrchestratorPorts } from '../../src/adapters/db/orchestrator-ports.js';
 import { DEFAULT_SETTINGS, type Settings } from '../../src/modules/settings/settings.js';
@@ -38,6 +44,7 @@ import type { JobQueue } from '../../src/ports/job-queue.js';
 import type { LLMCallRequest } from '../../src/ports/llm-transport.js';
 import type { AccountsRepository } from '../../src/ports/accounts.js';
 import type { MessagingProvider } from '../../src/ports/messaging-provider.js';
+import type { TenantScope } from '../../src/ports/tenancy.js';
 import type { NotifyEvent } from '../../src/ports/notify.js';
 import pino from 'pino';
 import { migratedDb } from './db.js';
@@ -304,6 +311,24 @@ export async function buildTestApp(
     );
   }
 
+  // Fase 4 (Task 11): campanhas — repo + casos de uso por scope de tenant.
+  const campaignRepos = createCampaignRepositories({ db });
+  const campaignAudience = buildAudience(db);
+  const campaignRecipients = buildRecipientStore(db);
+  const campaignAlerts = createCampaignAlertSink({
+    notifySink: async (e) => {
+      notifyLog.push(e);
+    },
+  });
+  const campaignScopeDeps = (scope: TenantScope) => ({
+    scope,
+    accounts: campaignRepos.accounts,
+    campaigns: campaignRepos.campaigns,
+    audience: campaignAudience,
+    recipients: campaignRecipients,
+    audit,
+  });
+
   const app = buildHttpApp({
     cfg,
     db,
@@ -329,6 +354,15 @@ export async function buildTestApp(
       conversations: handoffsConversations,
       settings: handoffsSettings,
       notify: handoffNotify,
+    },
+    campaigns: {
+      repository: campaignRepos.campaigns,
+      recipients: campaignRecipients,
+      createCampaign: (scope) => createCampaign(campaignScopeDeps(scope)),
+      startCampaign: (scope) => startCampaign(campaignScopeDeps(scope)),
+      pauseCampaign: (scope) =>
+        makePauseCampaign({ scope, campaigns: campaignRepos.campaigns, audit, alerts: campaignAlerts }),
+      resumeCampaign: (scope) => makeResumeCampaign({ scope, campaigns: campaignRepos.campaigns, audit }),
     },
     knowledge: {
       db,

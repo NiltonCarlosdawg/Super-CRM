@@ -16,7 +16,7 @@ import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb, type DbClient } from '../adapters/db/index.js';
-import { buildAudience, buildRecipientStore } from '../adapters/db/campaigns.js';
+import { buildAudience, buildRecipientStore, createCampaignRepositories } from '../adapters/db/campaigns.js';
 import { createConversationsRepository } from '../adapters/db/conversations.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
@@ -25,10 +25,15 @@ import { createTenantsRepository } from '../adapters/db/tenants.js';
 import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
 import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
+import { createCampaignAlertSink } from '../adapters/realtime/campaign-alerts.js';
 import { createWaAkgAdapter } from '../adapters/wa-akg/index.js';
 import { createAccountLifecycle } from '../application/account-lifecycle.js';
 import { makeApplyOptOut } from '../application/campaigns/apply-opt-out.js';
+import { createCampaign } from '../application/campaigns/create-campaign.js';
 import { makeInboundEffects } from '../application/campaigns/inbound-effects.js';
+import { makePauseCampaign } from '../application/campaigns/pause-campaign.js';
+import { makeResumeCampaign } from '../application/campaigns/resume-campaign.js';
+import { startCampaign } from '../application/campaigns/start-campaign.js';
 import { createLoginService } from '../application/auth/login.js';
 import { createLoginLimiter } from '../application/auth/login-limiter.js';
 import { createMfaService } from '../application/auth/mfa.js';
@@ -202,6 +207,8 @@ async function main(): Promise<void> {
   // "respondeu". O mesmo seam serve todos os tenants; o scope vem por chamada.
   const campaignAudience = buildAudience(db);
   const campaignRecipients = buildRecipientStore(db);
+  const campaignRepos = createCampaignRepositories({ db });
+  const campaignAlerts = createCampaignAlertSink({ notifySink: socketNotify });
   const inboundEffects = makeInboundEffects({
     applyOptOutFor: (tenantId) =>
       makeApplyOptOut({
@@ -281,6 +288,31 @@ async function main(): Promise<void> {
     conversations,
     messageSender,
     outbox,
+    campaigns: {
+      repository: campaignRepos.campaigns,
+      recipients: campaignRecipients,
+      createCampaign: (scope) =>
+        createCampaign({
+          scope,
+          accounts: campaignRepos.accounts,
+          campaigns: campaignRepos.campaigns,
+          audit,
+          now,
+        }),
+      startCampaign: (scope) =>
+        startCampaign({
+          scope,
+          accounts: campaignRepos.accounts,
+          campaigns: campaignRepos.campaigns,
+          audience: campaignAudience,
+          recipients: campaignRecipients,
+          audit,
+        }),
+      pauseCampaign: (scope) =>
+        makePauseCampaign({ scope, campaigns: campaignRepos.campaigns, audit, alerts: campaignAlerts }),
+      resumeCampaign: (scope) =>
+        makeResumeCampaign({ scope, campaigns: campaignRepos.campaigns, audit }),
+    },
     knowledge: {
       db,
       provider: knowledgeAi.provider,

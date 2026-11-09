@@ -21,4 +21,9 @@ export interface CampaignRecipientStore {
   markOptedOutByContact(scope: TenantScope, contactId: string, at: Date): Promise<number>;
   /** sent → replied (só se replied_at for null). Devolve nº de linhas. */
   markRepliedByContact(scope: TenantScope, contactId: string, at: Date): Promise<number>;
+  /** optedOut = linhas com opted_out_at NOT NULL (pode sobrepor-se a sent/replied). */
+  counts(
+    scope: TenantScope,
+    campaignId: string,
+  ): Promise<{ pending: number; sent: number; failed: number; replied: number; optedOut: number }>;
 }

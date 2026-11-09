@@ -1402,7 +1402,7 @@ git commit -m "feat: automatic campaign pause with human-only resume"
 
 ---
 
-### Task 11: API REST de campanhas (RBAC `admin` + `Idempotency-Key`)
+### Task 11: [x] API REST de campanhas (RBAC `admin` + `Idempotency-Key`)
 
 **Files:**
 - Create: `src/adapters/http/routes/campaigns.ts`

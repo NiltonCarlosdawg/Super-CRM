@@ -16,7 +16,13 @@ import type { AIConfig } from '../ai/config.js';
 import type { Audit } from '../../ports/audit.js';
 import type { AuthUserRepo, MfaPort, SessionStore } from '../../ports/auth.js';
 import type { PasswordHasher } from '../../ports/security.js';
-import type { TenancyPort } from '../../ports/tenancy.js';
+import type { TenancyPort, TenantScope } from '../../ports/tenancy.js';
+import type { CampaignRepository } from '../../ports/campaigns.js';
+import type { CampaignRecipientStore } from '../../ports/campaign-recipients.js';
+import type { CreateCampaign } from '../../application/campaigns/create-campaign.js';
+import type { StartCampaign } from '../../application/campaigns/start-campaign.js';
+import type { PauseCampaign } from '../../application/campaigns/pause-campaign.js';
+import type { ResumeCampaign } from '../../application/campaigns/resume-campaign.js';
 import type { DbClient } from '../db/index.js';
 import type { OrchestratorPortsFactory } from '../db/orchestrator-ports.js';
 import type { TenantsRepository } from '../db/tenants.js';
@@ -24,6 +30,7 @@ import type { UsersRepository } from '../db/users.js';
 import { toProblem } from './errors.js';
 import { authenticate, csrfGuard } from './guards.js';
 import { authRoutes } from './routes/auth.js';
+import { campaignsRoutes } from './routes/campaigns.js';
 import { conversationsRoutes } from './routes/conversations.js';
 import { draftsRoutes } from './routes/drafts.js';
 import { handoffsRoutes } from './routes/handoffs.js';
@@ -106,6 +113,15 @@ export interface HttpDeps {
     now(): Date;
     /** Chat de teste (Task 8): sem a fábrica de ports do orquestrador → 503. */
     portsFactory?: OrchestratorPortsFactory;
+  };
+  /** Fase 4 (Task 11): campanhas — casos de uso compostos por scope de tenant. */
+  campaigns?: {
+    repository: CampaignRepository;
+    recipients: CampaignRecipientStore;
+    createCampaign(scope: TenantScope): CreateCampaign;
+    startCampaign(scope: TenantScope): StartCampaign;
+    pauseCampaign(scope: TenantScope): PauseCampaign;
+    resumeCampaign(scope: TenantScope): ResumeCampaign;
   };
   /** Sinks de evento (realtime Task 15); o logout de admin notifica a transição. */
   notifySink?: (e: NotifyEvent) => Promise<void>;
@@ -215,6 +231,10 @@ export function buildHttpApp(deps: HttpDeps): FastifyInstance {
       // Fase 3 (Task 14): fila de handoffs — só com o bundle montado.
       if (deps.handoffs !== undefined) {
         await handoffsRoutes(instance, deps);
+      }
+      // Fase 4 (Task 11): campanhas — só com o bundle composto.
+      if (deps.campaigns !== undefined) {
+        await campaignsRoutes(instance, deps);
       }
       // Fase 3 (Task 18): rascunhos — a aprovação enfileira na outbox, logo
       // precisa de db (ler/atualizar) + outbox (enqueue).
