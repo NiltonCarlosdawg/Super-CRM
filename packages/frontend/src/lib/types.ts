@@ -123,3 +123,48 @@ export interface TenantListItem {
   accountsCount: number;
   createdAt: string;
 }
+
+// --- Campanhas (Fase 4) ---
+
+export type CampaignStatus =
+  | "draft"
+  | "scheduled"
+  | "running"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+export type CampaignPauseReason = "failure_rate" | "session_down" | "opt_out_spike" | "human";
+
+/** JSON de GET /v1/campaigns/:id (datas ISO; `allowedAccountIds` vem da junção). */
+export interface Campaign {
+  id: string;
+  name: string;
+  status: CampaignStatus;
+  messageTemplate: string;
+  allowedAccountIds: string[];
+  dailyLimit: number | null;
+  scheduledAt: string | null;
+  pauseReason: CampaignPauseReason | null;
+  pausedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignCounts {
+  pending: number;
+  sent: number;
+  failed: number;
+  replied: number;
+  optedOut: number;
+}
+
+export interface CampaignList {
+  items: Campaign[];
+  nextCursor: string | null;
+}
+
+export interface CampaignDetail {
+  campaign: Campaign;
+  counts: CampaignCounts;
+}
