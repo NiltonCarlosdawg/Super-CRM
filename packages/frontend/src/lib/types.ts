@@ -211,3 +211,156 @@ export interface Draft {
 export interface DraftsList {
   drafts: Draft[];
 }
+
+// --- Conhecimento e treino (Fases 2–4) ---
+
+export type BusinessLineSlug = "software" | "custom" | "telecom" | "cctv";
+export type DraftEntityType = "catalog_item" | "knowledge_doc" | "rule";
+export type DraftOp = "create" | "update" | "delete";
+export type DocType = "faq" | "policy" | "process" | "company_info" | "objection";
+
+/** Linha de GET /v1/knowledge/train/draft (payload é validado no servidor). */
+export interface DraftItem {
+  id: string;
+  slug: string;
+  entityType: DraftEntityType;
+  op: DraftOp;
+  lineSlug: string | null;
+  lineConfirmed: boolean;
+  payload: Record<string, unknown>;
+  chunks: unknown;
+  baseVersion: number | null;
+  changedById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DiffClassification = "added" | "updated" | "unchanged" | "conflict" | "archived";
+
+export interface DiffEntry {
+  slug: string;
+  entityType: DraftEntityType;
+  op: DraftOp;
+  classification: DiffClassification;
+  baseVersion: number | null;
+  currentVersion: number | null;
+}
+
+export interface DraftDiff {
+  entries: DiffEntry[];
+  unconfirmedSlugs: string[];
+  digest: string;
+}
+
+export interface ValidateResult {
+  publicationId: string;
+  applied: { added: number; updated: number; archived: number };
+  idempotent: boolean;
+}
+
+export interface PublishedItem {
+  id: string;
+  entityType: DraftEntityType;
+  slug: string;
+  name: string | null;
+  title: string | null;
+  version: number;
+  updatedAt: string;
+}
+
+export interface Publication {
+  id: string;
+  kind: string;
+  createdAt: string;
+  createdById: string;
+  applied: unknown;
+}
+
+export interface ReviewItem {
+  entityType: DraftEntityType;
+  id: string;
+  slug: string;
+  title: string;
+  lineSlug: string | null;
+  reviewedAt: string | null;
+  reviewEveryDays: number;
+  daysOverdue: number;
+  validUntil: string | null;
+}
+
+export interface KnowledgeGap {
+  id: string;
+  question: string;
+  occurrences: number;
+  conversationId: string | null;
+  status: "open" | "resolved" | "ignored";
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export interface KnowledgeSuggestion {
+  id: string;
+  gapId: string | null;
+  aiAnswer: string | null;
+  humanAnswer: string;
+  proposedTitle: string;
+  proposedBody: string;
+  proposedLineSlug: string | null;
+  proposedDocType: DocType | null;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+}
+
+export type AnswerType = "text" | "number" | "choice";
+
+export interface QualificationQuestion {
+  id: string;
+  lineId: string;
+  key: string;
+  question: string;
+  answerType: AnswerType;
+  choices: unknown;
+  required: boolean;
+  position: number;
+  active: boolean;
+  version: number;
+}
+
+export type HandoffAction = "handoff_now" | "handoff_when_qualified" | "flag_only";
+
+export interface HandoffTrigger {
+  id: string;
+  lineId: string | null;
+  code: string;
+  description: string;
+  detectionHint: string;
+  action: HandoffAction;
+  priority: "normal" | "high" | "urgent";
+  active: boolean;
+  version: number;
+}
+
+export type ConfigEntityType = "qualification_question" | "handoff_trigger";
+
+export interface ConfigRevision {
+  id: string;
+  entityType: ConfigEntityType;
+  entityId: string;
+  version: number;
+  snapshot: Record<string, unknown>;
+  changedById: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface ChatSource {
+  type: "chunk" | "catalog" | "rule";
+  id: string;
+  version?: number;
+  score?: number;
+}
+
+export interface ChatTestResult {
+  reply: string | null;
+  sources: ChatSource[];
+}
