@@ -35,6 +35,7 @@ export async function ensureCampaignTicks(deps: EnsureDeps): Promise<{
         );
         if (pending > 0) {
           await deps.scheduler.ensureTick({
+            tenantId: deps.scope.tenantId,
             campaignId: campaign.id,
             accountId,
             runAt: deps.now(),

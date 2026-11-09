@@ -27,6 +27,7 @@ import type { DbClient } from './index.js';
 import { campaignAccounts, campaignRecipients, campaigns } from './schema/campaigns.schema.js';
 import { contacts } from './schema/contacts.schema.js';
 import { outboxMessages } from './schema/outbox.schema.js';
+import { tenants } from './schema/tenants.schema.js';
 import { whatsappAccounts } from './schema/whatsapp-accounts.schema.js';
 import { findOrCreateConversation } from './inbound.js';
 
@@ -589,4 +590,15 @@ export function buildDeliveryProbe(db: DbClient): DeliveryProbe {
       return states;
     },
   };
+}
+
+// Fase 4, Task 12: tenants ativos para o `ensure` recorrente (um scope por
+// tenant; tenants suspensos não enviam campanhas).
+export async function listActiveTenantIds(db: DbClient): Promise<string[]> {
+  const rows = await db
+    .select({ id: tenants.id })
+    .from(tenants)
+    .where(eq(tenants.status, 'active'))
+    .orderBy(asc(tenants.id));
+  return rows.map((r) => r.id);
 }

@@ -37,7 +37,12 @@ export interface ConversationFinder {
 
 export interface TickScheduler {
   /** jobId determinístico; no-op se o job já existir. */
-  ensureTick(input: { campaignId: string; accountId: string; runAt: Date }): Promise<void>;
+  ensureTick(input: {
+    tenantId: string;
+    campaignId: string;
+    accountId: string;
+    runAt: Date;
+  }): Promise<void>;
 }
 
 export type PauseReasonCode = PauseReason;

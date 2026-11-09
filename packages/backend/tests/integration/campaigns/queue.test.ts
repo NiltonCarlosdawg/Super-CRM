@@ -39,6 +39,7 @@ async function waitFor(cond: () => boolean | Promise<boolean>, ms = 5000): Promi
 describe('campaign tick queue', () => {
   it('ensureTick com o mesmo runAt executa o handler uma só vez', async () => {
     const jobs = createJobQueue({ redisUrl: TEST_REDIS_URL });
+    const tenantId = randomUUID();
     const campaignId = randomUUID();
     const accountId = randomUUID();
     let runs = 0;
@@ -47,14 +48,14 @@ describe('campaign tick queue', () => {
     });
     const scheduler = createCampaignTickScheduler({ jobs, now: () => NOW });
 
-    await scheduler.ensureTick({ campaignId, accountId, runAt: NOW });
-    await scheduler.ensureTick({ campaignId, accountId, runAt: NOW });
+    await scheduler.ensureTick({ tenantId, campaignId, accountId, runAt: NOW });
+    await scheduler.ensureTick({ tenantId, campaignId, accountId, runAt: NOW });
     await waitFor(() => runs >= 1);
     await new Promise((r) => setTimeout(r, 300));
     assert.equal(runs, 1);
 
     // Um runAt diferente agenda o tick seguinte (o jobId anterior fica retido).
-    await scheduler.ensureTick({ campaignId, accountId, runAt: new Date(NOW.getTime() + 1_000) });
+    await scheduler.ensureTick({ tenantId, campaignId, accountId, runAt: new Date(NOW.getTime() + 1_000) });
     await waitFor(() => runs >= 2, 8_000);
     await jobs.close();
   });
@@ -157,9 +158,11 @@ describe('campaign tick queue', () => {
   it('registar o worker duas vezes não duplica o ensure recorrente', async () => {
     const jobs = createJobQueue({ redisUrl: TEST_REDIS_URL });
     let ensureRuns = 0;
+    const tickInputs: Array<{ tenantId: string; campaignId: string; accountId: string }> = [];
     const worker = {
       jobs,
-      async runTick() {
+      async runTick(input: { tenantId: string; campaignId: string; accountId: string }) {
+        tickInputs.push(input);
         return { outcome: 'idle' as const, reason: 'campaign_not_running' as const };
       },
       async ensure() {
@@ -170,8 +173,23 @@ describe('campaign tick queue', () => {
     };
     await registerCampaignTickWorker(worker);
     await registerCampaignTickWorker(worker); // 2.ª chamada = no-op
+
+    // O payload do tick leva o tenant (scope) até ao worker.
+    const tenantId = randomUUID();
+    const campaignId = randomUUID();
+    const accountId = randomUUID();
+    await createCampaignTickScheduler({ jobs, now: () => NOW }).ensureTick({
+      tenantId,
+      campaignId,
+      accountId,
+      runAt: NOW,
+    });
+    await waitFor(() => tickInputs.length >= 1);
+    assert.deepEqual(tickInputs[0], { tenantId, campaignId, accountId });
+
+    ensureRuns = 0; // conta só a janela seguinte (o tick acima pode ter demorado)
     await new Promise((r) => setTimeout(r, 550));
     await jobs.close();
-    assert.ok(ensureRuns >= 3 && ensureRuns <= 6, `ensureRuns=${ensureRuns} (3–6 em 550ms; >6 houve duplicação)`);
+    assert.ok(ensureRuns >= 3 && ensureRuns <= 7, `ensureRuns=${ensureRuns} (3–7 em 550ms; >7 houve duplicação)`);
   });
 });

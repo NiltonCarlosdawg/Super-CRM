@@ -16,7 +16,7 @@ import { createAccountsRepository } from '../adapters/db/accounts.js';
 import { createAuditAdapter } from '../adapters/db/audit-adapter.js';
 import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb, type DbClient } from '../adapters/db/index.js';
-import { buildAudience, buildRecipientStore, createCampaignRepositories } from '../adapters/db/campaigns.js';
+import { buildAudience, buildContactNameSource, buildConversationFinder, buildDeliveryProbe, buildDispatchStore, buildRecipientStatsStore, buildRecipientStore, createCampaignRepositories, listActiveTenantIds } from '../adapters/db/campaigns.js';
 import { createConversationsRepository } from '../adapters/db/conversations.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
@@ -24,14 +24,18 @@ import { createTenancyPort } from '../adapters/db/tenancy.js';
 import { createTenantsRepository } from '../adapters/db/tenants.js';
 import { createUsersRepository } from '../adapters/db/users.js';
 import { createJobQueue } from '../adapters/queue/index.js';
+import { createCampaignTickScheduler, registerCampaignTickWorker } from '../adapters/queue/campaign-tick.js';
 import { attachRealtime, createSocketNotify, type RealtimeHandle } from '../adapters/realtime/socket.js';
 import { createCampaignAlertSink } from '../adapters/realtime/campaign-alerts.js';
 import { createWaAkgAdapter } from '../adapters/wa-akg/index.js';
 import { createAccountLifecycle } from '../application/account-lifecycle.js';
 import { makeApplyOptOut } from '../application/campaigns/apply-opt-out.js';
 import { createCampaign } from '../application/campaigns/create-campaign.js';
+import { ensureCampaignTicks } from '../application/campaigns/ensure-campaign-ticks.js';
 import { makeInboundEffects } from '../application/campaigns/inbound-effects.js';
-import { makePauseCampaign } from '../application/campaigns/pause-campaign.js';
+import { makePauseApplier, makePauseCampaign, sessionPauseGuard, volumePauseGuard } from '../application/campaigns/pause-campaign.js';
+import { processCampaignTick, type TickDeps } from '../application/campaigns/process-campaign-tick.js';
+import { reconcileFailures } from '../application/campaigns/reconcile-failures.js';
 import { makeResumeCampaign } from '../application/campaigns/resume-campaign.js';
 import { startCampaign } from '../application/campaigns/start-campaign.js';
 import { createLoginService } from '../application/auth/login.js';
@@ -448,6 +452,69 @@ async function main(): Promise<void> {
         'outbox.tick.register_failed',
       );
     });
+
+  // Fase 4, Task 12: worker do tick de campanha. O `ensure` recorrente percorre
+  // os tenants ativos; cada job leva o tenant para o scope (nunca uma query sem
+  // âmbito). Não bloqueia o arranque: com Redis em baixo a fila guarda o registo.
+  const campaignDispatch = buildDispatchStore(db);
+  const campaignStats = buildRecipientStatsStore(db);
+  const campaignProbe = buildDeliveryProbe(db);
+  const campaignScheduler = createCampaignTickScheduler({ jobs, now });
+  const campaignTickDeps = (tenantId: string): TickDeps => ({
+    scope: { tenantId },
+    campaigns: campaignRepos.campaigns,
+    dispatch: campaignDispatch,
+    recipients: campaignRecipients,
+    contacts: buildContactNameSource(db),
+    accounts: campaignRepos.accounts,
+    outbox,
+    conversations: buildConversationFinder(db, now),
+    pauseGuards: [
+      sessionPauseGuard({ accounts: campaignRepos.accounts }),
+      volumePauseGuard({
+        stats: campaignStats,
+        probe: campaignProbe,
+        cfg: config.campaigns,
+        reconcile: reconcileFailures,
+      }),
+    ],
+    applyPause: makePauseApplier({
+      scope: { tenantId },
+      campaigns: campaignRepos.campaigns,
+      audit,
+      alerts: campaignAlerts,
+    }),
+    now,
+    rng: Math.random,
+    cfg: config.campaigns,
+  });
+  void registerCampaignTickWorker({
+    jobs,
+    runTick: ({ tenantId, campaignId, accountId }) =>
+      processCampaignTick({ campaignId, accountId }, campaignTickDeps(tenantId)),
+    ensure: async () => {
+      let scheduled = 0;
+      let completed = 0;
+      for (const tenantId of await listActiveTenantIds(db)) {
+        const result = await ensureCampaignTicks({
+          scope: { tenantId },
+          campaigns: campaignRepos.campaigns,
+          dispatch: campaignDispatch,
+          scheduler: campaignScheduler,
+          now,
+        });
+        scheduled += result.scheduled;
+        completed += result.completed;
+      }
+      return { scheduled, completed };
+    },
+    logger: (line) => log.info(line),
+  }).catch((error: unknown) => {
+    log.error(
+      { err: { message: error instanceof Error ? error.message : String(error) } },
+      'campaign.tick.register_failed',
+    );
+  });
 
   const shutdown = (signal: string): void => {
     log.info({ signal }, 'application.shutdown');

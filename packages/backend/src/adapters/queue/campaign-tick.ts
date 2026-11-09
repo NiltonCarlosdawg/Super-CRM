@@ -15,19 +15,19 @@ import type { JobQueue } from '../../ports/job-queue.js';
 export const CAMPAIGN_TICK_QUEUE = 'campaigns.tick';
 export const CAMPAIGN_ENSURE_QUEUE = 'campaigns.ensure';
 
-const tickPayload = z.object({ campaignId: z.guid(), accountId: z.guid() });
+const tickPayload = z.object({ tenantId: z.guid(), campaignId: z.guid(), accountId: z.guid() });
 
 export function createCampaignTickScheduler(deps: {
   jobs: JobQueue;
   now(): Date;
 }): TickScheduler {
   return {
-    async ensureTick({ campaignId, accountId, runAt }) {
+    async ensureTick({ tenantId, campaignId, accountId, runAt }) {
       await deps.jobs.enqueue(
         CAMPAIGN_TICK_QUEUE,
-        { campaignId, accountId },
+        { tenantId, campaignId, accountId },
         {
-          idempotencyKey: `campaign:${campaignId}:account:${accountId}:tick:${runAt.getTime()}`,
+          idempotencyKey: `tenant:${tenantId}:campaign:${campaignId}:account:${accountId}:tick:${runAt.getTime()}`,
           correlationId: `campaign:${campaignId}`,
           delayMs: Math.max(0, runAt.getTime() - deps.now().getTime()),
         },
@@ -38,7 +38,7 @@ export function createCampaignTickScheduler(deps: {
 
 export async function registerCampaignTickWorker(deps: {
   jobs: JobQueue;
-  runTick(input: { campaignId: string; accountId: string }): Promise<TickResult>;
+  runTick(input: { tenantId: string; campaignId: string; accountId: string }): Promise<TickResult>;
   ensure(): Promise<{ scheduled: number; completed: number }>;
   ensureEveryMs?: number;
   logger?: (line: string) => void;

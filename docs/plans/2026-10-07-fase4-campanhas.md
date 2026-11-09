@@ -1515,7 +1515,7 @@ git commit -m "feat: campaigns REST API with admin RBAC and idempotency"
 
 ---
 
-### Task 12: Jornada ponta-a-ponta, README e suite completa
+### Task 12: [x] Jornada ponta-a-ponta, README e suite completa
 
 **Files:**
 - Create: `src/modules/campaigns/README.md`
