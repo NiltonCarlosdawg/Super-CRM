@@ -14,6 +14,8 @@ grep -qF -- "--exclude='node_modules'" $s
 ! grep -q 'rsync -az' $s
 # Migrations ADIADAS pelo dono (2026-11-07, sem pgvector) — não reacrescentar sem decisão nova
 ! grep -q 'db:migrate' $s
+# onnxruntime-node: skip do download GPU (SIGKILL no host; ADR-0014 é CPU-only)
+grep -q 'ONNXRUNTIME_NODE_INSTALL=skip' $s
 # ordem: npm ci ANTES do restart, no mesmo ssh
 n=$(grep -n 'npm ci' $s | head -1 | cut -d: -f1)
 r=$(grep -nF 'eval "$DEPLOY_RESTART_CMD"' $s | head -1 | cut -d: -f1)

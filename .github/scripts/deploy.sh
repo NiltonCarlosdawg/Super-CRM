@@ -29,9 +29,12 @@ tar czf - --exclude='.env' --exclude='node_modules' --exclude='reports' -C packa
 
 # Um único ssh: npm ci antes do restart — se algo falhar, set -e aborta
 # antes de reiniciar, e a app antiga continua a correr.
+# ONNXRUNTIME_NODE_INSTALL=skip: sem GPU no host (e é CPU-only, ADR-0014) o
+# postinstall do onnxruntime-node leva SIGKILL a extrair os binários CUDA.
 ssh "$SSH_TARGET" "bash -s" <<EOF
 set -euo pipefail
 cd $DEPLOY_BACKEND_ROOT
+export ONNXRUNTIME_NODE_INSTALL=skip
 npm ci
 eval "$DEPLOY_RESTART_CMD"
 EOF
