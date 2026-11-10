@@ -19,6 +19,10 @@ const config: Config = {
           DEFAULT: "#3b6ef6",
           hover: "#2f5ce0",
           soft: "rgba(59,110,246,0.10)",
+          // Texto sobre fundo escuro: o DEFAULT só passa contraste como fundo (a11y).
+          bright: "#8aa8ff",
+          // Fundo de botão sólido: com branco por cima, o DEFAULT fica em 4.42:1.
+          deep: "#2650c4",
         },
         success: "#3fb950",
         warning: "#d29922",

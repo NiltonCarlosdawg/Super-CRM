@@ -48,6 +48,8 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Utilizadores" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Definições" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Conhecimento" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Handoffs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Campanhas" })).toBeInTheDocument();
   });
 
   it("não-admin não vê Contas nem Utilizadores, mas vê Definições", () => {
@@ -58,7 +60,9 @@ describe("Sidebar", () => {
     expect(screen.queryByRole("link", { name: "Utilizadores" })).toBeNull();
     expect(screen.getByRole("link", { name: "Definições" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Conversas" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Handoffs" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Conhecimento" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Campanhas" })).toBeNull();
   });
 
   it("plataforma continua a ver só Plataforma (sem Contas nem Definições)", () => {

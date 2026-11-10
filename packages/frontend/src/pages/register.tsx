@@ -51,7 +51,7 @@ export default function RegisterPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <p className="mb-3 text-xs uppercase tracking-[0.2em] text-accent">MilVendas · CRM</p>
+        <p className="mb-3 text-xs uppercase tracking-[0.2em] text-accent-bright">MilVendas · CRM</p>
         <h1 className="font-display text-4xl font-light leading-tight text-fg">
           Cria a tua empresa
         </h1>
@@ -95,7 +95,7 @@ export default function RegisterPage() {
             </form>
           ) : (
             <form onSubmit={submitCode} className="flex flex-col gap-4">
-              <p className="text-sm text-accent">
+              <p className="text-sm text-accent-bright">
                 O registo está quase completo — falta activar o TOTP na tua conta de administrador.
               </p>
               {otpauthUrl !== null && (

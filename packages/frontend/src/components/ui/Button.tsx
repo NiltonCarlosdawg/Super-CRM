@@ -6,8 +6,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  solid: "bg-accent text-white hover:bg-accent-hover",
-  outline: "border border-accent text-accent hover:bg-accent-soft",
+  solid: "bg-accent-hover text-white hover:bg-accent-deep",
+  outline: "border border-accent text-accent-bright hover:bg-accent-soft",
   ghost: "text-muted hover:bg-accent-soft hover:text-fg",
 };
 

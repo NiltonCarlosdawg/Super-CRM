@@ -16,8 +16,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/", label: "Dashboard", end: true },
   { to: "/accounts", label: "Contas", adminOnly: true },
   { to: "/conversations", label: "Conversas" },
-  { to: "/handoffs", label: "Handoffs" },
-  { to: "/campaigns", label: "Campanhas" },
+  { to: "/handoffs", label: "Handoffs", roles: ["agent", "admin"] },
+  { to: "/campaigns", label: "Campanhas", roles: ["admin"] },
   { to: "/knowledge", label: "Conhecimento", roles: ["editor", "admin"] },
   { to: "/settings", label: "Definições" },
 ];

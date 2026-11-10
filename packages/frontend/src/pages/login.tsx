@@ -50,7 +50,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <p className="mb-3 text-xs uppercase tracking-[0.2em] text-accent">MilVendas · CRM</p>
+        <p className="mb-3 text-xs uppercase tracking-[0.2em] text-accent-bright">MilVendas · CRM</p>
         <h1 className="font-display text-4xl font-light leading-tight text-fg">
           Painel MilVendas
         </h1>

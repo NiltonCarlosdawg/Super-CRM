@@ -54,7 +54,8 @@ Notas:
 - **Tempo real**: eventos `account.status`, `message.created`, `message.status`,
   `handoff.created`, `handoff.updated` (Socket.IO autenticado por cookie).
 - **Permissões**: `/accounts` e `/campaigns` são `RequireAdmin`; `/handoffs` é
-  `RequireAuth` (agent/admin no servidor); `/knowledge` é `RequireRole(['editor','admin'])`.
+  `RequireRole(['agent','admin'])` (igual ao RBAC do servidor); `/knowledge` é
+  `RequireRole(['editor','admin'])`. A sidebar esconde os itens sem papel.
   A sidebar esconde o que o papel não pode usar — a autoridade continua a ser o backend.
 - **Conversas**: além da thread e do composer, mostra rascunhos pendentes da IA
   (aprovar/rejeitar com motivo) e “Devolver à IA” quando `aiMode === 'human_only'`.

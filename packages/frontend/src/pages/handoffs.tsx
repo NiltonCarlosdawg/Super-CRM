@@ -151,7 +151,7 @@ export default function HandoffsPage() {
             </div>
             <Link
               to={`/conversations/${detail.conversationId}`}
-              className="text-sm text-accent hover:underline"
+              className="text-sm text-accent-bright hover:underline"
             >
               Abrir conversa
             </Link>

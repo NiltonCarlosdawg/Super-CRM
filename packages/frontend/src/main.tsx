@@ -28,6 +28,7 @@ import SettingsPage from "./pages/settings";
 import {
   ACCOUNTS_FORBIDDEN_NOTICE,
   CAMPAIGNS_FORBIDDEN_NOTICE,
+  HANDOFFS_FORBIDDEN_NOTICE,
   KNOWLEDGE_FORBIDDEN_NOTICE,
 } from "./lib/labels";
 
@@ -63,7 +64,15 @@ createRoot(document.getElementById("root")!).render(
                   </RequireAdmin>
                 }
               />
-              <Route path="/handoffs" element={<HandoffsPage />} />
+              {/* Backend: fila de handoffs = agent+admin (Fase 1, matriz RBAC). */}
+              <Route
+                path="/handoffs"
+                element={
+                  <RequireRole roles={["agent", "admin"]} notice={HANDOFFS_FORBIDDEN_NOTICE}>
+                    <HandoffsPage />
+                  </RequireRole>
+                }
+              />
               <Route
                 path="/knowledge"
                 element={

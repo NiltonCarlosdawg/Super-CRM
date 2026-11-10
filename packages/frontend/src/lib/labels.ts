@@ -144,6 +144,9 @@ export const ACCOUNTS_FORBIDDEN_NOTICE =
 export const CAMPAIGNS_FORBIDDEN_NOTICE =
   "Acesso restrito: só administradores podem abrir as Campanhas.";
 
+export const HANDOFFS_FORBIDDEN_NOTICE =
+  "Acesso restrito: só agentes e administradores podem abrir os Handoffs.";
+
 export const KNOWLEDGE_FORBIDDEN_NOTICE =
   "Acesso restrito: só editores e administradores podem abrir o Conhecimento.";
 

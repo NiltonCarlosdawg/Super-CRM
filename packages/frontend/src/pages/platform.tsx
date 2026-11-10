@@ -355,7 +355,7 @@ function Drill({
                     <button
                       type="button"
                       onClick={() => setConversationId(conversation.id)}
-                      className="py-3 text-left text-sm text-fg transition-colors hover:text-accent"
+                      className="py-3 text-left text-sm text-fg transition-colors hover:text-accent-bright"
                     >
                       {conversation.contactPhone}
                     </button>
