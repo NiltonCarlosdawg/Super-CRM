@@ -18,6 +18,7 @@ import { createAuthUserRepo, createSessionStore } from '../adapters/db/auth.js';
 import { createDb, type DbClient } from '../adapters/db/index.js';
 import { buildAudience, buildContactNameSource, buildConversationFinder, buildDeliveryProbe, buildDispatchStore, buildRecipientStatsStore, buildRecipientStore, createCampaignRepositories, listActiveTenantIds } from '../adapters/db/campaigns.js';
 import { createConversationsRepository } from '../adapters/db/conversations.js';
+import { createHandoffConversations, createHandoffQueueRepository } from '../adapters/db/handoff-queue.js';
 import { createOrchestratorPorts } from '../adapters/db/orchestrator-ports.js';
 import { createOutbox } from '../adapters/db/outbox.js';
 import { createTenancyPort } from '../adapters/db/tenancy.js';
@@ -292,6 +293,13 @@ async function main(): Promise<void> {
     conversations,
     messageSender,
     outbox,
+    // Fase 3 (Task 14): fila de handoffs para o painel humano (agent/admin).
+    handoffs: {
+      queue: createHandoffQueueRepository(db),
+      conversations: createHandoffConversations(db),
+      settings,
+      notify: socketNotify,
+    },
     campaigns: {
       repository: campaignRepos.campaigns,
       recipients: campaignRecipients,

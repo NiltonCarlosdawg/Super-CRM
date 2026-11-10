@@ -95,7 +95,8 @@ export interface HttpDeps {
     queue: HandoffQueueRepository;
     conversations: HandoffConversations;
     settings: Settings;
-    notify: Ports['notify'];
+    /** A rota costura o `tenantId` da sessão antes de emitir (R31). */
+    notify: (e: Parameters<Ports['notify']>[0] & { tenantId: string }) => Promise<void>;
   };
   /**
    * Treinar agente (Task 4): upload → extração → rascunho. Só com o bundle

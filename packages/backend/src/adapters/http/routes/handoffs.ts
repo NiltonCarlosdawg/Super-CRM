@@ -42,15 +42,19 @@ export async function handoffsRoutes(app: FastifyInstance, deps: HttpDeps): Prom
     return { tenantId };
   };
 
-  const mkDeps = (request: FastifyRequest): HandoffDeps => ({
-    scope: scope(request),
-    queue: h.queue,
-    conversations: h.conversations,
-    settings: h.settings,
-    audit: deps.audit,
-    notify: h.notify,
-    now: deps.now,
-  });
+  const mkDeps = (request: FastifyRequest): HandoffDeps => {
+    const s = scope(request);
+    return {
+      scope: s,
+      queue: h.queue,
+      conversations: h.conversations,
+      settings: h.settings,
+      audit: deps.audit,
+      // R31: o adaptador realtime precisa do tenant; o caso de uso é agnóstico.
+      notify: (e) => h.notify({ ...e, tenantId: s.tenantId }),
+      now: deps.now,
+    };
+  };
 
   app.get('/v1/handoffs', { preHandler: agentOrAdmin }, async (request, reply) => {
     const q = listQuery.parse(request.query);
