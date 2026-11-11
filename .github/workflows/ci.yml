@@ -119,5 +119,7 @@ jobs:
       - name: Verify
         run: |
           curl -fsS --retry 10 --retry-delay 5 --retry-connrefused "https://supcrm.milvendas.ao/" > /dev/null
-          curl -fsS --retry 10 --retry-delay 5 "https://supcrm.milvendas.ao/v1/health/live" | grep -q '"status":"ok"'
+          # /v1/health/live não existe (o health fica em /health/live): o
+          # handshake do Socket.IO prova o proxy /socket.io + backend de uma vez.
+          curl -fsS --retry 10 --retry-delay 5 "https://supcrm.milvendas.ao/socket.io/?EIO=4&transport=polling" | grep -q '"sid"'
           curl -fsS --retry 10 --retry-delay 5 "https://api.supercrm.milvendas.ao/health/live" | grep -q '"status":"ok"'
