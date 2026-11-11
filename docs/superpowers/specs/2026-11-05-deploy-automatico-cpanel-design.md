@@ -80,7 +80,7 @@ push → main ─► GitHub Actions (ci.yml)
                       ├─ build do frontend no runner (vite build)
                       ├─ tar packages/frontend/dist  → docroot de supcrm.milvendas.ao
                       ├─ tar packages/backend/*      → raiz da app Node de api.supercrm.milvendas.ao
-                      ├─ SSH: npm ci (no servidor)
+                      ├─ SSH: npm ci --omit=dev (no servidor)
                       └─ SSH: restart da app Node
                          (db:migrate ADIADO — 2026-11-07, sem pgvector)
 
@@ -104,7 +104,11 @@ por isso **não** é a escolha **[call]**.
 5. `tar` do `dist/` para o docroot do frontend, e de `packages/backend/` para a raiz da
    app Node, **sobre ssh** (o servidor não tem rsync — Gate 0). **`--exclude='.env'`** e
    **`--exclude='node_modules'`** são obrigatórios.
-6. SSH: `npm ci` na raiz da app Node (inclui dev deps — `tsx` é devDep **[call]**).
+6. SSH: `npm ci --omit=dev` na raiz da app Node — só deps de runtime (**[emenda
+   2026-11-11]**: a cage LVE mata o `npm ci` completo a ~950MB RSS, medido no host; a
+   instalação completa é `--omit=dev` com sync periódico e `ONNXRUNTIME_NODE_INSTALL=skip`;
+   por isso `tsx` e `ioredis` são `dependencies` — o arranque (`start.mjs`) importa-os).
+   PATH do node/npm exportado explicitamente (o `ssh` não-interativo não tem).
 7. ~~SSH: `npm run db:migrate`~~ — **ADIADO (2026-11-07)**: sem pgvector (G8) a migration
    `0000` falha; schema tratado manualmente até o alojamento instalar a extensão **[dono]**.
 8. SSH: restart da app Node.

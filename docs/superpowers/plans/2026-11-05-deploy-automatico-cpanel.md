@@ -2,6 +2,8 @@
 
 > **Emenda 2026-11-07 (dono):** (a) migrations automáticas **ADIADAS** — sem pgvector no servidor a migration `0000` falha; deploy publica só código, `db:migrate` sai do `deploy.sh` e o guardião proíbe-o; (b) o servidor **não tem rsync** — transporte é `tar` sobre ssh; (c) `engines` desce para `>=22` após prova da suite sob Node 22. Evidência do Gate 0 na spec §7.1.
 
+> **Emenda 2026-11-11 (implementação):** (d) o campo *Application startup file* do cPanel é um **ficheiro** (`node <ficheiro>`, `PassengerStartupFile`) — `npm start` não é aceite; o arranque é `packages/backend/start.mjs` (carrega `.env` se existir, registra o tsx e importa `main.ts`), testado localmente (`/health/live` → 200); (e) o `ssh` não-interativo não tem `node`/`npm` no PATH — `deploy.sh` exporta `/opt/alt/alt-nodejs22/root/usr/bin`; (f) proxy WebSocket exige alvo `ws://` (com `http://` o LiteSpeed trava) e o fallback SPA é `RewriteRule` (`FallbackResource` devolve 404) — ver spec §7.1; (g) a cage LVE mata processos a **~950MB RSS** (medido: probe exit 137 a 953716KB) e o `npm ci` completo morre a ~5s — a receita de produção é `npm ci --omit=dev --no-audit --no-fund --prefer-offline` com `sync` periódico, `NODE_OPTIONS=--max-old-space-size=400` e `ONNXRUNTIME_NODE_INSTALL=skip` (pico medido 872MB, exit 0, 13min); `tsx` e `ioredis` passaram a `dependencies` porque o arranque os importa — ADR-0016 §Emenda.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** um `push` para `main` publica o frontend em `supcrm.milvendas.ao`, o backend em `api.supercrm.milvendas.ao` e corre `npm run db:migrate` no servidor antes de reiniciar a app.
@@ -299,7 +301,7 @@ git commit -m "feat(frontend): apache reverse proxy for /v1 and socket.io"
 - Produz: `vars.*` e `secret.SSH_PRIVATE_KEY` consumidos pela Task 4.
 
 - [ ] **Step 1 (dono, cPanel):** criar os subdomínios `supcrm` e `api.supercrm` (Domínios), registar os docroots exatos (G3).
-- [ ] **Step 2 (dono, cPanel):** *Setup Node.js App* para `api.supercrm.milvendas.ao` com a app Node (`DEPLOY_BACKEND_ROOT`), Node 24, `npm start` (Task 2), porta local fixa do G5.
+- [ ] **Step 2 (dono, cPanel):** *Setup Node.js App* para `api.supercrm.milvendas.ao` com a app Node (`DEPLOY_BACKEND_ROOT`), Node **22.23.4**, modo Production, *Application startup file* **`start.mjs`** (emenda 2026-11-11(d): o campo é um ficheiro, `node <ficheiro>` — `npm start` não é aceite), `PORT=3002` (G5).
 - [ ] **Step 3 (dono, cPanel):** criar o `.env` de produção na raiz da app (perm 600) com todos os campos de `packages/backend/.env.example` — valores por canal próprio, **nunca** no repo/log.
 - [ ] **Step 4:** Gerar chave dedicada só para este repo (sem passphrase) e entregar a pública ao cPanel (*Acesso SSH*), o privado ao GitHub:
 
@@ -335,7 +337,7 @@ curl -fsS -o /dev/null -w '%{http_code}\n' https://supcrm.milvendas.ao/         
 curl -fsS https://supcrm.milvendas.ao/v1/health/live                                          # {"status":"ok"}
 curl -fsS https://api.supercrm.milvendas.ao/health/live                                       # {"status":"ok"}
 ssh -i ~/.ssh/supercrm_deploy $USER@$HOST 'ls -l $BACKEND_ROOT/.env'                         # sobrevive ao deploy
-ssh -i ~/.ssh/supercrm_deploy $USER@$HOST 'cd $BACKEND_ROOT && npm run db:migrate'           # idempotente (2ª execução sem mudanças)
+# db:migrate NÃO corre aqui (emenda 2026-11-07: migrations adiadas — sem pgvector)
 ```
 
 - [ ] **Step 4:** Verificação no navegador (hook global): `bash ~/.config/opencode/skills/agent-browser-verify/scripts/verify.sh https://supcrm.milvendas.ao/` — login, consola sem erros, Socket.IO ligado (5 eventos), screenshot.

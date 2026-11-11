@@ -67,3 +67,32 @@ Estado verificado a 2026-11-05:
   (`packages/backend/package.json` só tem `dev`).
 - Desfazer: remover o job de deploy, apagar as chaves, desligar as apps — o código do repo
   não fica preso a nada.
+
+## Emenda 2026-11-11 (implementação, medições no host)
+
+A implementação executou a Opção 1 com quatro correções forçadas pelo servidor real —
+todas medidas, não presumidas:
+
+1. **Transporte: `tar` sobre ssh, não rsync** — Gate 0 (2026-11-07) provou que o
+   servidor não tem `rsync`; `tar` + `--exclude='.env' --exclude='node_modules'` (§6 da
+   spec).
+2. **Migrations adiadas** (dono, 2026-11-07) — sem pgvector a migration `0000` falha;
+   o `deploy.sh` publica só código e o guardião (`deploy.test.sh`) **proíbe** `db:migrate`
+   no script. Desvio da decisão original acima; reacrescentar só com decisão nova.
+3. **Node 22, não 24** — o servidor só tem Node 22 (`/opt/alt/alt-nodejs22`); `engines`
+   desceu para `>=22` e a CI corre a suite em Node 22 (a prova está no job `test` do
+   PR). O arranque é `packages/backend/start.mjs`: o campo *Application startup file* do
+   cPanel é um **ficheiro** (`PassengerStartupFile` → `node <ficheiro>`), `npm start` não
+   é aceite; o wrapper carrega `.env` se existir, regista o tsx e importa `main.ts`
+   (testado: `/health/live` → 200).
+4. **Instalação de produção: `npm ci --omit=dev` sobrevive à cage LVE; o completo não**
+   — medido no host (2026-11-11): a cage CloudLinux mata processos por SIGKILL a
+   **~950MB RSS** (probe: exit 137 a 953716KB). `npm ci` completo atinge esse limiar em
+   ~5s (buffers de extração, memória externa ao heap — caps de `--max-old-space-size` não
+   ajudam) e morre sempre; `npm ci --omit=dev` completou com exit 0 (`added 190 packages
+   em 13m`, pico 872MB) com sync periódico de disco durante a instalação. Para isso
+   **`tsx`** (arranque via `start.mjs`) e **`ioredis`** (import de runtime em
+   `src/infra/main.ts:6`) passaram de `devDependencies` a `dependencies` — a instalação
+   de produção tem de conter tudo o que o processo de arranque importa. O `ssh`
+   não-interativo também não tem `node`/`npm` no PATH: o script exporta
+   `/opt/alt/alt-nodejs22/root/usr/bin`.
