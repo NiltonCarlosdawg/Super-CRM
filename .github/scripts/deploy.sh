@@ -29,15 +29,23 @@ tar czf - --exclude='.env' --exclude='node_modules' --exclude='reports' -C packa
 
 # Um único ssh: npm ci antes do restart — se algo falhar, set -e aborta
 # antes de reiniciar, e a app antiga continua a correr.
-# ONNXRUNTIME_NODE_INSTALL=skip: sem GPU no host (e é CPU-only, ADR-0014) o
-# postinstall do onnxruntime-node leva SIGKILL a extrair os binários CUDA.
+# Medido no host (2026-11-11): a cage LVE mata processos a ~950MB RSS e o
+# `npm ci` completo chega lá em 5s (buffers de extração) — por isso:
+#   - --omit=dev: só deps de runtime (tsx/ioredis movidos para dependencies);
+#     pico medido 872MB, `added 190 packages` com exit 0;
+#   - sync periódico: descarrega as páginas sujas de node_modules, senão o
+#     uso total da cage (RSS + sujas) ultrapassa o limite a meio da extração;
+#   - NODE_OPTIONS capa o heap; ONNXRUNTIME skip: sem GPU no host (ADR-0014
+#     é CPU-only) o postinstall do onnxruntime-node leva SIGKILL.
 ssh "$SSH_TARGET" "bash -s" <<EOF
 set -euo pipefail
 # SSH não-interativo não tem node/npm no PATH (Gate 0); alt-nodejs22 é o Node 22 do host
 export PATH=/opt/alt/alt-nodejs22/root/usr/bin:\$PATH
 cd $DEPLOY_BACKEND_ROOT
 export ONNXRUNTIME_NODE_INSTALL=skip
-# --no-audit: o POST de advisories demorou 206s e estava em voo quando o npm morreu (LVE)
-npm ci --no-audit --no-fund
+export NODE_OPTIONS=--max-old-space-size=400
+( while :; do sync; sleep 1; done ) & SYNC=\$!
+trap 'kill \$SYNC 2>/dev/null || true' EXIT
+npm ci --omit=dev --no-audit --no-fund --prefer-offline
 eval "$DEPLOY_RESTART_CMD"
 EOF

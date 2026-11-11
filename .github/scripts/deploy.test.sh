@@ -16,6 +16,11 @@ grep -qF -- "--exclude='node_modules'" $s
 ! grep -q 'db:migrate' $s
 # onnxruntime-node: skip do download GPU (SIGKILL no host; ADR-0014 é CPU-only)
 grep -q 'ONNXRUNTIME_NODE_INSTALL=skip' $s
+# LVE ~1GB: npm completo morre a ~950MB (medido 2026-11-11) — produção instala só deps de runtime
+grep -q 'npm ci --omit=dev' $s
+# sync periódico durante a instalação (páginas sujas de node_modules na cage) + limpeza garantida
+grep -q 'sync; sleep' $s
+grep -q 'trap .*SYNC.* EXIT' $s
 # ordem: npm ci ANTES do restart, no mesmo ssh
 n=$(grep -n 'npm ci' $s | head -1 | cut -d: -f1)
 r=$(grep -nF 'eval "$DEPLOY_RESTART_CMD"' $s | head -1 | cut -d: -f1)
