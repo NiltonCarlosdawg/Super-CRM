@@ -107,6 +107,10 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan "$DEPLOY_SSH_HOST" >> ~/.ssh/known_hosts
           eval "$(ssh-agent -s)"
+          # O agent vive só neste passo: sem exportar para GITHUB_ENV o passo
+          # seguinte arranca sem ele e o ssh falha com Permission denied (255).
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
           echo "$SSH_PRIVATE_KEY" | ssh-add -
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}

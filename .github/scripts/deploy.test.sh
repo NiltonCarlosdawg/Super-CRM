@@ -29,5 +29,8 @@ test -n "$n" && test -n "$r" && test "$n" -lt "$r"
 # workflow: deploy só em push para main, e nunca em cron/PR/dispatch
 grep -qF "if: github.event_name == 'push' && github.ref == 'refs/heads/main'" $w
 ! grep -q 'Deploy não configurado' $w            # placeholder removido
+# o ssh-agent do passo Setup SSH só chega ao passo Deploy via GITHUB_ENV
+# (sem isto: Permission denied publickey, exit 255 — falhou a 2026-11-11)
+grep -q 'SSH_AUTH_SOCK=.*GITHUB_ENV' $w
 
 echo "deploy-guard: OK"
