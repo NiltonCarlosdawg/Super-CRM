@@ -12,7 +12,9 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.ts'],
+    // start.mjs corre no Node (Passenger): process/URL são globais do runtime;
+    // o tsc não cobre .mjs, e declarar globals exigiria o pacote `globals`.
+    files: ['**/*.ts', '**/*.mjs'],
     rules: {
       // O tsc (typecheck) cobre isto em .ts; no-undef gera falsos positivos com tipos globais.
       'no-undef': 'off',
