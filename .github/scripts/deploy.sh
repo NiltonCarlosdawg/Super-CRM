@@ -33,8 +33,11 @@ tar czf - --exclude='.env' --exclude='node_modules' --exclude='reports' -C packa
 # postinstall do onnxruntime-node leva SIGKILL a extrair os binários CUDA.
 ssh "$SSH_TARGET" "bash -s" <<EOF
 set -euo pipefail
+# SSH não-interativo não tem node/npm no PATH (Gate 0); alt-nodejs22 é o Node 22 do host
+export PATH=/opt/alt/alt-nodejs22/root/usr/bin:\$PATH
 cd $DEPLOY_BACKEND_ROOT
 export ONNXRUNTIME_NODE_INSTALL=skip
-npm ci
+# --no-audit: o POST de advisories demorou 206s e estava em voo quando o npm morreu (LVE)
+npm ci --no-audit --no-fund
 eval "$DEPLOY_RESTART_CMD"
 EOF
