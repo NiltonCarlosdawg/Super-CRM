@@ -57,7 +57,8 @@ npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 eval "$DEPLOY_RESTART_CMD"
 # Espera o arranque (compile frio do tsx: ~30-60s) — sem isto o Verify do
 # runner apanha o proxy ainda em 503 e falha (medido 2026-11-12).
-for _ in $(seq 1 36); do
+# \$(: o heredoc de envio é não-quoted — sem a barra o seq expandsia AQUI.
+for _ in \$(seq 1 36); do
   if curl -fsS -m 3 http://127.0.0.1:3002/health/live >/dev/null 2>&1; then exit 0; fi
   sleep 5
 done
