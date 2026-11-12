@@ -55,6 +55,14 @@ npm cache clean --force >/dev/null 2>&1 || true
 trap 'kill \$SYNC 2>/dev/null || true' EXIT
 npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 eval "$DEPLOY_RESTART_CMD"
+# Espera o arranque (compile frio do tsx: ~30-60s) — sem isto o Verify do
+# runner apanha o proxy ainda em 503 e falha (medido 2026-11-12).
+for _ in $(seq 1 36); do
+  if curl -fsS -m 3 http://127.0.0.1:3002/health/live >/dev/null 2>&1; then exit 0; fi
+  sleep 5
+done
+echo "backend não respondeu em 180s após restart" >&2
+exit 1
 INNER
 setsid nohup bash -c 'bash "\$HOME/.deploy-npmci.sh"; echo \$? > "\$HOME/.deploy-npmci.exit"' \
   > "\$HOME/.deploy-npmci.log" 2>&1 < /dev/null &
