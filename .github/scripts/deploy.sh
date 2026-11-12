@@ -27,8 +27,8 @@ tar czf - --exclude='.env' -C packages/frontend/dist . | \
 tar czf - --exclude='.env' --exclude='node_modules' --exclude='reports' -C packages/backend . | \
   ssh "$SSH_TARGET" "tar xzf - -C '$DEPLOY_BACKEND_ROOT'"
 
-# Um único ssh: npm ci antes do restart — se algo falhar, set -e aborta
-# antes de reiniciar, e a app antiga continua a correr.
+# npm ci antes do restart — se algo falhar, o restart não acontece e a app
+# antiga continua a correr.
 # Medido no host (2026-11-11/12): cage LVE mata a ~950MB RSS. Cache quente do
 # npm + install scripts nativos causam rajada que ultrapassa o limite — por isso:
 #   - npm cache clean --force: força extração/download ritmado (cache quente mata);
@@ -37,15 +37,44 @@ tar czf - --exclude='.env' --exclude='node_modules' --exclude='reports' -C packa
 #   - sync periódico: descarrega páginas sujas de node_modules (trap EXIT limpa);
 #   - ONNXRUNTIME skip: sem GPU no host (ADR-0014 é CPU-only).
 # Provado: exit 0, ~815MB pico, ~17m (cache limpa). Sem estes, rc=137/1.
+# O passo remoto corre DESTACADO (setsid nohup) e o runner faz poll com ssh's
+# curtos: em 2026-11-12 o servidor fechou a ligação aos 13m e matava o npm a
+# meio, deixando node_modules incompleto (sem restart = app antiga no ar, mas
+# próxima reinício rebentava).
 ssh "$SSH_TARGET" "bash -s" <<EOF
+set -euo pipefail
+rm -f \$HOME/.deploy-npmci.exit
+cat > \$HOME/.deploy-npmci.sh <<'INNER'
 set -euo pipefail
 # SSH não-interativo não tem node/npm no PATH (Gate 0); alt-nodejs22 é o Node 22 do host
 export PATH=/opt/alt/alt-nodejs22/root/usr/bin:\$PATH
-cd $DEPLOY_BACKEND_ROOT
 export ONNXRUNTIME_NODE_INSTALL=skip
+cd $DEPLOY_BACKEND_ROOT
 npm cache clean --force >/dev/null 2>&1 || true
 ( while :; do sync; sleep 1; done ) & SYNC=\$!
 trap 'kill \$SYNC 2>/dev/null || true' EXIT
 npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 eval "$DEPLOY_RESTART_CMD"
+INNER
+setsid nohup bash -c 'bash "\$HOME/.deploy-npmci.sh"; echo \$? > "\$HOME/.deploy-npmci.exit"' \
+  > "\$HOME/.deploy-npmci.log" 2>&1 < /dev/null &
+echo "deploy: npm ci destacado no servidor (log: ~/.deploy-npmci.log)"
 EOF
+
+# Poll: ligação nova a cada ronda — uma queda não desmarca o npm ci remoto.
+rc=""
+for _ in $(seq 1 60); do # 60 x 30s = 30min (npm ci medido a ~17m)
+  sleep 30
+  rc=$(ssh "$SSH_TARGET" "cat \$HOME/.deploy-npmci.exit 2>/dev/null" || true)
+  if [ -n "$rc" ]; then break; fi
+done
+if [ -z "$rc" ]; then
+  echo "deploy: timeout à espera do npm ci remoto" >&2
+  exit 1
+fi
+if [ "$rc" != "0" ]; then
+  echo "deploy: npm ci/remoto falhou (exit $rc) — log:" >&2
+  ssh "$SSH_TARGET" "tail -40 \$HOME/.deploy-npmci.log" >&2 || true
+  exit 1
+fi
+echo "deploy: npm ci e restart concluídos"
