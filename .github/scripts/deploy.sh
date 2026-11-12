@@ -29,23 +29,23 @@ tar czf - --exclude='.env' --exclude='node_modules' --exclude='reports' -C packa
 
 # Um único ssh: npm ci antes do restart — se algo falhar, set -e aborta
 # antes de reiniciar, e a app antiga continua a correr.
-# Medido no host (2026-11-11): a cage LVE mata processos a ~950MB RSS e o
-# `npm ci` completo chega lá em 5s (buffers de extração) — por isso:
+# Medido no host (2026-11-11/12): cage LVE mata a ~950MB RSS. Cache quente do
+# npm + install scripts nativos causam rajada que ultrapassa o limite — por isso:
+#   - npm cache clean --force: força extração/download ritmado (cache quente mata);
 #   - --omit=dev: só deps de runtime (tsx/ioredis movidos para dependencies);
-#     pico medido 872MB, `added 190 packages` com exit 0;
-#   - sync periódico: descarrega as páginas sujas de node_modules, senão o
-#     uso total da cage (RSS + sujas) ultrapassa o limite a meio da extração;
-#   - NODE_OPTIONS capa o heap; ONNXRUNTIME skip: sem GPU no host (ADR-0014
-#     é CPU-only) o postinstall do onnxruntime-node leva SIGKILL.
+#   - --ignore-scripts: deps nativas têm prebuild/optional-deps no tarball;
+#   - sync periódico: descarrega páginas sujas de node_modules (trap EXIT limpa);
+#   - ONNXRUNTIME skip: sem GPU no host (ADR-0014 é CPU-only).
+# Provado: exit 0, ~815MB pico, ~17m (cache limpa). Sem estes, rc=137/1.
 ssh "$SSH_TARGET" "bash -s" <<EOF
 set -euo pipefail
 # SSH não-interativo não tem node/npm no PATH (Gate 0); alt-nodejs22 é o Node 22 do host
 export PATH=/opt/alt/alt-nodejs22/root/usr/bin:\$PATH
 cd $DEPLOY_BACKEND_ROOT
 export ONNXRUNTIME_NODE_INSTALL=skip
-export NODE_OPTIONS=--max-old-space-size=400
+npm cache clean --force >/dev/null 2>&1 || true
 ( while :; do sync; sleep 1; done ) & SYNC=\$!
 trap 'kill \$SYNC 2>/dev/null || true' EXIT
-npm ci --omit=dev --no-audit --no-fund --prefer-offline
+npm ci --omit=dev --no-audit --no-fund --ignore-scripts
 eval "$DEPLOY_RESTART_CMD"
 EOF

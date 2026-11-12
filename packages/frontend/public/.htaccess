@@ -1,12 +1,13 @@
 # Reverse proxy para o backend (mesma origem: /v1 e Socket.IO) — ADR-0016.
 # Porta fixa do G5: PORT=3002 no .env de produção de api.supercrm.milvendas.ao.
-# G6/G7 provado no servidor (2026-11-11): o alvo do upgrade tem de ser ws:// —
-# com http:// o LiteSpeed recebe o pedido mas nunca encaminha o 101 (trava).
-# FallbackResource não é suportado neste LiteSpeed; o fallback SPA é RewriteRule.
+# G6/G7 provado (2026-11-11): alvo ws:// para o 101 chegar ao cliente; http://
+# preserva query mas não entrega 101. Em alvos ws:// o LiteSpeed corta a query
+# (medido 2026-11-12) — o upgrade WS falha mas o engine.io fica em polling.
+# FallbackResource não suportado; fallback SPA é RewriteRule.
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # WebSocket do Socket.IO (handshake 101)
+  # WebSocket do Socket.IO (handshake 101; query cortada em ws:// — polling fallback)
   RewriteCond %{HTTP:Upgrade} =websocket [NC]
   RewriteRule ^(v1|socket\.io)(.*)$ ws://127.0.0.1:3002/$1$2 [P,L]
 

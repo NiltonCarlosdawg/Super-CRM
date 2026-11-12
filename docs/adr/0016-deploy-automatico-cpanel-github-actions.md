@@ -85,14 +85,25 @@ todas medidas, não presumidas:
    cPanel é um **ficheiro** (`PassengerStartupFile` → `node <ficheiro>`), `npm start` não
    é aceite; o wrapper carrega `.env` se existir, regista o tsx e importa `main.ts`
    (testado: `/health/live` → 200).
-4. **Instalação de produção: `npm ci --omit=dev` sobrevive à cage LVE; o completo não**
-   — medido no host (2026-11-11): a cage CloudLinux mata processos por SIGKILL a
-   **~950MB RSS** (probe: exit 137 a 953716KB). `npm ci` completo atinge esse limiar em
-   ~5s (buffers de extração, memória externa ao heap — caps de `--max-old-space-size` não
-   ajudam) e morre sempre; `npm ci --omit=dev` completou com exit 0 (`added 190 packages
-   em 13m`, pico 872MB) com sync periódico de disco durante a instalação. Para isso
-   **`tsx`** (arranque via `start.mjs`) e **`ioredis`** (import de runtime em
-   `src/infra/main.ts:6`) passaram de `devDependencies` a `dependencies` — a instalação
-   de produção tem de conter tudo o que o processo de arranque importa. O `ssh`
-   não-interativo também não tem `node`/`npm` no PATH: o script exporta
-   `/opt/alt/alt-nodejs22/root/usr/bin`.
+4. **Instalação de produção: receita LVE (~950MB, cage mata por SIGKILL)** — a receita
+   final (medida 2026-11-11/12) é `npm cache clean --force` + `npm ci --omit=dev
+   --ignore-scripts` com sync periódico (trap EXIT). O completo morre em ~5s (buffers de
+   extração) e, com cache quente, o omit+scripts também (rajada → ~1GB em 5s, rc=137).
+   Com cache fria + scripts nativos o heap/node crasha (argon2 `uv_thread_create`, rc=1)
+   sob pressão da cage — `--ignore-scripts` é seguro: argon2 tem prebuild glibc no
+   tarball; msgpackr-extract/canvas/esbuild vêm dos optional-deps de plataforma. Prova:
+   exit 0, ~815MB pico, ~17m. **`tsx`** e **`ioredis`** estão em `dependencies` (arranque
+   importa ambos). SSH não-interativo sem PATH: exporta `/opt/alt/alt-nodejs22/root/usr/bin`.
+5. **`lsnode.js` desvia `listen()` para fd0 (socket extapp) e o proxy do frontend só
+   funciona com TCP local** — medido 2026-11-11/12: `/usr/local/lsws/fcgi-bin/lsnode.js`
+   faz patch a `http.Server.prototype.listen` antes de carregar o startup file
+   (`customListen` → `realListen({fd:0})`, 2.º listen ignorado). `start.mjs` desfaz o
+   patch e reencaminha fd0 → `127.0.0.1:$PORT`: a app escuta em TCP (proxy do frontend
+   funciona) e o domínio da API continua a servir pelo socket extapp. O proxy usa
+   `http://127.0.0.1:3002` (padrão provado): alvos de domínio falham porque o LiteSpeed
+   reencaminha pelo vhost da 1.ª linha `host:` (preservada). WebSocket: alvos `ws://`
+   entregam o 101 mas cortam a query; `http://` preserva a query mas perde o 101 —
+   Socket.IO degrada para polling (funcional). Verify CI: polling handshake
+   (`"sid"`) em vez de `/v1/health/live` (rota inexistente). Deploy run `42971075847`
+   falhou em `npm ci` (rc=137, cache quente) — receita corrigida; app em produção
+   saudável com os 2 commits aplicados manualmente e restart.

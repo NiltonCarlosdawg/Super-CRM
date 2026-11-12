@@ -16,8 +16,12 @@ grep -qF -- "--exclude='node_modules'" $s
 ! grep -q 'db:migrate' $s
 # onnxruntime-node: skip do download GPU (SIGKILL no host; ADR-0014 é CPU-only)
 grep -q 'ONNXRUNTIME_NODE_INSTALL=skip' $s
-# LVE ~1GB: npm completo morre a ~950MB (medido 2026-11-11) — produção instala só deps de runtime
+# LVE ~1GB: npm completo morre a ~950MB (medido 2026-11-11/12) — produção instala só deps de runtime
 grep -q 'npm ci --omit=dev' $s
+# install scripts nativos (argon2/msgpackr-extract) matam a cage em build paralelo; prebuilds/optional-deps cobrem
+grep -q -- '--ignore-scripts' $s
+# cache limpa: cache quente + install faz rajada que excede a cage (medido rc=137)
+grep -q 'npm cache clean --force' $s
 # sync periódico durante a instalação (páginas sujas de node_modules na cage) + limpeza garantida
 grep -q 'sync; sleep' $s
 grep -q 'trap .*SYNC.* EXIT' $s
