@@ -241,10 +241,11 @@ async function main(): Promise<void> {
     : undefined;
   const settings = await loadBootSettings(db, log);
 
-  // Task 19+20 (docs/05 §3.1): orquestrador de inbound SEM IA configurada —
-  // `createUnavailableAiProvider` rejeita sempre → o orquestrador cai no
-  // failSafe (ai_active: mensagem fixa + passa a humano; ai_suggest: rascunho
-  // por aprovar, D13) — e o job 'inbound.process' que despacha por tipo.
+  // Task 19+20 (docs/05 §3.1): orquestrador de inbound — usa o MESMO provider
+  // do módulo de conhecimento (`knowledgeAi.provider`): com `AI_API_KEY` é o
+  // LLM real; sem chave é o indisponível, que rejeita sempre e o orquestrador
+  // cai no failSafe (ai_active: mensagem fixa + passa a humano; ai_suggest:
+  // rascunho por aprovar, D13). O job 'inbound.process' despacha por tipo.
   // Onda 1 (Task 5, ruling R1): o job resolve o tenant pela conta do webhook e
   // cria os ports do orquestrador DESSE tenant (`forTenant`).
   // Fase 2 Task 2 (§7.4): retrieve real do orquestrador — `retrievePublished`
@@ -358,7 +359,7 @@ async function main(): Promise<void> {
   });
 
   const orchestrate = (msg: InboundMessage, tenantId: string): Promise<Outcome> =>
-    handleInbound(orchestratorPorts.forTenant(tenantId), unavailableAiProvider, msg);
+    handleInbound(orchestratorPorts.forTenant(tenantId), knowledgeAi.provider, msg);
 
   await jobs.register(
     'inbound.process',
