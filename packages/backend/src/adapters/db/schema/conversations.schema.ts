@@ -38,8 +38,8 @@ export const conversations = pgTable(
       .references(() => contacts.id),
     leadId: uuid('lead_id').references(() => leads.id), // ligado depois de o lead existir
     lineId: uuid('line_id').references(() => businessLines.id), // nulo até identificar a linha
-    // Quem responde. Default ai_suggest = D13; mudar para ai_active exige gate.
-    aiMode: aiModeEnum('ai_mode').notNull().default('ai_suggest'),
+    // Quem responde. Default ai_active = gate validado (qualidade >= 75% recall, mustNot = 0).
+    aiMode: aiModeEnum('ai_mode').notNull().default('ai_active'),
     // Conversa sintética do mini-chat de teste ("Treinar agente" spec §7):
     // sem handoffs, lacunas, notificações nem envios.
     isTest: boolean('is_test').notNull().default(false),

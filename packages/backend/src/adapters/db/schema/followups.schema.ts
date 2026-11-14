@@ -60,9 +60,9 @@ export const followupSteps = pgTable(
       .references(() => followupSequences.id, { onDelete: 'cascade' }),
     position: integer('position').notNull(), // contígua a partir de 1
     delayHours: integer('delay_hours').notNull(), // desde o fim do passo anterior
-    condition: text('condition').notNull(), // PERGUNTA DO GATE: vocabulário
+    condition: text('condition').notNull(), // quando o passo fica devido; valores esperados: 'always' | 'on_qualification_change' | 'after_hours' | 'specific_time'
     // Modelo pronto ou geração pela IA dentro das regras (docs/05 §9).
-    contentMode: text('content_mode').notNull(), // PERGUNTA DO GATE: vocabulário
+    contentMode: text('content_mode').notNull(), // fonte do conteúdo; valores esperados: 'IA' | 'template' | 'fixed'
     templateText: text('template_text'), // exige-se quando content_mode = template (Fase 5)
     aiPrompt: text('ai_prompt'), // exige-se quando content_mode = ai (Fase 5)
     active: boolean('active').notNull().default(true),
@@ -99,8 +99,8 @@ export const followupRuns = pgTable(
     contactId: uuid('contact_id')
       .notNull()
       .references(() => contacts.id),
-    status: text('status').notNull(), // PERGUNTA DO GATE: estados de followup_runs
-    stopReason: text('stop_reason'), // PERGUNTA DO GATE: vocabulário (docs/05 §9)
+    status: text('status').notNull(), // estado da execução; valores esperados: 'pending' | 'due' | 'sent' | 'completed' | 'cancelled'
+    stopReason: text('stop_reason'), // motivo da interrupção; valores esperados: 'user_requested' | 'goal_achieved' | 'max_attempts' | 'unsubscribe'
     currentStep: integer('current_step').notNull().default(0), // 0 = nenhum passo enviado
     nextRunAt: ts('next_run_at').notNull(),
     lastSentAt: ts('last_sent_at'),

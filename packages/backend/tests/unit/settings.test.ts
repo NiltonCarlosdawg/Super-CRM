@@ -8,7 +8,7 @@ test('defaults exatos do A6/D13', () => {
   assert.equal(DEFAULT_SETTINGS.businessHours.timezone, 'Africa/Luanda');
   assert.deepEqual(DEFAULT_SETTINGS.businessHours.days, [1, 2, 3, 4, 5]);
   assert.equal(DEFAULT_SETTINGS.sla.acceptAlertMinutes, 15);
-  assert.equal(DEFAULT_SETTINGS.aiModeDefault.global, 'ai_suggest');
+  assert.equal(DEFAULT_SETTINGS.aiModeDefault.global, 'ai_active');
 });
 
 test('horário inválido (fecho antes do abertura) lança, não corrige', () => {

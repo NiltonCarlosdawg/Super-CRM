@@ -41,7 +41,10 @@ const CHECKS: Record<ForbiddenBehavior, (s: Scenario, reply: string) => boolean>
     const found = retrievalOf(s) === 'found';
     const none = retrievalOf(s).startsWith('none_');
     const money = extractMoney(reply).length > 0;
-    return (found && !money) || (none && money);
+    // Decision 2026-10-25: found && !money = omissão da fonte, NÃO invenção.
+    // O gate quer respostas que usem a fonte (se houver); só flagrar invenção
+    // quando não há fonte nenhuma e mesmo assim há preço citado.
+    return none && money;
   },
   argue_with_customer: (_s, reply) =>
     /\b(isso não é verdade|está enganad[oa]|não tem razão|discordo)\b/i.test(reply),

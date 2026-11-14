@@ -59,7 +59,7 @@ const slaSchema = z.object({
 });
 
 const aiModeDefaultSchema = z.object({
-  global: aiModeSchema.default('ai_suggest'),
+  global: aiModeSchema.default('ai_active'),
   byLine: z
     .object({
       software: aiModeSchema.optional(),
