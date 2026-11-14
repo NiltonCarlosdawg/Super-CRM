@@ -3,6 +3,7 @@
 
 import { ZodError } from 'zod';
 import { DomainError } from '../../domain/error.js';
+import { ProviderUnavailableError } from '../../ports/messaging-provider.js';
 
 export interface ProblemJson {
   type: string;
@@ -73,6 +74,10 @@ export function toProblem(
 
   if (err instanceof HttpError) {
     return mk(err.status, err.code, err.detail ?? err.code, err.extra);
+  }
+  // WA-AKG em baixo/timeout: 503 transitório em vez de 500 (docs/04 §6).
+  if (err instanceof ProviderUnavailableError) {
+    return mk(503, 'provider_unavailable', 'WA-AKG indisponível: tente novamente');
   }
   if (err instanceof DomainError) {
     const mapped = DOMAIN[err.code];
